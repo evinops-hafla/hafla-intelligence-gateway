@@ -1,0 +1,73 @@
+name: release
+
+# Publishes @hafla/intelligence-mcp-bridge to npm with OIDC trusted publisher
+# attestation (provenance). One-time setup at npmjs.com:
+#   1. Sign in as a maintainer of the @hafla org.
+#   2. Visit https://www.npmjs.com/package/@hafla/intelligence-mcp-bridge/access
+#      (or the package's "Settings → Publishing access" tab once it exists).
+#   3. Under "Trusted Publisher", add:
+#        - Publisher: GitHub Actions
+#        - Repository: evinops-hafla/hafla-intelligence-gateway
+#        - Workflow filename: release.yml
+#        - Environment: (leave blank)
+#   4. Save. The first manual publish must still happen via `npm publish`
+#      from a maintainer's machine to claim the @hafla/intelligence-mcp-bridge
+#      name; after that, tag pushes from this workflow take over.
+#
+# Trigger: pushing a tag matching v*.*.* (e.g. v1.0.0, v1.2.3-beta.1).
+#   git tag v1.0.0 && git push --follow-tags
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  publish:
+    name: publish to npm
+    runs-on: ubuntu-latest
+
+    # id-token: write — required for OIDC trusted-publisher attestation.
+    # contents: read  — checkout the tagged commit.
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # We rely on tag context; full history not needed.
+          fetch-depth: 1
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: install
+        run: npm ci
+
+      - name: test
+        run: npm test --workspaces --if-present
+
+      - name: verify package version matches tag
+        working-directory: packages/intelligence-mcp-bridge
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::package.json version ($PKG_VERSION) does not match git tag ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "Version matches: $PKG_VERSION"
+
+      - name: pack dry-run (sanity check)
+        working-directory: packages/intelligence-mcp-bridge
+        run: npm pack --dry-run
+
+      - name: publish
+        working-directory: packages/intelligence-mcp-bridge
+        # publishConfig in package.json handles --access public and --provenance.
+        # Under OIDC trusted publishing, no NODE_AUTH_TOKEN is required.
+        run: npm publish
