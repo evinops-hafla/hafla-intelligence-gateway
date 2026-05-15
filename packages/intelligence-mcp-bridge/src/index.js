@@ -1,0 +1,533 @@
+#!/usr/bin/env node
+/**
+ * MCP stdio bridge for the Hafla Intelligence Gateway at mcp.hafla.com.
+ *
+ * stdio↔HTTPS forwarder with Google ID token minting + caching + diagnostics,
+ * used by Claude Code / Claude Desktop / Cursor / Gemini CLI to reach the
+ * Cloud Run IAM-gated production service.
+ *
+ * Why this exists:
+ *   MCP HTTP clients take only static headers in their config. Cloud Run IAM
+ *   requires a fresh 60-min Google ID token. The bridge runs as a long-lived
+ *   stdio child process, mints + caches the token via gcloud, refreshes ~55 min
+ *   before expiry, and forwards JSON-RPC over HTTPS with a fresh Bearer
+ *   header on every request.
+ *
+ * Pre-flight diagnostics (run once at startup):
+ *   (a) gcloud CLI installed + at least one ACTIVE account
+ *   (b) active account is on the required Workspace domain (default: hafla.com)
+ * Runtime diagnostics (on 401 / 403 from gateway):
+ *   (c) 401 = likely audience mismatch — points to --add-custom-audiences
+ *   (d) 403 employee_inactive = OpsUsers.isEmployeeActive=false — contact ops
+ *
+ * Environment:
+ * - GATEWAY_URL: gateway base URL (default https://mcp.hafla.com)
+ * - GATEWAY_PATH: MCP endpoint path (default /mcp)
+ * - GATEWAY_AUDIENCE: JWT aud claim (default GATEWAY_URL)
+ * - REQUIRED_DOMAIN: required Workspace domain for active gcloud account (default hafla.com)
+ * - REQUEST_TIMEOUT_MS: HTTP request timeout in ms (default 30000)
+ * - TOKEN_REFRESH_BEFORE_MS: refresh-ahead window in ms (default 300000 = 5 min)
+ * - DEBUG: set to "1" for verbose logging
+ *
+ * The script exits non-zero with an actionable diagnostic banner on any
+ * pre-flight failure or on a hard runtime error. The diagnostic banner
+ * is printed to stderr (stdout is reserved for MCP JSON-RPC traffic).
+ */
+
+import { request as httpsRequest } from 'node:https';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { pipeline } from 'node:stream/promises';
+import { Transform } from 'node:stream';
+
+const execFileAsync = promisify(execFile);
+
+// Windows ships gcloud as gcloud.cmd; Node's execFile doesn't apply PATHEXT.
+const GCLOUD_BIN = process.platform === 'win32' ? 'gcloud.cmd' : 'gcloud';
+
+// ── Configuration ────────────────────────────────────────────────────────────
+
+const rawGatewayUrl = process.env.GATEWAY_URL || 'https://mcp.hafla.com';
+
+// HTTPS enforcement — the bridge mints Google ID tokens; sending them over
+// plaintext HTTP would expose them on the wire. Allow http:// only for local
+// dev hostnames (localhost, 127.0.0.1) where there's no network exposure.
+{
+  const u = (() => {
+    try {
+      return new URL(rawGatewayUrl);
+    } catch {
+      process.stderr.write(
+        `\n┌── intelligence-mcp-bridge: invalid GATEWAY_URL\n│ Could not parse: ${rawGatewayUrl}\n└──\n\n`
+      );
+      process.exit(1);
+    }
+  })();
+  const isLocalDev =
+    u.hostname === 'localhost' ||
+    u.hostname === '127.0.0.1' ||
+    u.hostname === '0.0.0.0';
+  if (u.protocol !== 'https:' && !isLocalDev) {
+    process.stderr.write(
+      `\n┌── intelligence-mcp-bridge: refusing plaintext HTTP for non-local GATEWAY_URL\n│ Got: ${rawGatewayUrl}\n│ Fix: set GATEWAY_URL to https:// (or localhost for dev)\n└──\n\n`
+    );
+    process.exit(1);
+  }
+}
+
+const config = {
+  gatewayUrl: rawGatewayUrl,
+  gatewayPath: process.env.GATEWAY_PATH || '/mcp',
+  audience:
+    process.env.GATEWAY_AUDIENCE ||
+    process.env.GATEWAY_URL ||
+    'https://mcp.hafla.com',
+  requiredDomain: process.env.REQUIRED_DOMAIN || 'hafla.com',
+  requestTimeoutMs: Number.parseInt(
+    process.env.REQUEST_TIMEOUT_MS || '30000',
+    10
+  ),
+  tokenRefreshBeforeMs: Number.parseInt(
+    process.env.TOKEN_REFRESH_BEFORE_MS || '300000', // 5 min
+    10
+  ),
+  // Google ID tokens have a fixed 60-min lifetime.
+  tokenLifetimeMs: 60 * 60_000,
+  debug: process.env.DEBUG === '1'
+};
+
+// ── Logging (stderr only — stdout is the MCP channel) ───────────────────────
+
+const log = {
+  info: (msg, data) =>
+    process.stderr.write(
+      JSON.stringify({ level: 'info', msg, ...data }) + '\n'
+    ),
+  warn: (msg, data) =>
+    process.stderr.write(
+      JSON.stringify({ level: 'warn', msg, ...data }) + '\n'
+    ),
+  error: (msg, data) =>
+    process.stderr.write(
+      JSON.stringify({ level: 'error', msg, ...data }) + '\n'
+    ),
+  debug: (msg, data) => {
+    if (config.debug) {
+      process.stderr.write(
+        JSON.stringify({ level: 'debug', msg, ...data }) + '\n'
+      );
+    }
+  }
+};
+
+// ── Diagnostic banner — actionable failure messages to stderr ───────────────
+
+export function diagnosticBanner(title, ...lines) {
+  process.stderr.write(`\n┌── intelligence-mcp-bridge: ${title}\n`);
+  for (const l of lines) process.stderr.write(`│ ${l}\n`);
+  process.stderr.write(`└──\n\n`);
+}
+
+function fail(title, ...lines) {
+  diagnosticBanner(title, ...lines);
+  process.exit(1);
+}
+
+// ── gcloud invocation — injectable for tests ────────────────────────────────
+
+/**
+ * Execute a gcloud command. Returns trimmed stdout.
+ * Throws {message, stderr, code} on failure.
+ *
+ * Exported for unit-test injection; tests replace it with a stub.
+ */
+export async function execGcloud(args, { execFn = execFileAsync } = {}) {
+  try {
+    const { stdout } = await execFn(GCLOUD_BIN, args, { timeout: 15_000 });
+    return stdout.toString().trim();
+  } catch (err) {
+    const stderr = err.stderr?.toString?.() ?? '';
+    const wrapped = new Error(err.message);
+    wrapped.stderr = stderr;
+    wrapped.code = err.code;
+    throw wrapped;
+  }
+}
+
+// ── Pre-flight diagnostics ───────────────────────────────────────────────────
+
+/**
+ * Verify gcloud is installed, an account is active, and that account
+ * is on the required Workspace domain. Exits non-zero with a banner on
+ * any failure. Returns the active account email on success.
+ */
+export async function preFlight({ execGcloudFn = execGcloud } = {}) {
+  // (a) gcloud installed + an active account exists
+  let activeAccount;
+  try {
+    activeAccount = await execGcloudFn([
+      'auth',
+      'list',
+      '--filter=status:ACTIVE',
+      '--format=value(account)'
+    ]);
+  } catch (err) {
+    if (err.code === 'ENOENT' || /not found|not installed/i.test(err.stderr)) {
+      fail(
+        'gcloud CLI not found.',
+        'Install Google Cloud SDK: https://cloud.google.com/sdk/docs/install',
+        'Then run: gcloud auth login'
+      );
+    }
+    fail(`gcloud auth check failed: ${err.message}`, 'Try: gcloud auth login');
+  }
+
+  if (!activeAccount) {
+    fail(
+      'No active gcloud account.',
+      'Run: gcloud auth login',
+      `Then ensure your @${config.requiredDomain} account is the active one.`
+    );
+  }
+
+  // (b) active account must be on the required Workspace domain
+  if (!activeAccount.endsWith(`@${config.requiredDomain}`)) {
+    fail(
+      `Active gcloud account is "${activeAccount}" — must be an @${config.requiredDomain} account.`,
+      `Run: gcloud config set account <your-${config.requiredDomain}-email>`,
+      `(If you have not yet logged in with your ${config.requiredDomain} account:`,
+      `   gcloud auth login)`
+    );
+  }
+
+  log.info('Pre-flight OK', {
+    account: activeAccount,
+    audience: config.audience,
+    domain: config.requiredDomain
+  });
+  return activeAccount;
+}
+
+// ── Token cache + minting ────────────────────────────────────────────────────
+
+/**
+ * Internal token cache state. Exposed via a factory so tests can reset
+ * between cases.
+ */
+export function createTokenCache({
+  execGcloudFn = execGcloud,
+  audience = config.audience,
+  lifetimeMs = config.tokenLifetimeMs,
+  refreshBeforeMs = config.tokenRefreshBeforeMs,
+  now = () => Date.now()
+} = {}) {
+  let cachedToken = null;
+  let mintedAt = 0;
+
+  return {
+    /** Returns a fresh token, minting + caching as needed. */
+    async getToken() {
+      const t = now();
+      if (cachedToken && t - mintedAt < lifetimeMs - refreshBeforeMs) {
+        return cachedToken;
+      }
+
+      let token;
+      try {
+        token = await execGcloudFn([
+          'auth',
+          'print-identity-token',
+          `--audiences=${audience}`
+        ]);
+      } catch (err) {
+        log.error('Failed to mint identity token', {
+          error: err.message,
+          stderr: err.stderr
+        });
+        fail(
+          `Failed to mint Google ID token: ${err.message}`,
+          'Common causes:',
+          `  1. Expired credentials — run: gcloud auth login`,
+          `  2. Wrong active project — check: gcloud config get-value project`,
+          `  3. Missing --audiences support — older gcloud SDK; upgrade: gcloud components update`
+        );
+      }
+
+      cachedToken = token;
+      mintedAt = t;
+      log.info('Identity token minted', {
+        ttlMs: lifetimeMs,
+        nextRefreshInMs: lifetimeMs - refreshBeforeMs
+      });
+      return cachedToken;
+    },
+
+    /** Force-invalidate the cache (used after a 401 from the gateway). */
+    invalidate() {
+      cachedToken = null;
+      mintedAt = 0;
+    },
+
+    /** Test/diagnostic accessor. */
+    _state() {
+      return { cached: !!cachedToken, mintedAt };
+    }
+  };
+}
+
+// ── HTTP forwarder ───────────────────────────────────────────────────────────
+
+/**
+ * Forward a single JSON-RPC message to the gateway. Returns the parsed
+ * JSON-RPC response object. Handles 401/403 with diagnostic banners.
+ *
+ * Exported with injectable cache + httpRequest for testing.
+ */
+export async function forwardRequest(
+  message,
+  {
+    tokenCache,
+    httpRequestFn = httpsRequest,
+    gatewayUrl = config.gatewayUrl,
+    gatewayPath = config.gatewayPath,
+    requestTimeoutMs = config.requestTimeoutMs
+  }
+) {
+  if (!message || typeof message !== 'object') {
+    return {
+      jsonrpc: '2.0',
+      error: { code: -32600, message: 'Invalid Request' },
+      id: message?.id ?? null
+    };
+  }
+
+  const token = await tokenCache.getToken();
+  const messageStr = JSON.stringify(message);
+  const url = new URL(gatewayPath, gatewayUrl);
+
+  return new Promise((resolve) => {
+    const timeoutId = setTimeout(() => {
+      req.destroy();
+      log.warn('Request timeout', {
+        method: message.method,
+        id: message.id,
+        timeoutMs: requestTimeoutMs
+      });
+      resolve({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: `Request timeout after ${requestTimeoutMs}ms`
+        },
+        id: message.id ?? null
+      });
+    }, requestTimeoutMs);
+
+    const options = {
+      hostname: url.hostname,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(messageStr),
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json, text/event-stream',
+        'User-Agent': 'intelligence-mcp-bridge/1.0'
+      }
+    };
+
+    const req = httpRequestFn(options, (res) => {
+      let body = '';
+      res.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+      res.on('end', () => {
+        clearTimeout(timeoutId);
+
+        // 401 — likely audience mismatch (Cloud Run rejected the token).
+        if (res.statusCode === 401) {
+          diagnosticBanner(
+            'gateway returned 401 — token audience likely mismatched',
+            `The gateway expects tokens whose "aud" claim matches a configured custom-audience.`,
+            `Confirm the service has https://mcp.hafla.com in customAudiences:`,
+            `  gcloud run services describe mcp-gateway --format='value(spec.template.metadata.annotations,spec.customAudiences)'`,
+            `If absent, the operator must redeploy with:`,
+            `  --add-custom-audiences=https://mcp.hafla.com`,
+            `Bridge will invalidate cached token and retry on the next request.`
+          );
+          tokenCache.invalidate();
+        }
+
+        // 403 employee_inactive — OpsUsers.isEmployeeActive=false.
+        if (res.statusCode === 403 && /employee_inactive/.test(body)) {
+          diagnosticBanner(
+            'gateway returned 403 employee_inactive',
+            `Your account is not flagged as an active Hafla employee in OpsUsers.`,
+            `Contact ops to verify your isEmployeeActive flag in haflaCore.OpsUsers.`
+          );
+        }
+
+        if (res.statusCode !== 200) {
+          log.warn('Gateway non-200', {
+            statusCode: res.statusCode,
+            id: message.id,
+            bodyPreview: body.slice(0, 200)
+          });
+          resolve({
+            jsonrpc: '2.0',
+            error: {
+              code: -32000,
+              message: `Gateway returned ${res.statusCode}`
+            },
+            id: message.id ?? null
+          });
+          return;
+        }
+
+        try {
+          resolve(JSON.parse(body));
+        } catch (e) {
+          log.error('Failed to parse gateway response', {
+            parseError: e.message,
+            id: message.id,
+            bodyLength: body.length
+          });
+          resolve({
+            jsonrpc: '2.0',
+            error: { code: -32700, message: 'Parse error' },
+            id: message.id ?? null
+          });
+        }
+      });
+    });
+
+    req.on('error', (err) => {
+      clearTimeout(timeoutId);
+      log.error('Gateway request failed', {
+        error: err.message,
+        code: err.code,
+        id: message.id,
+        host: url.hostname
+      });
+      resolve({
+        jsonrpc: '2.0',
+        error: {
+          code: -32603,
+          message: `Connection failed: ${err.code || err.message}`
+        },
+        id: message.id ?? null
+      });
+    });
+
+    req.write(messageStr);
+    req.end();
+  });
+}
+
+// ── Main pipeline (line-based stdio) ─────────────────────────────────────────
+
+async function main() {
+  await preFlight();
+  const tokenCache = createTokenCache();
+
+  log.info('intelligence-mcp-bridge started', {
+    gatewayUrl: config.gatewayUrl,
+    gatewayPath: config.gatewayPath,
+    audience: config.audience,
+    requestTimeoutMs: config.requestTimeoutMs
+  });
+
+  const lineSplitter = new Transform({
+    transform(chunk, encoding, callback) {
+      const str = (this.lastLine || '') + chunk.toString();
+      this.lastLine = '';
+      const lines = str.split('\n');
+      this.lastLine = lines.pop();
+      for (const line of lines) {
+        if (line.trim()) this.push(line + '\n');
+      }
+      callback();
+    },
+    flush(callback) {
+      if (this.lastLine?.trim()) {
+        this.push(this.lastLine + '\n');
+      }
+      callback();
+    }
+  });
+
+  const lineTransform = new Transform({
+    transform(chunk, encoding, callback) {
+      const line = chunk.toString();
+      if (!line.trim()) {
+        callback();
+        return;
+      }
+      let message;
+      try {
+        message = JSON.parse(line);
+      } catch (parseErr) {
+        log.error('Failed to parse stdin line', {
+          error: parseErr.message,
+          line: line.slice(0, 100)
+        });
+        const errorResponse = {
+          jsonrpc: '2.0',
+          error: { code: -32700, message: 'Parse error' },
+          id: null
+        };
+        callback(null, JSON.stringify(errorResponse) + '\n');
+        return;
+      }
+
+      forwardRequest(message, { tokenCache })
+        .then((response) => {
+          callback(null, JSON.stringify(response) + '\n');
+        })
+        .catch((err) => {
+          log.error('Unexpected forwardRequest error', { error: err.message });
+          callback(
+            null,
+            JSON.stringify({
+              jsonrpc: '2.0',
+              error: { code: -32603, message: 'Internal error' },
+              id: message.id ?? null
+            }) + '\n'
+          );
+        });
+    }
+  });
+
+  try {
+    await pipeline(process.stdin, lineSplitter, lineTransform, process.stdout);
+    log.info('Pipeline closed normally');
+    process.exit(0);
+  } catch (err) {
+    log.error('Pipeline error', { error: err.message });
+    process.exit(1);
+  }
+}
+
+// ── Graceful shutdown ────────────────────────────────────────────────────────
+
+process.on('SIGTERM', () => {
+  log.info('SIGTERM received');
+  process.exit(0);
+});
+process.on('SIGINT', () => {
+  log.info('SIGINT received');
+  process.exit(0);
+});
+
+// ── Execution guard — skip when imported as a module by tests ───────────────
+
+const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+if (isMainModule) {
+  try {
+    await main();
+  } catch (err) {
+    log.error('Uncaught error', { error: err.message, stack: err.stack });
+    process.exit(1);
+  }
+}

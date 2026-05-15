@@ -1,0 +1,20 @@
+{
+  "name": "hafla-intelligence-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Public client packages for the Hafla Intelligence Gateway — npm bridge today, Claude Code plugin / Gemini CLI extension next.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm test --workspaces --if-present"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/evinops-hafla/hafla-intelligence-gateway.git"
+  }
+}

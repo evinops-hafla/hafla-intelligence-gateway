@@ -1,0 +1,58 @@
+{
+  "name": "@hafla/intelligence-mcp-bridge",
+  "version": "1.0.0",
+  "description": "stdio↔HTTPS bridge to the Hafla MCP Gateway at mcp.hafla.com, with gcloud-minted Google ID token auth.",
+  "type": "module",
+  "bin": {
+    "intelligence-mcp-bridge": "src/index.js"
+  },
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "test": "node --test tests/index.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/evinops-hafla/hafla-intelligence-gateway.git",
+    "directory": "packages/intelligence-mcp-bridge"
+  },
+  "homepage": "https://github.com/evinops-hafla/hafla-intelligence-gateway/tree/main/packages/intelligence-mcp-bridge#readme",
+  "bugs": {
+    "url": "https://github.com/evinops-hafla/hafla-intelligence-gateway/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "claude-code",
+    "gemini-cli",
+    "stdio",
+    "bridge",
+    "cloud-run",
+    "google-oidc",
+    "hafla"
+  ],
+  "author": "Hafla (Evinops Limited)",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
