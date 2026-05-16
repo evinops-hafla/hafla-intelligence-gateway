@@ -22,7 +22,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Compatibility
 
-- Source-level changes to `createTokenCache`: new optional `activeAccount`, `failFn`, `decodeJwtFn` parameters. When `activeAccount` is null (the 1.0.0 call shape), behaviour is identical to 1.0.0 — `--audiences` is always passed, no cross-check runs. The new defaults activate only when `main()` wires the value through from `preFlight()`. **No breaking change for the npx-bin use case** that operators actually consume.
+- Source-level changes to `createTokenCache`: new optional `activeAccount`, `failFn`, `decodeJwtFn` parameters. When `activeAccount` is null (the 1.0.0 call shape), behaviour is identical to 1.0.0 — `--audiences` is always passed, no cross-check runs. The new defaults activate only when `main()` wires the value through from `preFlight()`. **No breaking change for the npx-bin use case** that operators actually consume — happy-path (human on `@hafla.com` with no impersonation config, OR SA running natively in CI / Cloud Run) is unchanged.
+- **Behavioural change for operators with persistent gcloud impersonation config.** 1.0.0 silently produced an unusable token (token's `email` claim = SA's email, NOT the human's) and either failed obscurely at the gateway's audience check or — pre-cutover — succeeded with the SA-attributed audit log. 1.0.1 hard-rejects at the bridge with an actionable banner identifying the impersonation-config root cause + 4-step recovery. This is intentional, NOT a regression — see § Added "Post-mint identity cross-check". Operators in this state run `gcloud config unset auth/impersonate_service_account` (and unset the env-var equivalent) once; thereafter the bridge works without further action.
 
 ### Deploy ordering (operator-facing)
 

@@ -211,12 +211,24 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
     await cache.getToken();
     assert.equal(cache._state().cached, false);
     const message = failFn.calls[0].join('\n');
+    // Dedicated "missing email" framing — different from the identity-
+    // mismatch path even though the root cause (impersonation config) is
+    // usually the same.
     assert.match(message, /no `email` claim/);
-    assert.match(message, /--include-email/);
+    // Message must direct the operator at the actionable root cause
+    // (unset impersonation config) — NOT at adding gcloud flags they
+    // don't control (the bridge owns gcloud args).
+    assert.match(message, /impersonat/);
+    assert.match(message, /gcloud config unset auth\/impersonate_service_account/);
     assert.doesNotMatch(
       message,
       /Identity mismatch/,
       'missing-email path must use its own message, not the impersonation one'
+    );
+    assert.doesNotMatch(
+      message,
+      /--include-email/,
+      'do NOT instruct the operator to add gcloud flags — the bridge owns the gcloud invocation; the operator cannot pass flags through'
     );
   });
 

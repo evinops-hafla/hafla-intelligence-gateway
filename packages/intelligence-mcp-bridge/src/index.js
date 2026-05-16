@@ -348,11 +348,23 @@ export function createTokenCache({
         if (typeof claims.email !== 'string') {
           failFn(
             'gcloud minted a token with no `email` claim.',
-            'If gcloud is using --impersonate-service-account, also pass',
-            '--include-email (the IAM Credentials API defaults includeEmail',
-            'to false). Without an email claim, the bridge cannot enforce',
-            'identity attribution. Either fix the gcloud invocation or',
-            'unset the impersonation config and try again.'
+            'This almost always means gcloud is configured to impersonate a',
+            'service account (via "gcloud config set',
+            'auth/impersonate_service_account", the',
+            'CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT env var, a wrapper script,',
+            'or similar). The IAM Credentials API mints impersonation tokens',
+            'without the email claim by default. The bridge owns the gcloud',
+            'invocation — you cannot add a flag to fix this; the impersonation',
+            'config itself is the root cause.',
+            '',
+            'To fix:',
+            '  1. gcloud config unset auth/impersonate_service_account',
+            '  2. unset CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT  (if set)',
+            '  3. Check for any wrapper script or alias around "gcloud"',
+            '  4. Restart the bridge.',
+            '',
+            'Once impersonation is off, your default human token carries the',
+            '`email` claim, and the bridge will accept it.'
           );
           return;
         }
@@ -483,10 +495,14 @@ export async function forwardRequest(
           diagnosticBanner(
             'gateway returned 401 — token audience likely mismatched',
             `The gateway expects tokens whose "aud" claim matches a configured custom-audience.`,
-            `Confirm the service has https://mcp.hafla.com in customAudiences:`,
-            `  gcloud run services describe mcp-gateway --format='value(spec.template.metadata.annotations,spec.customAudiences)'`,
-            `If absent, the operator must redeploy with:`,
-            `  --add-custom-audiences=https://mcp.hafla.com`,
+            `Confirm both required audiences are present:`,
+            `  gcloud run services describe mcp-gateway-production --region=us-central1 \\`,
+            `    --format='value(spec.customAudiences)'`,
+            `Both must be in the output (Path A multi-audience):`,
+            `  - https://mcp.hafla.com           (service URL — SA path)`,
+            `  - 32555940559.apps.googleusercontent.com  (gcloud SDK default — human path)`,
+            `If either is missing, the operator redeploys via the canonical script:`,
+            `  bash infra/mcp-gateway/scripts/cloud-service-deploy.sh`,
             `Bridge will invalidate cached token and retry on the next request.`
           );
           tokenCache.invalidate();
