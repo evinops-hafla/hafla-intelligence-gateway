@@ -16,7 +16,8 @@ import {
   createTokenCache,
   preFlight,
   forwardRequest,
-  decodeJwtPayloadNoVerify
+  decodeJwtPayloadNoVerify,
+  handleMessage
 } from '../src/index.js';
 
 // ── JWT-shaped token builder for cross-check tests ──────────────────────────
@@ -89,6 +90,78 @@ describe('createTokenCache', () => {
     nowValue = 56_000; // inside the refresh-before window (>60000-5000)
     await cache.getToken();
     assert.equal(mintCalls, 2);
+  });
+
+  test('concurrent getToken() coalesces into single mint (stampede prevention)', async () => {
+    // Regression guard for HIGH #2 (token cache stampede). MCP clients
+    // commonly fire 3-5 concurrent requests on connection (initialize +
+    // tools/list + resources/list + ...); without coalescing, each
+    // would spawn its own `gcloud auth print-identity-token` subprocess.
+    // The pendingMint promise must absorb all concurrent callers into a
+    // single in-flight mint.
+    let mintCount = 0;
+    const cache = createTokenCache({
+      execGcloudFn: async () => {
+        mintCount += 1;
+        // Delay so concurrent callers all race past the cache check
+        // before this resolves
+        await new Promise((r) => setTimeout(r, 20));
+        return `token-${mintCount}`;
+      },
+      lifetimeMs: 60_000,
+      refreshBeforeMs: 5_000,
+      now: () => 0
+    });
+
+    const tokens = await Promise.all([
+      cache.getToken(),
+      cache.getToken(),
+      cache.getToken(),
+      cache.getToken(),
+      cache.getToken()
+    ]);
+
+    assert.equal(
+      mintCount,
+      1,
+      'execGcloudFn must be called exactly once despite 5 concurrent callers'
+    );
+    assert.ok(
+      tokens.every((t) => t === 'token-1'),
+      'all callers must receive the same token'
+    );
+    assert.equal(
+      cache._state().pendingMint,
+      false,
+      'pendingMint promise must clear after the mint resolves'
+    );
+  });
+
+  test('concurrent getToken() after invalidate() coalesces re-mint too', async () => {
+    // Edge case: after invalidate() clears the cache, multiple parallel
+    // callers should ALSO coalesce — not spawn N more gcloud processes.
+    let mintCount = 0;
+    const cache = createTokenCache({
+      execGcloudFn: async () => {
+        mintCount += 1;
+        await new Promise((r) => setTimeout(r, 10));
+        return `token-${mintCount}`;
+      },
+      lifetimeMs: 60_000,
+      refreshBeforeMs: 5_000,
+      now: () => 0
+    });
+
+    await cache.getToken(); // mint 1
+    cache.invalidate();
+    const tokens = await Promise.all([
+      cache.getToken(),
+      cache.getToken(),
+      cache.getToken()
+    ]);
+
+    assert.equal(mintCount, 2, 'exactly 2 mints total: initial + 1 coalesced re-mint');
+    assert.ok(tokens.every((t) => t === 'token-2'));
   });
 
   test('invalidate forces re-mint on next getToken', async () => {
@@ -338,6 +411,25 @@ describe('preFlight', () => {
     assert.equal(account, 'sidd@hafla.com');
   });
 
+  test('accepts mixed-case @hafla.com email (case-insensitive domain check)', async () => {
+    // Regression guard for MEDIUM #4. The gateway's middleware case-normalises
+    // emails before the OpsUsers lookup; the bridge's preFlight must mirror
+    // that behaviour so a stray-case account doesn't 403 at startup.
+    const account = await preFlight({
+      execGcloudFn: async (args) => {
+        if (args[0] === 'auth' && args[1] === 'list') {
+          return 'Sidd@HAFLA.com'; // mixed case — gateway lowercases at lookup
+        }
+        throw new Error(`unexpected args: ${args.join(' ')}`);
+      }
+    });
+    assert.equal(
+      account,
+      'Sidd@HAFLA.com',
+      'preFlight returns the active account verbatim — case-normalisation is only for the domain match, not the email itself'
+    );
+  });
+
   test('returns active account on SA happy path (CI / Cloud Run / Vertex)', async () => {
     // Regression: an earlier draft of preFlight rejected any active account
     // not ending in @hafla.com, which would have blocked the SA-native flow
@@ -380,6 +472,120 @@ function mockHttpRequest({ statusCode, body }) {
     return req;
   };
 }
+
+describe('handleMessage — concurrent dispatch (HIGH #1 fix)', () => {
+  test('does NOT serialize forwardRequest calls — second call starts before first resolves', async () => {
+    // Regression guard for HIGH #1 (head-of-line blocking). The previous
+    // design called the Transform callback INSIDE forwardRequest's .then(),
+    // forcing the stream to wait for each HTTP round-trip before reading
+    // the next line. This broke notifications/cancellation. The fix calls
+    // callback() immediately and pushes responses asynchronously. This
+    // test proves the new contract: a second handleMessage call's
+    // forwardRequest starts even while the first is still pending.
+    let firstStarted = false;
+    let secondStarted = false;
+    let releaseFirst;
+    const firstPromise = new Promise((r) => {
+      releaseFirst = r;
+    });
+
+    const fakeForwardRequest = async (msg) => {
+      if (msg.id === 1) {
+        firstStarted = true;
+        await firstPromise; // hang until released
+        return { jsonrpc: '2.0', result: 'first', id: 1 };
+      }
+      if (msg.id === 2) {
+        secondStarted = true;
+        return { jsonrpc: '2.0', result: 'second', id: 2 };
+      }
+      throw new Error(`unexpected id: ${msg.id}`);
+    };
+
+    const pushed = [];
+    const pushFn = (line) => pushed.push(line);
+
+    // Fire both without awaiting either
+    const p1 = handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'a', id: 1 }),
+      { tokenCache: null, pushFn, forwardRequestFn: fakeForwardRequest }
+    );
+    const p2 = handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'b', id: 2 }),
+      { tokenCache: null, pushFn, forwardRequestFn: fakeForwardRequest }
+    );
+
+    // Tick the microtask queue so both forwardRequest invocations get a chance to run
+    await new Promise((r) => setImmediate(r));
+
+    assert.equal(firstStarted, true, 'first request must have started');
+    assert.equal(
+      secondStarted,
+      true,
+      'second request must have started even though first is hanging — proves HOL blocking is gone'
+    );
+
+    // Now release the first; both should complete out-of-order (second responded first)
+    releaseFirst();
+    await Promise.all([p1, p2]);
+
+    assert.equal(pushed.length, 2);
+    const responses = pushed.map((l) => JSON.parse(l));
+    assert.deepEqual(
+      responses.map((r) => r.id).sort(),
+      [1, 2],
+      'both responses must be pushed (order is not guaranteed)'
+    );
+  });
+
+  test('parse error pushes -32700 without invoking forwardRequest', async () => {
+    let forwardCalled = false;
+    const pushed = [];
+    await handleMessage('this-is-not-json', {
+      tokenCache: null,
+      pushFn: (l) => pushed.push(l),
+      forwardRequestFn: async () => {
+        forwardCalled = true;
+      }
+    });
+    assert.equal(forwardCalled, false);
+    assert.equal(pushed.length, 1);
+    const resp = JSON.parse(pushed[0]);
+    assert.equal(resp.error.code, -32700);
+    assert.equal(resp.error.message, 'Parse error');
+    assert.equal(resp.id, null);
+  });
+
+  test('forwardRequest throws → pushes -32603 with original message id', async () => {
+    const pushed = [];
+    await handleMessage(JSON.stringify({ jsonrpc: '2.0', method: 'x', id: 42 }), {
+      tokenCache: null,
+      pushFn: (l) => pushed.push(l),
+      forwardRequestFn: async () => {
+        throw new Error('synthetic-failure');
+      }
+    });
+    assert.equal(pushed.length, 1);
+    const resp = JSON.parse(pushed[0]);
+    assert.equal(resp.error.code, -32603);
+    assert.equal(resp.error.message, 'Internal error');
+    assert.equal(resp.id, 42);
+  });
+
+  test('empty/whitespace line is a no-op (no push, no forwardRequest)', async () => {
+    const pushed = [];
+    let forwardCalled = false;
+    await handleMessage('   \t  ', {
+      tokenCache: null,
+      pushFn: (l) => pushed.push(l),
+      forwardRequestFn: async () => {
+        forwardCalled = true;
+      }
+    });
+    assert.equal(pushed.length, 0);
+    assert.equal(forwardCalled, false);
+  });
+});
 
 describe('forwardRequest', () => {
   test('200 response is parsed and returned', async () => {

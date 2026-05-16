@@ -218,11 +218,16 @@ export async function preFlight({ execGcloudFn = execGcloud } = {}) {
   // emails end in `.iam.gserviceaccount.com` and don't have an @domain
   // form; rejecting them here would block the legitimate SA-native flow
   // that createTokenCache's Shape B branch is designed to serve.
-  const isSAActive = activeAccount
-    .toLowerCase()
-    .endsWith('.iam.gserviceaccount.com');
-  const isOnRequiredDomain = activeAccount.endsWith(
-    `@${config.requiredDomain}`
+  //
+  // Case normalisation: gcloud auth list MAY return emails with mixed case
+  // (e.g. Sidd@HAFLA.com). The gateway's middleware case-normalises emails
+  // for OpsUsers lookup (auth.js line 257); the bridge mirrors that to
+  // avoid 403-ing valid accounts on case alone.
+  const activeAccountLower = activeAccount.toLowerCase();
+  const requiredDomainLower = config.requiredDomain.toLowerCase();
+  const isSAActive = activeAccountLower.endsWith('.iam.gserviceaccount.com');
+  const isOnRequiredDomain = activeAccountLower.endsWith(
+    `@${requiredDomainLower}`
   );
   if (!isSAActive && !isOnRequiredDomain) {
     fail(
@@ -268,6 +273,16 @@ export function createTokenCache({
 } = {}) {
   let cachedToken = null;
   let mintedAt = 0;
+  // Concurrent-mint coalescing: when N callers hit getToken() with an
+  // empty/stale cache simultaneously (the realistic case at MCP-client
+  // startup, where tools/list + resources/list + initialize land
+  // back-to-back), N parallel `gcloud auth print-identity-token`
+  // subprocess spawns is wasteful + may trigger gcloud-side state locks
+  // or rate limits. The first caller stores the in-flight promise here;
+  // subsequent callers within the same window return the same promise
+  // and await its resolution. Cleared in a `finally` so a failed mint
+  // doesn't strand subsequent retries.
+  let pendingMint = null;
 
   // Shape B: humans omit --audiences (gcloud --audiences is service-account-
   // only — BS-3). SAs (or unknown legacy/test contexts) keep --audiences for
@@ -276,160 +291,182 @@ export function createTokenCache({
     typeof activeAccount === 'string' &&
     !activeAccount.toLowerCase().endsWith(SA_EMAIL_SUFFIX);
 
+  async function mintAndCacheToken(t) {
+    const args = ['auth', 'print-identity-token'];
+    if (!isHumanActive) {
+      args.push(`--audiences=${audience}`);
+    }
+
+    let token;
+    try {
+      token = await execGcloudFn(args);
+    } catch (err) {
+      log.error('Failed to mint identity token', {
+        error: err.message,
+        stderr: err.stderr
+      });
+      // This catch path also captures the empirically-unverified edge case
+      // documented in `specs/.../research/2026-05-16-bs3-final-plan-synthesis.md`
+      // § Empirical verification: human-active + impersonation-config-set +
+      // no-`--audiences` (Shape B's human branch). If gcloud's IAM
+      // Credentials API rejects the mint because it requires an audience
+      // under impersonation, the error surfaces here as a "Failed to mint"
+      // banner with the same PERMISSION_DENIED / impersonation hint.
+      failFn(
+        `Failed to mint Google ID token: ${err.message}`,
+        'Common causes:',
+        `  1. Expired credentials — run: gcloud auth login`,
+        `  2. Wrong active project — check: gcloud config get-value project`,
+        `  3. PERMISSION_DENIED on impersonation — the SA you're configured to`,
+        `     impersonate may not grant you roles/iam.serviceAccountTokenCreator,`,
+        `     OR you have not been added to the relevant role binding yet.`,
+        `  4. gcloud's IAM Credentials API rejected the mint because the active`,
+        `     account is human but impersonation config requires an audience.`,
+        `     Unset impersonation: gcloud config unset auth/impersonate_service_account`
+      );
+      // failFn → process.exit(1) in production (synchronous; this return is
+      // unreachable). Tests inject a non-throwing collector (collectingFailFn)
+      // — the `return` is what halts execution under test so we don't fall
+      // through to caching a token that was never minted.
+      return undefined;
+    }
+
+    // Post-mint identity cross-check (Path A / BS-3 resolution).
+    //
+    // Only runs when activeAccount was provided (production flow via
+    // preFlight). Skipped in legacy / unit-test contexts where the cache
+    // is exercised in isolation.
+    //
+    // Why hard-reject rather than warn-then-pass:
+    //   The bridge's local invariant is "the minted token represents the
+    //   active gcloud account". If gcloud is configured to impersonate
+    //   (config set auth/impersonate_service_account, env var, wrapper,
+    //   future surface), the minted token's email claim will differ from
+    //   the active account. Forwarding it would let the gateway's SA
+    //   branch admit the request and erase the human's identity from the
+    //   audit trail — silently violating D-4's "verified email claim IS
+    //   the user identity" property at the bridge layer. Stderr warnings
+    //   are too easy to suppress (MCP clients route stdio child stderr
+    //   to debug logs or /dev/null). Hard-reject is the only sound
+    //   posture.
+    //
+    // Why decode-not-parse: enumerating gcloud's impersonation surfaces
+    // (config, env vars, wrappers, future flags) is a losing game. The
+    // minted token's `email` claim is the deterministic source of truth
+    // for what gcloud actually produced.
+    if (activeAccount) {
+      let claims;
+      try {
+        claims = decodeJwtFn(token);
+      } catch (err) {
+        failFn(
+          `gcloud minted a token that does not parse as a JWT: ${err.message}`,
+          'This usually means gcloud returned an unexpected output format.',
+          'Try: gcloud components update'
+        );
+        return undefined;
+      }
+
+      if (typeof claims.email !== 'string') {
+        failFn(
+          'gcloud minted a token with no `email` claim.',
+          'This almost always means gcloud is configured to impersonate a',
+          'service account (via "gcloud config set',
+          'auth/impersonate_service_account", the',
+          'CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT env var, a wrapper script,',
+          'or similar). The IAM Credentials API mints impersonation tokens',
+          'without the email claim by default. The bridge owns the gcloud',
+          'invocation — you cannot add a flag to fix this; the impersonation',
+          'config itself is the root cause.',
+          '',
+          'To fix:',
+          '  1. gcloud config unset auth/impersonate_service_account',
+          '  2. unset CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT  (if set)',
+          '  3. Check for any wrapper script or alias around "gcloud"',
+          '  4. Restart the bridge.',
+          '',
+          'Once impersonation is off, your default human token carries the',
+          '`email` claim, and the bridge will accept it.'
+        );
+        return undefined;
+      }
+
+      if (claims.email.toLowerCase() !== activeAccount.toLowerCase()) {
+        failFn(
+          `Identity mismatch: gcloud minted a token for "${claims.email}"`,
+          `but your active gcloud account is "${activeAccount}".`,
+          '',
+          'This almost always means gcloud is configured to impersonate a',
+          'service account (via "gcloud config set',
+          'auth/impersonate_service_account", the',
+          'CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT env var, a wrapper',
+          'script, or similar). Forwarding this token would silently erase',
+          'your identity from the gateway audit trail — Hafla MCP requires',
+          'per-user attribution.',
+          '',
+          'To fix:',
+          '  1. gcloud config unset auth/impersonate_service_account',
+          '  2. unset CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT  (if set)',
+          '  3. Check for any wrapper script or alias around "gcloud"',
+          '  4. Restart the bridge.',
+          '',
+          'If you legitimately need to act as the service account, run',
+          'the bridge from a CI / Cloud Run / Vertex context where the',
+          'SA IS your active account — "gcloud auth list" should show',
+          'the SA as active. The cross-check passes in that case.'
+        );
+        return undefined;
+      }
+    }
+
+    cachedToken = token;
+    mintedAt = t;
+    log.info('Identity token minted', {
+      ttlMs: lifetimeMs,
+      nextRefreshInMs: lifetimeMs - refreshBeforeMs,
+      identityCrossCheck: activeAccount ? 'verified' : 'skipped'
+    });
+    return cachedToken;
+  }
+
   return {
-    /** Returns a fresh token, minting + caching as needed. */
+    /**
+     * Returns a fresh token, minting + caching as needed.
+     *
+     * Concurrent-mint coalescing: if N callers hit getToken() simultaneously
+     * with empty/stale cache, only ONE gcloud subprocess spawns — the others
+     * await the same in-flight promise. MCP clients commonly send 3-5
+     * parallel requests on connection (initialize + tools/list + resources/list
+     * etc.); without coalescing this would stampede gcloud with N parallel
+     * subprocess spawns.
+     */
     async getToken() {
       const t = now();
       if (cachedToken && t - mintedAt < lifetimeMs - refreshBeforeMs) {
         return cachedToken;
       }
-
-      const args = ['auth', 'print-identity-token'];
-      if (!isHumanActive) {
-        args.push(`--audiences=${audience}`);
+      if (pendingMint) {
+        return pendingMint;
       }
-
-      let token;
-      try {
-        token = await execGcloudFn(args);
-      } catch (err) {
-        log.error('Failed to mint identity token', {
-          error: err.message,
-          stderr: err.stderr
-        });
-        // This catch path also captures the empirically-unverified edge case
-        // documented in `specs/.../research/2026-05-16-bs3-final-plan-synthesis.md`
-        // § Empirical verification: human-active + impersonation-config-set +
-        // no-`--audiences` (Shape B's human branch). If gcloud's IAM
-        // Credentials API rejects the mint because it requires an audience
-        // under impersonation, the error surfaces here as a "Failed to mint"
-        // banner with the same PERMISSION_DENIED / impersonation hint.
-        failFn(
-          `Failed to mint Google ID token: ${err.message}`,
-          'Common causes:',
-          `  1. Expired credentials — run: gcloud auth login`,
-          `  2. Wrong active project — check: gcloud config get-value project`,
-          `  3. PERMISSION_DENIED on impersonation — the SA you're configured to`,
-          `     impersonate may not grant you roles/iam.serviceAccountTokenCreator,`,
-          `     OR you have not been added to the relevant role binding yet.`,
-          `  4. gcloud's IAM Credentials API rejected the mint because the active`,
-          `     account is human but impersonation config requires an audience.`,
-          `     Unset impersonation: gcloud config unset auth/impersonate_service_account`
-        );
-        // failFn → process.exit(1) in production (synchronous; this return is
-        // unreachable). Tests inject a non-throwing collector (collectingFailFn)
-        // — the `return` is what halts execution under test so we don't fall
-        // through to caching a token that was never minted.
-        return;
-      }
-
-      // Post-mint identity cross-check (Path A / BS-3 resolution).
-      //
-      // Only runs when activeAccount was provided (production flow via
-      // preFlight). Skipped in legacy / unit-test contexts where the cache
-      // is exercised in isolation.
-      //
-      // Why hard-reject rather than warn-then-pass:
-      //   The bridge's local invariant is "the minted token represents the
-      //   active gcloud account". If gcloud is configured to impersonate
-      //   (config set auth/impersonate_service_account, env var, wrapper,
-      //   future surface), the minted token's email claim will differ from
-      //   the active account. Forwarding it would let the gateway's SA
-      //   branch admit the request and erase the human's identity from the
-      //   audit trail — silently violating D-4's "verified email claim IS
-      //   the user identity" property at the bridge layer. Stderr warnings
-      //   are too easy to suppress (MCP clients route stdio child stderr
-      //   to debug logs or /dev/null). Hard-reject is the only sound
-      //   posture.
-      //
-      // Why decode-not-parse: enumerating gcloud's impersonation surfaces
-      // (config, env vars, wrappers, future flags) is a losing game. The
-      // minted token's `email` claim is the deterministic source of truth
-      // for what gcloud actually produced.
-      if (activeAccount) {
-        let claims;
-        try {
-          claims = decodeJwtFn(token);
-        } catch (err) {
-          failFn(
-            `gcloud minted a token that does not parse as a JWT: ${err.message}`,
-            'This usually means gcloud returned an unexpected output format.',
-            'Try: gcloud components update'
-          );
-          return;
-        }
-
-        if (typeof claims.email !== 'string') {
-          failFn(
-            'gcloud minted a token with no `email` claim.',
-            'This almost always means gcloud is configured to impersonate a',
-            'service account (via "gcloud config set',
-            'auth/impersonate_service_account", the',
-            'CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT env var, a wrapper script,',
-            'or similar). The IAM Credentials API mints impersonation tokens',
-            'without the email claim by default. The bridge owns the gcloud',
-            'invocation — you cannot add a flag to fix this; the impersonation',
-            'config itself is the root cause.',
-            '',
-            'To fix:',
-            '  1. gcloud config unset auth/impersonate_service_account',
-            '  2. unset CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT  (if set)',
-            '  3. Check for any wrapper script or alias around "gcloud"',
-            '  4. Restart the bridge.',
-            '',
-            'Once impersonation is off, your default human token carries the',
-            '`email` claim, and the bridge will accept it.'
-          );
-          return;
-        }
-
-        if (claims.email.toLowerCase() !== activeAccount.toLowerCase()) {
-          failFn(
-            `Identity mismatch: gcloud minted a token for "${claims.email}"`,
-            `but your active gcloud account is "${activeAccount}".`,
-            '',
-            'This almost always means gcloud is configured to impersonate a',
-            'service account (via "gcloud config set',
-            'auth/impersonate_service_account", the',
-            'CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT env var, a wrapper',
-            'script, or similar). Forwarding this token would silently erase',
-            'your identity from the gateway audit trail — Hafla MCP requires',
-            'per-user attribution.',
-            '',
-            'To fix:',
-            '  1. gcloud config unset auth/impersonate_service_account',
-            '  2. unset CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT  (if set)',
-            '  3. Check for any wrapper script or alias around "gcloud"',
-            '  4. Restart the bridge.',
-            '',
-            'If you legitimately need to act as the service account, run',
-            'the bridge from a CI / Cloud Run / Vertex context where the',
-            'SA IS your active account — "gcloud auth list" should show',
-            'the SA as active. The cross-check passes in that case.'
-          );
-          return;
-        }
-      }
-
-      cachedToken = token;
-      mintedAt = t;
-      log.info('Identity token minted', {
-        ttlMs: lifetimeMs,
-        nextRefreshInMs: lifetimeMs - refreshBeforeMs,
-        identityCrossCheck: activeAccount ? 'verified' : 'skipped'
+      pendingMint = mintAndCacheToken(t).finally(() => {
+        pendingMint = null;
       });
-      return cachedToken;
+      return pendingMint;
     },
 
     /** Force-invalidate the cache (used after a 401 from the gateway). */
     invalidate() {
       cachedToken = null;
       mintedAt = 0;
+      // Intentionally NOT clearing pendingMint: if a mint is in flight when
+      // a 401 comes back on a previously-cached token, the in-flight mint's
+      // result is fresh and valid (the 401 was about the OLD token). Let
+      // it complete; coalesced callers benefit from the fresh token.
     },
 
     /** Test/diagnostic accessor. */
     _state() {
-      return { cached: !!cachedToken, mintedAt };
+      return { cached: !!cachedToken, mintedAt, pendingMint: !!pendingMint };
     }
   };
 }
@@ -590,6 +627,61 @@ export async function forwardRequest(
 
 // ── Main pipeline (line-based stdio) ─────────────────────────────────────────
 
+/**
+ * Handle a single MCP message: parse, forward to gateway, emit response.
+ *
+ * Extracted from main() for testability + so the line-transform's `transform`
+ * can be a thin wrapper. Returns a Promise that resolves when the response
+ * (or parse-error) has been pushed; tests track concurrency by awaiting
+ * multiple in parallel.
+ *
+ * Concurrency contract: caller MAY invoke this for multiple lines without
+ * awaiting each one — that's the whole point of the fix for HIGH #1
+ * (head-of-line blocking). Out-of-order responses are allowed by JSON-RPC
+ * (clients correlate by `id`).
+ *
+ * Exported for unit testing.
+ */
+export async function handleMessage(
+  rawLine,
+  { tokenCache, pushFn, forwardRequestFn = forwardRequest, logFn = log } = {}
+) {
+  const line = typeof rawLine === 'string' ? rawLine : rawLine.toString();
+  if (!line.trim()) return;
+
+  let message;
+  try {
+    message = JSON.parse(line);
+  } catch (parseErr) {
+    logFn.error('Failed to parse stdin line', {
+      error: parseErr.message,
+      line: line.slice(0, 100)
+    });
+    pushFn(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: { code: -32700, message: 'Parse error' },
+        id: null
+      }) + '\n'
+    );
+    return;
+  }
+
+  try {
+    const response = await forwardRequestFn(message, { tokenCache });
+    pushFn(JSON.stringify(response) + '\n');
+  } catch (err) {
+    logFn.error('Unexpected forwardRequest error', { error: err.message });
+    pushFn(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: { code: -32603, message: 'Internal error' },
+        id: message.id ?? null
+      }) + '\n'
+    );
+  }
+}
+
 async function main() {
   const activeAccount = await preFlight();
   // Pass activeAccount into the cache → enables Shape B (omit --audiences
@@ -605,9 +697,18 @@ async function main() {
     requestTimeoutMs: config.requestTimeoutMs
   });
 
+  // Fix HIGH #3 (multi-byte UTF-8 corruption): engage Node's internal
+  // StringDecoder so partial multi-byte sequences across pipe-buffer
+  // boundaries are buffered safely. Without this, `chunk.toString()`
+  // on a buffer that ends mid-codepoint corrupts the character →
+  // JSON.parse throws downstream → false parse-error response.
+  process.stdin.setEncoding('utf8');
+
   const lineSplitter = new Transform({
+    encoding: 'utf8',
+    decodeStrings: false,
     transform(chunk, encoding, callback) {
-      const str = (this.lastLine || '') + chunk.toString();
+      const str = (this.lastLine || '') + chunk;
       this.lastLine = '';
       const lines = str.split('\n');
       this.lastLine = lines.pop();
@@ -624,45 +725,38 @@ async function main() {
     }
   });
 
-  const lineTransform = new Transform({
-    transform(chunk, encoding, callback) {
-      const line = chunk.toString();
-      if (!line.trim()) {
-        callback();
-        return;
-      }
-      let message;
-      try {
-        message = JSON.parse(line);
-      } catch (parseErr) {
-        log.error('Failed to parse stdin line', {
-          error: parseErr.message,
-          line: line.slice(0, 100)
-        });
-        const errorResponse = {
-          jsonrpc: '2.0',
-          error: { code: -32700, message: 'Parse error' },
-          id: null
-        };
-        callback(null, JSON.stringify(errorResponse) + '\n');
-        return;
-      }
+  // In-flight response tracking for graceful shutdown. Without this, a
+  // pending forwardRequest could be racing with process.exit when stdin
+  // closes, dropping its response on the floor.
+  const inFlight = new Set();
 
-      forwardRequest(message, { tokenCache })
-        .then((response) => {
-          callback(null, JSON.stringify(response) + '\n');
-        })
-        .catch((err) => {
-          log.error('Unexpected forwardRequest error', { error: err.message });
-          callback(
-            null,
-            JSON.stringify({
-              jsonrpc: '2.0',
-              error: { code: -32603, message: 'Internal error' },
-              id: message.id ?? null
-            }) + '\n'
-          );
-        });
+  // Fix HIGH #1 (head-of-line blocking): the previous design called the
+  // Transform `callback(null, response)` INSIDE forwardRequest's `.then()`,
+  // which made the stream wait for the HTTP round-trip before reading the
+  // next stdin chunk. That serialised all MCP traffic and broke
+  // notifications/cancellation. The fix: call `callback()` immediately
+  // after parsing the line, freeing the stream to read more input; use
+  // `this.push(...)` to emit responses asynchronously as they arrive.
+  // Out-of-order responses are allowed by JSON-RPC (clients correlate by
+  // `id`).
+  const lineTransform = new Transform({
+    encoding: 'utf8',
+    decodeStrings: false,
+    transform(chunk, encoding, callback) {
+      const t = this;
+      const promise = handleMessage(chunk, {
+        tokenCache,
+        pushFn: (out) => t.push(out)
+      }).finally(() => inFlight.delete(promise));
+      inFlight.add(promise);
+      callback(); // free the stream IMMEDIATELY — don't await forwardRequest
+    },
+    async flush(callback) {
+      // Drain in-flight responses before signalling stream-end. Without
+      // this, late-arriving responses would be lost when the readable side
+      // closes.
+      await Promise.allSettled([...inFlight]);
+      callback();
     }
   });
 
