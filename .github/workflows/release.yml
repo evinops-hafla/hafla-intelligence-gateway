@@ -68,6 +68,9 @@ jobs:
 
       - name: publish
         working-directory: packages/intelligence-mcp-bridge
-        # publishConfig in package.json handles --access public and --provenance.
+        # publishConfig in package.json handles --access public.
+        # --provenance is opt-in here so local manual publishes (which can't
+        # produce OIDC attestations) don't fail. CI is the only path that
+        # mints provenance, and it does so explicitly via this flag.
         # Under OIDC trusted publishing, no NODE_AUTH_TOKEN is required.
-        run: npm publish
+        run: npm publish --provenance
