@@ -232,6 +232,64 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
     );
   });
 
+  test('execGcloud throws PERMISSION_DENIED → catch-block surfaces actionable banner', async () => {
+    // Covers the mint-itself-fails path (distinct from the mint-succeeds-
+    // but-cross-check-rejects paths covered by tests (c) and (d)). Real
+    // production triggers for this: operator's gcloud creds expired, or
+    // tokenCreator role revoked mid-session, or — empirically-unverified —
+    // gcloud's IAM Credentials API rejecting an impersonated mint that
+    // lacks --audiences. All three surface here as a "Failed to mint"
+    // banner so the catch-block is the single recovery point.
+    const failFn = collectingFailFn();
+    const cache = createTokenCache({
+      activeAccount: 'sidd@hafla.com',
+      execGcloudFn: async () => {
+        const err = new Error(
+          'PERMISSION_DENIED: Caller does not have permission roles/iam.serviceAccountTokenCreator on SA'
+        );
+        err.stderr =
+          'ERROR: (gcloud.auth.print-identity-token) PERMISSION_DENIED ...';
+        throw err;
+      },
+      failFn,
+      now: () => 0
+    });
+    await cache.getToken();
+    assert.equal(failFn.calls.length, 1);
+    assert.equal(cache._state().cached, false);
+    const message = failFn.calls[0].join('\n');
+    assert.match(message, /Failed to mint Google ID token/);
+    assert.match(message, /PERMISSION_DENIED/);
+    assert.match(
+      message,
+      /roles\/iam\.serviceAccountTokenCreator/,
+      'banner must name the missing role so operators know what to request'
+    );
+  });
+
+  test('malformed JWT (wrong segment count) → catch-block surfaces decoder banner', async () => {
+    // Exercises the post-mint decode path when execGcloud returns
+    // something that does not parse as a JWT. The decodeJwtFn injection
+    // point in createTokenCache exists for this scenario — without this
+    // test it is unexercised API surface. We use the default decoder
+    // (no injection) since a real gcloud-returns-garbage scenario does
+    // not go through a custom decoder; the test thereby covers both the
+    // decoder's segment-count guard AND the catch-block in getToken().
+    const failFn = collectingFailFn();
+    const cache = createTokenCache({
+      activeAccount: 'sidd@hafla.com',
+      execGcloudFn: async () => 'not-a-jwt-shape', // 1 segment → decoder throws
+      failFn,
+      now: () => 0
+    });
+    await cache.getToken();
+    assert.equal(failFn.calls.length, 1);
+    assert.equal(cache._state().cached, false);
+    const message = failFn.calls[0].join('\n');
+    assert.match(message, /does not parse as a JWT/);
+    assert.match(message, /gcloud components update/);
+  });
+
   test('case-insensitive identity match (active=Sidd@HAFLA.com vs token email=sidd@hafla.com)', async () => {
     const failFn = collectingFailFn();
     const cache = createTokenCache({

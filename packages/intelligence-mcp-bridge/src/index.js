@@ -297,6 +297,13 @@ export function createTokenCache({
           error: err.message,
           stderr: err.stderr
         });
+        // This catch path also captures the empirically-unverified edge case
+        // documented in `specs/.../research/2026-05-16-bs3-final-plan-synthesis.md`
+        // § Empirical verification: human-active + impersonation-config-set +
+        // no-`--audiences` (Shape B's human branch). If gcloud's IAM
+        // Credentials API rejects the mint because it requires an audience
+        // under impersonation, the error surfaces here as a "Failed to mint"
+        // banner with the same PERMISSION_DENIED / impersonation hint.
         failFn(
           `Failed to mint Google ID token: ${err.message}`,
           'Common causes:',
@@ -304,9 +311,16 @@ export function createTokenCache({
           `  2. Wrong active project — check: gcloud config get-value project`,
           `  3. PERMISSION_DENIED on impersonation — the SA you're configured to`,
           `     impersonate may not grant you roles/iam.serviceAccountTokenCreator,`,
-          `     OR you have not been added to the relevant role binding yet.`
+          `     OR you have not been added to the relevant role binding yet.`,
+          `  4. gcloud's IAM Credentials API rejected the mint because the active`,
+          `     account is human but impersonation config requires an audience.`,
+          `     Unset impersonation: gcloud config unset auth/impersonate_service_account`
         );
-        return; // failFn is process.exit in prod; tests inject a throwing stub
+        // failFn → process.exit(1) in production (synchronous; this return is
+        // unreachable). Tests inject a non-throwing collector (collectingFailFn)
+        // — the `return` is what halts execution under test so we don't fall
+        // through to caching a token that was never minted.
+        return;
       }
 
       // Post-mint identity cross-check (Path A / BS-3 resolution).
