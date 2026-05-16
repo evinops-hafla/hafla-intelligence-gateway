@@ -133,6 +133,28 @@ function fail(title, ...lines) {
   process.exit(1);
 }
 
+// ── JWT payload decoder (no signature verification) ─────────────────────────
+
+/**
+ * Decode the payload (middle segment) of a JWT without verifying the
+ * signature. Used by the post-mint identity cross-check below to read the
+ * `email` claim from a token gcloud has just produced.
+ *
+ * We do NOT verify — the gateway re-verifies via jose against Google JWKS
+ * (defence-in-depth). The bridge only needs to inspect the claim cheaply.
+ *
+ * Exported for test injection and for any future caller that needs the
+ * same primitive.
+ */
+export function decodeJwtPayloadNoVerify(token) {
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    throw new Error('not a JWT (expected 3 dot-separated segments)');
+  }
+  const json = Buffer.from(parts[1], 'base64url').toString('utf8');
+  return JSON.parse(json);
+}
+
 // ── gcloud invocation — injectable for tests ────────────────────────────────
 
 /**
@@ -214,15 +236,34 @@ export async function preFlight({ execGcloudFn = execGcloud } = {}) {
  * Internal token cache state. Exposed via a factory so tests can reset
  * between cases.
  */
+const SA_EMAIL_SUFFIX = '.iam.gserviceaccount.com';
+
 export function createTokenCache({
   execGcloudFn = execGcloud,
   audience = config.audience,
   lifetimeMs = config.tokenLifetimeMs,
   refreshBeforeMs = config.tokenRefreshBeforeMs,
-  now = () => Date.now()
+  now = () => Date.now(),
+  // Shape B + cross-check inputs. When `activeAccount` is null (legacy /
+  // unit-test path), the cache behaves as 1.0.0 did: --audiences always
+  // appended; no post-mint identity check. When provided (production via
+  // main() → preFlight()), Shape B branches on the active-account type and
+  // the cross-check rejects mismatches.
+  activeAccount = null,
+  // Test injection — `fail` calls process.exit(1) in production. Tests pass
+  // a throwing stub so the cross-check rejection paths can be asserted.
+  failFn = fail,
+  decodeJwtFn = decodeJwtPayloadNoVerify
 } = {}) {
   let cachedToken = null;
   let mintedAt = 0;
+
+  // Shape B: humans omit --audiences (gcloud --audiences is service-account-
+  // only — BS-3). SAs (or unknown legacy/test contexts) keep --audiences for
+  // backwards compatibility and for the SA path that actually requires it.
+  const isHumanActive =
+    typeof activeAccount === 'string' &&
+    !activeAccount.toLowerCase().endsWith(SA_EMAIL_SUFFIX);
 
   return {
     /** Returns a fresh token, minting + caching as needed. */
@@ -232,32 +273,113 @@ export function createTokenCache({
         return cachedToken;
       }
 
+      const args = ['auth', 'print-identity-token'];
+      if (!isHumanActive) {
+        args.push(`--audiences=${audience}`);
+      }
+
       let token;
       try {
-        token = await execGcloudFn([
-          'auth',
-          'print-identity-token',
-          `--audiences=${audience}`
-        ]);
+        token = await execGcloudFn(args);
       } catch (err) {
         log.error('Failed to mint identity token', {
           error: err.message,
           stderr: err.stderr
         });
-        fail(
+        failFn(
           `Failed to mint Google ID token: ${err.message}`,
           'Common causes:',
           `  1. Expired credentials — run: gcloud auth login`,
           `  2. Wrong active project — check: gcloud config get-value project`,
-          `  3. Missing --audiences support — older gcloud SDK; upgrade: gcloud components update`
+          `  3. PERMISSION_DENIED on impersonation — the SA you're configured to`,
+          `     impersonate may not grant you roles/iam.serviceAccountTokenCreator,`,
+          `     OR you have not been added to the relevant role binding yet.`
         );
+        return; // failFn is process.exit in prod; tests inject a throwing stub
+      }
+
+      // Post-mint identity cross-check (Path A / BS-3 resolution).
+      //
+      // Only runs when activeAccount was provided (production flow via
+      // preFlight). Skipped in legacy / unit-test contexts where the cache
+      // is exercised in isolation.
+      //
+      // Why hard-reject rather than warn-then-pass:
+      //   The bridge's local invariant is "the minted token represents the
+      //   active gcloud account". If gcloud is configured to impersonate
+      //   (config set auth/impersonate_service_account, env var, wrapper,
+      //   future surface), the minted token's email claim will differ from
+      //   the active account. Forwarding it would let the gateway's SA
+      //   branch admit the request and erase the human's identity from the
+      //   audit trail — silently violating D-4's "verified email claim IS
+      //   the user identity" property at the bridge layer. Stderr warnings
+      //   are too easy to suppress (MCP clients route stdio child stderr
+      //   to debug logs or /dev/null). Hard-reject is the only sound
+      //   posture.
+      //
+      // Why decode-not-parse: enumerating gcloud's impersonation surfaces
+      // (config, env vars, wrappers, future flags) is a losing game. The
+      // minted token's `email` claim is the deterministic source of truth
+      // for what gcloud actually produced.
+      if (activeAccount) {
+        let claims;
+        try {
+          claims = decodeJwtFn(token);
+        } catch (err) {
+          failFn(
+            `gcloud minted a token that does not parse as a JWT: ${err.message}`,
+            'This usually means gcloud returned an unexpected output format.',
+            'Try: gcloud components update'
+          );
+          return;
+        }
+
+        if (typeof claims.email !== 'string') {
+          failFn(
+            'gcloud minted a token with no `email` claim.',
+            'If gcloud is using --impersonate-service-account, also pass',
+            '--include-email (the IAM Credentials API defaults includeEmail',
+            'to false). Without an email claim, the bridge cannot enforce',
+            'identity attribution. Either fix the gcloud invocation or',
+            'unset the impersonation config and try again.'
+          );
+          return;
+        }
+
+        if (claims.email.toLowerCase() !== activeAccount.toLowerCase()) {
+          failFn(
+            `Identity mismatch: gcloud minted a token for "${claims.email}"`,
+            `but your active gcloud account is "${activeAccount}".`,
+            '',
+            'This almost always means gcloud is configured to impersonate a',
+            'service account (via "gcloud config set',
+            'auth/impersonate_service_account", the',
+            'CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT env var, a wrapper',
+            'script, or similar). Forwarding this token would silently erase',
+            'your identity from the gateway audit trail — Hafla MCP requires',
+            'per-user attribution.',
+            '',
+            'To fix:',
+            '  1. gcloud config unset auth/impersonate_service_account',
+            '  2. unset CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT  (if set)',
+            '  3. Check for any wrapper script or alias around "gcloud"',
+            '  4. Restart the bridge.',
+            '',
+            'If you legitimately need to act as the service account, run',
+            'the bridge from a CI / Cloud Run / Vertex context where the',
+            'SA IS your active account — "gcloud auth list" should show',
+            'the SA as active. The cross-check passes in that case.'
+          );
+          return;
+        }
       }
 
       cachedToken = token;
       mintedAt = t;
       log.info('Identity token minted', {
         ttlMs: lifetimeMs,
-        nextRefreshInMs: lifetimeMs - refreshBeforeMs
+        nextRefreshInMs: lifetimeMs - refreshBeforeMs,
+        identityCrossCheck: activeAccount ? 'verified' : 'skipped'
       });
       return cachedToken;
     },
@@ -428,8 +550,12 @@ export async function forwardRequest(
 // ── Main pipeline (line-based stdio) ─────────────────────────────────────────
 
 async function main() {
-  await preFlight();
-  const tokenCache = createTokenCache();
+  const activeAccount = await preFlight();
+  // Pass activeAccount into the cache → enables Shape B (omit --audiences
+  // for human active accounts) AND the post-mint identity cross-check
+  // (hard-reject if gcloud silently minted as a different identity, e.g.
+  // global impersonation config).
+  const tokenCache = createTokenCache({ activeAccount });
 
   log.info('intelligence-mcp-bridge started', {
     gatewayUrl: config.gatewayUrl,
