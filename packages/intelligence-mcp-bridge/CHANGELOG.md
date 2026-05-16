@@ -22,7 +22,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Compatibility
 
-- Source-level breaking changes to `createTokenCache`: new optional `activeAccount`, `failFn`, `decodeJwtFn` parameters. When `activeAccount` is null (the 1.0.0 call shape), behaviour is identical to 1.0.0 — `--audiences` is always passed, no cross-check runs. The new defaults activate only when `main()` wires the value through from `preFlight()`. **No breaking change for the npx-bin use case** that operators actually consume.
+- Source-level changes to `createTokenCache`: new optional `activeAccount`, `failFn`, `decodeJwtFn` parameters. When `activeAccount` is null (the 1.0.0 call shape), behaviour is identical to 1.0.0 — `--audiences` is always passed, no cross-check runs. The new defaults activate only when `main()` wires the value through from `preFlight()`. **No breaking change for the npx-bin use case** that operators actually consume.
+
+### Deploy ordering (operator-facing)
+
+1.0.1 mints tokens **without** `--audiences` when the active gcloud account is human (Shape B). The Cloud Run gateway must therefore accept tokens with `aud=32555940559.apps.googleusercontent.com` (gcloud SDK's default OAuth client ID) — this is the **Path A multi-audience** change in the gateway's `auth.js` + the multi-value `--add-custom-audiences` on the Cloud Run service. **Deploy the gateway-side Path A change BEFORE updating any client's `.mcp.json` to 1.0.1** — otherwise the gateway will 401 on every request from the new bridge until the gateway accepts the broader audience.
 
 ### Cross-references
 

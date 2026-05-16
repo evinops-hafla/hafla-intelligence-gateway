@@ -256,7 +256,7 @@ describe('decodeJwtPayloadNoVerify', () => {
 // tests against the published package.
 
 describe('preFlight', () => {
-  test('returns active account on happy path', async () => {
+  test('returns active account on human happy path', async () => {
     const account = await preFlight({
       execGcloudFn: async (args) => {
         if (args[0] === 'auth' && args[1] === 'list') {
@@ -266,6 +266,25 @@ describe('preFlight', () => {
       }
     });
     assert.equal(account, 'sidd@hafla.com');
+  });
+
+  test('returns active account on SA happy path (CI / Cloud Run / Vertex)', async () => {
+    // Regression: an earlier draft of preFlight rejected any active account
+    // not ending in @hafla.com, which would have blocked the SA-native flow
+    // that createTokenCache's Shape B branch is explicitly designed to serve.
+    // Code reviewer (2026-05-16) caught the contradiction; this test guards
+    // against any future re-introduction.
+    const saEmail =
+      'mcp-gw-production-sa@hafla-backend-v1.iam.gserviceaccount.com';
+    const account = await preFlight({
+      execGcloudFn: async (args) => {
+        if (args[0] === 'auth' && args[1] === 'list') {
+          return saEmail;
+        }
+        throw new Error(`unexpected args: ${args.join(' ')}`);
+      }
+    });
+    assert.equal(account, saEmail);
   });
 });
 

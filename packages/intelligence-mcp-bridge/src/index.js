@@ -212,10 +212,21 @@ export async function preFlight({ execGcloudFn = execGcloud } = {}) {
     );
   }
 
-  // (b) active account must be on the required Workspace domain
-  if (!activeAccount.endsWith(`@${config.requiredDomain}`)) {
+  // (b) active account must be either on the required Workspace domain
+  // (human path — most operators) OR a service account (CI runner, Cloud
+  // Run service, Vertex agent running natively under SA identity). SA
+  // emails end in `.iam.gserviceaccount.com` and don't have an @domain
+  // form; rejecting them here would block the legitimate SA-native flow
+  // that createTokenCache's Shape B branch is designed to serve.
+  const isSAActive = activeAccount
+    .toLowerCase()
+    .endsWith('.iam.gserviceaccount.com');
+  const isOnRequiredDomain = activeAccount.endsWith(
+    `@${config.requiredDomain}`
+  );
+  if (!isSAActive && !isOnRequiredDomain) {
     fail(
-      `Active gcloud account is "${activeAccount}" — must be an @${config.requiredDomain} account.`,
+      `Active gcloud account is "${activeAccount}" — must be an @${config.requiredDomain} account OR a service account (.iam.gserviceaccount.com).`,
       `Run: gcloud config set account <your-${config.requiredDomain}-email>`,
       `(If you have not yet logged in with your ${config.requiredDomain} account:`,
       `   gcloud auth login)`
