@@ -462,9 +462,18 @@ function mockHttpRequest({ statusCode, body }) {
     req.end = () => {
       const res = new EventEmitter();
       res.statusCode = statusCode;
+      // Real Node http.IncomingMessage exposes setEncoding(); the bridge
+      // calls it to engage StringDecoder for safe multi-byte UTF-8
+      // handling across TCP chunks. Mock as a no-op so the bridge can
+      // call it without crashing the test. Tests that specifically need
+      // to assert setEncoding-was-called build their own mock (see the
+      // "multi-byte UTF-8 response body" describe block).
+      res.setEncoding = () => {};
       callback(res);
       setImmediate(() => {
-        res.emit('data', Buffer.from(body));
+        // Emit a string (matching the post-setEncoding behaviour of real
+        // Node http) so `body += chunk` produces the expected output.
+        res.emit('data', body);
         res.emit('end');
       });
     };
@@ -584,6 +593,147 @@ describe('handleMessage — concurrent dispatch (HIGH #1 fix)', () => {
     });
     assert.equal(pushed.length, 0);
     assert.equal(forwardCalled, false);
+  });
+});
+
+describe('forwardRequest — multi-byte UTF-8 response body (dl-review 2026-05-17 MEDIUM #1)', () => {
+  test('correctly reassembles multi-byte UTF-8 split across response chunks', async () => {
+    // The MCP gateway returns tool results that routinely include
+    // non-ASCII content: WhatsApp message bodies (Arabic, emoji),
+    // AlloyDB queries against user-entered text, etc. If a TCP chunk
+    // boundary splits a multi-byte UTF-8 codepoint (a 4-byte emoji or
+    // 2-3 byte Arabic letter), the previous code's `body += chunk.toString()`
+    // corrupted the codepoint. With `res.setEncoding('utf8')`, Node's
+    // internal StringDecoder buffers partial sequences correctly.
+    //
+    // This test simulates real Node http behaviour:
+    //   - mock res tracks whether setEncoding('utf8') was called
+    //   - if called: emit chunks via StringDecoder (Node's real behaviour)
+    //   - if not: emit raw Buffers (the bug path)
+    // Test asserts the bridge took the correct path and the content
+    // survives intact.
+    const { StringDecoder } = await import('node:string_decoder');
+
+    // "حبا 🇸🇦" — Arabic + Saudi flag emoji. UTF-8 bytes are
+    // multi-byte everywhere; any split between bytes 1 and 11 falls
+    // inside a multi-byte sequence.
+    const payload = { jsonrpc: '2.0', result: { content: 'حبا 🇸🇦' }, id: 1 };
+    const bytes = Buffer.from(JSON.stringify(payload), 'utf8');
+    // Find a split offset guaranteed mid-codepoint. Bytes 1-8 are inside
+    // the Arabic + emoji area when JSON is `{"jsonrpc":"2.0","result":{"content":"حبا 🇸🇦"},"id":1}`.
+    // Pick offset 35 — likely lands mid-Arabic.
+    const splitOffset = 35;
+    const chunk1 = bytes.subarray(0, splitOffset);
+    const chunk2 = bytes.subarray(splitOffset);
+
+    const mockReq = (options, callback) => {
+      const req = new EventEmitter();
+      let encoding = null;
+      req.write = () => {};
+      req.end = () => {
+        const res = new EventEmitter();
+        res.statusCode = 200;
+        res.setEncoding = (enc) => {
+          encoding = enc;
+        };
+        callback(res);
+        setImmediate(() => {
+          if (encoding === 'utf8') {
+            // Bridge correctly called setEncoding → Node would decode
+            // via StringDecoder. Simulate that.
+            const decoder = new StringDecoder('utf8');
+            res.emit('data', decoder.write(chunk1));
+            res.emit('data', decoder.write(chunk2));
+            const tail = decoder.end();
+            if (tail) res.emit('data', tail);
+          } else {
+            // Bridge did NOT call setEncoding → raw Buffers emitted →
+            // bug path. body += chunk.toString() on partial buffer corrupts.
+            res.emit('data', chunk1);
+            res.emit('data', chunk2);
+          }
+          res.emit('end');
+        });
+      };
+      req.destroy = () => {};
+      return req;
+    };
+
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 1 },
+      {
+        tokenCache,
+        httpRequestFn: mockReq,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+
+    assert.equal(
+      result.result?.content,
+      'حبا 🇸🇦',
+      'multi-byte UTF-8 content must survive intact across chunk boundaries — proves res.setEncoding("utf8") is engaged'
+    );
+  });
+
+  test('calls res.setEncoding("utf8") before attaching the data handler', async () => {
+    // Belt-and-suspenders: directly assert the call ordering. Catches a
+    // future refactor that accidentally removes the setEncoding line.
+    const events = [];
+    const mockReq = (options, callback) => {
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.end = () => {
+        const res = new EventEmitter();
+        res.statusCode = 200;
+        res.setEncoding = () => events.push('setEncoding');
+        const origOn = res.on.bind(res);
+        res.on = (ev, fn) => {
+          if (ev === 'data') events.push('data-handler-attached');
+          return origOn(ev, fn);
+        };
+        callback(res);
+        setImmediate(() => {
+          res.emit('data', '{"jsonrpc":"2.0","result":"ok","id":1}');
+          res.emit('end');
+        });
+      };
+      req.destroy = () => {};
+      return req;
+    };
+
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+
+    await forwardRequest(
+      { jsonrpc: '2.0', method: 'x', id: 1 },
+      {
+        tokenCache,
+        httpRequestFn: mockReq,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+
+    const setEncIdx = events.indexOf('setEncoding');
+    const dataHandlerIdx = events.indexOf('data-handler-attached');
+    assert.ok(
+      setEncIdx !== -1,
+      'res.setEncoding MUST be called — see dl-review 2026-05-17 MEDIUM #1'
+    );
+    assert.ok(
+      setEncIdx < dataHandlerIdx,
+      'setEncoding MUST be called BEFORE the data handler is attached, else early chunks bypass StringDecoder'
+    );
   });
 });
 

@@ -557,9 +557,20 @@ export async function forwardRequest(
     };
 
     const req = httpRequestFn(options, (res) => {
+      // Engage Node's internal StringDecoder so partial multi-byte UTF-8
+      // sequences across TCP chunk boundaries are buffered safely. Without
+      // this, a 4-byte emoji or 2-3 byte Arabic codepoint split across two
+      // chunks would corrupt when `chunk.toString()` ran on the partial
+      // buffer, and JSON.parse(body) downstream would either throw or
+      // produce wrong content. Symmetric with the stdin-side fix at the
+      // bottom of this file (`process.stdin.setEncoding('utf8')`). The
+      // customer-facing WhatsApp corpus and AlloyDB queries against
+      // user-entered content routinely include multi-byte payloads — this
+      // is not a theoretical concern.
+      res.setEncoding('utf8');
       let body = '';
       res.on('data', (chunk) => {
-        body += chunk.toString();
+        body += chunk; // chunk is now a string; no .toString() needed
       });
       res.on('end', () => {
         clearTimeout(timeoutId);
