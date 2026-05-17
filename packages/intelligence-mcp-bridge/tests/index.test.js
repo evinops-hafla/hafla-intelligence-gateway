@@ -34,7 +34,8 @@ import {
   preFlight,
   forwardRequest,
   decodeJwtPayloadNoVerify,
-  handleMessage
+  handleMessage,
+  extractSseJson
 } from '../src/index.js';
 
 // ── JWT-shaped token builder for cross-check tests ──────────────────────────
@@ -751,6 +752,122 @@ describe('forwardRequest — multi-byte UTF-8 response body (dl-review 2026-05-1
       setEncIdx < dataHandlerIdx,
       'setEncoding MUST be called BEFORE the data handler is attached, else early chunks bypass StringDecoder'
     );
+  });
+});
+
+describe('extractSseJson', () => {
+  test('parses single-frame SSE response with leading space after data:', () => {
+    const body =
+      'event: message\ndata: {"jsonrpc":"2.0","id":1,"result":"ok"}\n\n';
+    const parsed = extractSseJson(body);
+    assert.equal(parsed.result, 'ok');
+    assert.equal(parsed.id, 1);
+  });
+
+  test('parses SSE without leading space after data:', () => {
+    const body =
+      'event: message\ndata:{"jsonrpc":"2.0","id":2,"result":"ok"}\n\n';
+    const parsed = extractSseJson(body);
+    assert.equal(parsed.id, 2);
+  });
+
+  test('joins multi-line data: fields per SSE spec', () => {
+    const body =
+      'event: message\ndata: {"jsonrpc":"2.0",\ndata: "id":3,"result":"ok"}\n\n';
+    const parsed = extractSseJson(body);
+    assert.equal(parsed.id, 3);
+  });
+
+  test('handles CRLF line endings', () => {
+    const body =
+      'event: message\r\ndata: {"jsonrpc":"2.0","id":4,"result":"ok"}\r\n\r\n';
+    const parsed = extractSseJson(body);
+    assert.equal(parsed.id, 4);
+  });
+
+  test('throws when body has no data: lines', () => {
+    assert.throws(() => extractSseJson('event: ping\n\n'), /no data: lines/);
+  });
+});
+
+describe('forwardRequest — SSE response (gateway returns text/event-stream)', () => {
+  test('correctly parses SSE-wrapped JSON-RPC reply', async () => {
+    const ssePayload =
+      'event: message\ndata: {"jsonrpc":"2.0","id":1,"result":{"tools":[]}}\n\n';
+    const mockReq = (options, callback) => {
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.end = () => {
+        const res = new EventEmitter();
+        res.statusCode = 200;
+        res.headers = { 'content-type': 'text/event-stream' };
+        res.setEncoding = () => {};
+        callback(res);
+        setImmediate(() => {
+          res.emit('data', ssePayload);
+          res.emit('end');
+        });
+      };
+      req.destroy = () => {};
+      return req;
+    };
+
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/list', id: 1 },
+      {
+        tokenCache,
+        httpRequestFn: mockReq,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+
+    assert.equal(result.id, 1);
+    assert.ok(Array.isArray(result.result?.tools));
+  });
+
+  test('falls back to JSON.parse when content-type is application/json', async () => {
+    const mockReq = (options, callback) => {
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.end = () => {
+        const res = new EventEmitter();
+        res.statusCode = 200;
+        res.headers = { 'content-type': 'application/json' };
+        res.setEncoding = () => {};
+        callback(res);
+        setImmediate(() => {
+          res.emit('data', '{"jsonrpc":"2.0","id":7,"result":"plain"}');
+          res.emit('end');
+        });
+      };
+      req.destroy = () => {};
+      return req;
+    };
+
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'x', id: 7 },
+      {
+        tokenCache,
+        httpRequestFn: mockReq,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+
+    assert.equal(result.result, 'plain');
   });
 });
 

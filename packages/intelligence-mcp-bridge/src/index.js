@@ -188,6 +188,39 @@ export function decodeJwtPayloadNoVerify(token) {
   return JSON.parse(json);
 }
 
+// ── SSE response parsing ────────────────────────────────────────────────────
+
+/**
+ * Extract a single JSON payload from an MCP Streamable-HTTP SSE response body.
+ *
+ * Format (per W3C Server-Sent Events + MCP spec):
+ *   event: message
+ *   data: {"jsonrpc":"2.0","id":1,"result":{...}}
+ *   <blank line>
+ *
+ * The MCP server may emit multiple events; for request-response calls there is
+ * typically exactly one `message` event carrying the JSON-RPC reply. We
+ * concatenate all `data:` lines from the last event (per SSE spec a multi-line
+ * data field is joined by '\n') and JSON.parse the result.
+ *
+ * Exported for unit tests.
+ */
+export function extractSseJson(body) {
+  const dataLines = [];
+  for (const line of body.split(/\r?\n/)) {
+    if (line.startsWith('data:')) {
+      // Strip the "data:" prefix and one optional leading space (SSE quirk:
+      // "data: foo" and "data:foo" are both legal; the leading space is
+      // stripped per the spec)
+      dataLines.push(line.slice(5).replace(/^ /, ''));
+    }
+  }
+  if (dataLines.length === 0) {
+    throw new Error('SSE body contained no data: lines');
+  }
+  return JSON.parse(dataLines.join('\n'));
+}
+
 // ── gcloud invocation — injectable for tests ────────────────────────────────
 
 /**
@@ -640,11 +673,21 @@ export async function forwardRequest(
           return;
         }
 
+        // The MCP Streamable HTTP transport may respond with either
+        // `application/json` (single JSON-RPC frame) or `text/event-stream`
+        // (SSE). The gateway picks based on internal heuristics; both are
+        // protocol-valid (MCP spec 2024-11-05 § "Streamable HTTP"). Detect
+        // by Content-Type and parse accordingly. Without this, every tool
+        // call returns -32700 to the client when the gateway picks SSE.
+        const contentType = (res.headers?.['content-type'] || '').toLowerCase();
+        const isSse = contentType.includes('text/event-stream');
+        let payload;
         try {
-          resolve(JSON.parse(body));
+          payload = isSse ? extractSseJson(body) : JSON.parse(body);
         } catch (e) {
           log.error('Failed to parse gateway response', {
             parseError: e.message,
+            contentType,
             id: message.id,
             bodyLength: body.length
           });
@@ -653,7 +696,9 @@ export async function forwardRequest(
             error: { code: -32700, message: 'Parse error' },
             id: message.id ?? null
           });
+          return;
         }
+        resolve(payload);
       });
     });
 
