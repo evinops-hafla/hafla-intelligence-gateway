@@ -7,6 +7,23 @@
  * request function.
  *
  * No real network or gcloud calls happen here.
+ *
+ * TODO(integration): main()'s full pipeline (process.stdin → lineSplitter →
+ * lineTransform → process.stdout) is NOT exercised end-to-end by any test
+ * in this file. The HOL-blocking fix's correctness depends on:
+ *   (a) handleMessage being called per-line — covered by direct unit tests
+ *       in the "handleMessage — concurrent dispatch" describe block;
+ *   (b) the Transform.push() → process.stdout glue actually emitting
+ *       responses correctly — NOT covered here.
+ * Reviewer 2026-05-17 flagged this gap. E2E validation today comes from
+ * the operator's `npx -y @hafla/intelligence-mcp-bridge@1.0.1` smoke test
+ * against the live mcp.hafla.com gateway. A future integration test could
+ * spawn a real `node src/index.js` child with mocked gcloud + a local MCP
+ * gateway stub, write JSON lines to its stdin, and assert stdout — but
+ * doing it correctly requires a fixture for the gcloud subprocess and a
+ * lightweight HTTPS server, which is more setup than this branch warrants.
+ * Tracked for a future 1.x release if/when MCP-client compatibility
+ * regressions surface in real use.
  */
 
 import { test, describe } from 'node:test';

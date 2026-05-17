@@ -824,6 +824,51 @@ async function main() {
     }
   });
 
+  // Graceful shutdown — drain in-flight responses on SIGTERM/SIGINT with a
+  // hard timeout cap so a wedged forwardRequest can't hang the process.
+  //
+  // Registered INSIDE main() (not at module load) so:
+  //   (a) the closure over `inFlight` is correct (handlers can see in-flight
+  //       responses);
+  //   (b) test imports of this module don't accidentally install signal
+  //       handlers that interfere with the test runner;
+  //   (c) handlers are only active while the bridge is actually running.
+  //
+  // Without this drain, in-flight forwardRequest responses arriving between
+  // SIGTERM and process.exit() would be dropped — fine for the typical
+  // stdio-MCP-disconnect case (parent process is going away) but wrong if
+  // the bridge ever runs under a process supervisor that expects graceful
+  // shutdown. Reviewer 2026-05-17 flagged this as NIT; addressing
+  // defensively while the branch is pre-merge.
+  let shuttingDown = false;
+  const drainTimeoutMs = 2000;
+  const onShutdownSignal = async (signal) => {
+    if (shuttingDown) {
+      log.warn('Shutdown signal received again — forcing exit', { signal });
+      process.exit(1);
+    }
+    shuttingDown = true;
+    log.info('Shutdown signal — draining in-flight responses', {
+      signal,
+      inFlightCount: inFlight.size
+    });
+    const result = await Promise.race([
+      Promise.allSettled([...inFlight]).then(() => 'drained'),
+      new Promise((r) => setTimeout(() => r('timeout'), drainTimeoutMs))
+    ]);
+    if (result === 'timeout') {
+      log.warn('Drain timed out — exiting with dropped responses', {
+        droppedCount: inFlight.size,
+        drainTimeoutMs
+      });
+      process.exit(1);
+    }
+    log.info('Drain complete — exiting', { signal });
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => onShutdownSignal('SIGTERM'));
+  process.on('SIGINT', () => onShutdownSignal('SIGINT'));
+
   try {
     await pipeline(process.stdin, lineSplitter, lineTransform, process.stdout);
     log.info('Pipeline closed normally');
@@ -833,17 +878,6 @@ async function main() {
     process.exit(1);
   }
 }
-
-// ── Graceful shutdown ────────────────────────────────────────────────────────
-
-process.on('SIGTERM', () => {
-  log.info('SIGTERM received');
-  process.exit(0);
-});
-process.on('SIGINT', () => {
-  log.info('SIGINT received');
-  process.exit(0);
-});
 
 // ── Execution guard — skip when imported as a module by tests ───────────────
 
