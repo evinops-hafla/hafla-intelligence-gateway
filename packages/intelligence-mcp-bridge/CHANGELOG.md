@@ -36,8 +36,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Cross-references
 
-- Canonical resolution plan: <https://github.com/evinops-hafla/hafla-intelligence/blob/research/bs3-resolution-discovery/mcp-gateway/specs/history-and-future/history/research/2026-05-16-bs3-final-plan-synthesis.md> (private repo)
-- Gateway-side changes (multi-audience + `hd` guard): private repo commit `48e37cb3`
+- Canonical resolution plan: <https://github.com/evinops-hafla/hafla-intelligence/blob/feat/mcp-gateway-hardening/mcp-gateway/specs/history-and-future/history/research/2026-05-16-bs3-final-plan-synthesis.md> (private repo, consolidated onto `feat/mcp-gateway-hardening` 2026-05-16)
+- Gateway-side changes (multi-audience + `hd` guard): private repo branch `feat/mcp-gateway-hardening` (PR #200)
+
+### Deferred to 1.1.0
+
+- **Module split.** Software Architecture review (2026-05-16) flagged `src/index.js` at ~794 lines as a monolith mixing config, auth, RPC, and lifecycle concerns. The split into `src/config.js`, `src/log.js`, `src/jwt.js`, `src/gcloud.js`, `src/token-cache.js`, `src/rpc.js`, `src/index.js` is deferred from the 1.0.1 review cycle to a dedicated 1.1.0 release. Reason: 1.0.1's 4 design-review fixes (HOL blocking, stampede, UTF-8, case-sensitive domain) are functional improvements; the split is a structural refactor with no behavioural change. Bundling them into one release would extend the review cycle for no functional benefit and mix concerns in the operator's review surface. The header comment in `src/index.js` carries the `TODO(1.1.0)` block with the suggested split boundaries.
 
 ## [1.0.0] — 2026-05-16
 
