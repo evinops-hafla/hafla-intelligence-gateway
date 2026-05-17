@@ -418,14 +418,19 @@ export function createTokenCache({
           '    4. Restart the bridge.',
           '',
           'Rarer cause — SA-native context (CI / Cloud Run / Vertex):',
-          '  Some service-account configurations produce ID tokens without an',
-          '  email claim. The bridge cannot enforce per-user attribution in',
-          '  that case and must reject. Verify by running:',
-          '    gcloud auth print-identity-token --audiences=$AUD \\',
-          '      | cut -d. -f2 | base64 -d 2>/dev/null | grep -o \'"email"[^,]*\'',
-          '  If empty: this SA cannot produce an email claim; coordinate with',
-          '  ops to either grant the SA the right config, or run the bridge',
-          '  under a different SA whose tokens include email.'
+          '  Some service-account configurations produce ID tokens without',
+          '  an email claim. The bridge cannot enforce per-user attribution',
+          '  in that case and must reject. Verify by running (copy-paste,',
+          '  no substitutions required — substitute your custom audience',
+          '  only if GATEWAY_AUDIENCE is set to something other than the',
+          '  default):',
+          '    gcloud auth print-identity-token \\',
+          '      --audiences=https://mcp.hafla.com \\',
+          '      | cut -d. -f2 | base64 -d 2>/dev/null \\',
+          '      | grep -o \'"email"[^,]*\'',
+          '  If empty: this SA cannot produce an email claim; coordinate',
+          '  with ops to either grant the SA the right config, or run the',
+          '  bridge under a different SA whose tokens include email.'
         );
         return undefined;
       }
