@@ -156,6 +156,16 @@ function fail(title, ...lines) {
   process.exit(1);
 }
 
+/**
+ * Service-account email suffix per Google IAM. Used in two places:
+ *   - `preFlight` to allow SA-native bridge contexts (CI / Cloud Run / Vertex)
+ *   - `createTokenCache` to branch Shape B (omit `--audiences` for humans)
+ *
+ * Hoisted here so both call sites use the same constant instead of duplicating
+ * the literal. (Closes gemini-code-assist's PR #1 inline suggestion.)
+ */
+const SA_EMAIL_SUFFIX = '.iam.gserviceaccount.com';
+
 // ── JWT payload decoder (no signature verification) ─────────────────────────
 
 /**
@@ -248,7 +258,7 @@ export async function preFlight({ execGcloudFn = execGcloud } = {}) {
   // avoid 403-ing valid accounts on case alone.
   const activeAccountLower = activeAccount.toLowerCase();
   const requiredDomainLower = config.requiredDomain.toLowerCase();
-  const isSAActive = activeAccountLower.endsWith('.iam.gserviceaccount.com');
+  const isSAActive = activeAccountLower.endsWith(SA_EMAIL_SUFFIX);
   const isOnRequiredDomain = activeAccountLower.endsWith(
     `@${requiredDomainLower}`
   );
@@ -275,8 +285,6 @@ export async function preFlight({ execGcloudFn = execGcloud } = {}) {
  * Internal token cache state. Exposed via a factory so tests can reset
  * between cases.
  */
-const SA_EMAIL_SUFFIX = '.iam.gserviceaccount.com';
-
 export function createTokenCache({
   execGcloudFn = execGcloud,
   audience = config.audience,
@@ -393,23 +401,31 @@ export function createTokenCache({
       if (typeof claims.email !== 'string') {
         failFn(
           'gcloud minted a token with no `email` claim.',
-          'This almost always means gcloud is configured to impersonate a',
-          'service account (via "gcloud config set',
-          'auth/impersonate_service_account", the',
-          'CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT env var, a wrapper script,',
-          'or similar). The IAM Credentials API mints impersonation tokens',
-          'without the email claim by default. The bridge owns the gcloud',
-          'invocation — you cannot add a flag to fix this; the impersonation',
-          'config itself is the root cause.',
           '',
-          'To fix:',
-          '  1. gcloud config unset auth/impersonate_service_account',
-          '  2. unset CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT  (if set)',
-          '  3. Check for any wrapper script or alias around "gcloud"',
-          '  4. Restart the bridge.',
+          'Most common cause — impersonation config (humans only):',
+          '  gcloud is configured to impersonate a service account (via',
+          '  "gcloud config set auth/impersonate_service_account", the',
+          '  CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT env var, a wrapper',
+          '  script, or similar). The IAM Credentials API mints impersonation',
+          '  tokens without the email claim by default. The bridge owns the',
+          '  gcloud invocation — you cannot add a flag to fix this; the',
+          '  impersonation config itself is the root cause.',
           '',
-          'Once impersonation is off, your default human token carries the',
-          '`email` claim, and the bridge will accept it.'
+          '  To fix:',
+          '    1. gcloud config unset auth/impersonate_service_account',
+          '    2. unset CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT  (if set)',
+          '    3. Check for any wrapper script or alias around "gcloud"',
+          '    4. Restart the bridge.',
+          '',
+          'Rarer cause — SA-native context (CI / Cloud Run / Vertex):',
+          '  Some service-account configurations produce ID tokens without an',
+          '  email claim. The bridge cannot enforce per-user attribution in',
+          '  that case and must reject. Verify by running:',
+          '    gcloud auth print-identity-token --audiences=$AUD \\',
+          '      | cut -d. -f2 | base64 -d 2>/dev/null | grep -o \'"email"[^,]*\'',
+          '  If empty: this SA cannot produce an email claim; coordinate with',
+          '  ops to either grant the SA the right config, or run the bridge',
+          '  under a different SA whose tokens include email.'
         );
         return undefined;
       }
@@ -781,7 +797,21 @@ async function main() {
       const promise = handleMessage(chunk, {
         tokenCache,
         pushFn: (out) => t.push(out)
-      }).finally(() => inFlight.delete(promise));
+      })
+        .catch((err) => {
+          // Defensive backstop. handleMessage wraps forwardRequest in
+          // try/catch and pushes a JSON-RPC error response on any throw —
+          // so it should not reject. The remaining failure surface is the
+          // pushFn itself: Transform.push() does not throw under normal
+          // conditions but could in edge cases (e.g., stream destroyed
+          // mid-pipeline during a SIGTERM race). Log and continue rather
+          // than letting Node 25's default unhandled-rejection behaviour
+          // terminate the process and drop other in-flight responses.
+          log.error('handleMessage promise rejected unexpectedly', {
+            error: err?.message ?? String(err)
+          });
+        })
+        .finally(() => inFlight.delete(promise));
       inFlight.add(promise);
       callback(); // free the stream IMMEDIATELY — don't await forwardRequest
     },
