@@ -857,10 +857,19 @@ async function main() {
       signal,
       inFlightCount: inFlight.size
     });
+    let timeoutHandle;
     const result = await Promise.race([
       Promise.allSettled([...inFlight]).then(() => 'drained'),
-      new Promise((r) => setTimeout(() => r('timeout'), drainTimeoutMs))
+      new Promise((r) => {
+        timeoutHandle = setTimeout(() => r('timeout'), drainTimeoutMs);
+      })
     ]);
+    // Code-cleanliness: cancel the timer once the race resolves. On the
+    // drain-wins path this prevents a dangling timer reference (process.exit
+    // would terminate before it fires, but clearing is the disciplined
+    // form). On the timeout-wins path the timer has already fired and
+    // clearTimeout is a no-op — safe to call unconditionally.
+    clearTimeout(timeoutHandle);
     if (result === 'timeout') {
       log.warn('Drain timed out — exiting with dropped responses', {
         droppedCount: inFlight.size,
