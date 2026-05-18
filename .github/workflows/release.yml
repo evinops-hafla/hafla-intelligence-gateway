@@ -68,9 +68,7 @@ jobs:
 
       - name: publish
         working-directory: packages/intelligence-mcp-bridge
-        # publishConfig in package.json handles --access public.
-        # --provenance is opt-in here so local manual publishes (which can't
-        # produce OIDC attestations) don't fail. CI is the only path that
-        # mints provenance, and it does so explicitly via this flag.
-        # Under OIDC trusted publishing, no NODE_AUTH_TOKEN is required.
+        # No NODE_AUTH_TOKEN — OIDC trusted publisher mints the token via
+        # setup-node + id-token:write. Binding at npmjs.com:
+        # evinops-hafla/hafla-intelligence-gateway / release.yml (no env).
         run: npm publish --provenance
