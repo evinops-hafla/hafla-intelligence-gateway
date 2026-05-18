@@ -986,7 +986,10 @@ async function main() {
   // shutdown. Reviewer 2026-05-17 flagged this as NIT; addressing
   // defensively while the branch is pre-merge.
   let shuttingDown = false;
-  const drainTimeoutMs = 2000;
+  const drainTimeoutMs = Number.parseInt(
+    process.env.BRIDGE_SHUTDOWN_DRAIN_MS || '2000',
+    10
+  );
   const onShutdownSignal = async (signal) => {
     if (shuttingDown) {
       log.warn('Shutdown signal received again — forcing exit', { signal });

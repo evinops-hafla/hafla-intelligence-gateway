@@ -4,6 +4,12 @@ All notable changes to `@hafla/intelligence-mcp-bridge` will be documented in th
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **`BRIDGE_SHUTDOWN_DRAIN_MS` env var** — the 2s graceful-shutdown drain timeout is now operator-tunable via this environment variable (default: `2000`). Useful when the bridge runs under a process supervisor or alongside long-running `safe_sql_sandbox` queries (e.g., set `BRIDGE_SHUTDOWN_DRAIN_MS=10000` for a 10s window). Has no effect in the common single-user, on-demand invocation model.
+
 ## [1.0.2] — 2026-05-18
 
 ### Fixed
