@@ -43,7 +43,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
+          # No registry-url — npm OIDC trusted publishing handles token exchange
+          # internally. Adding registry-url causes setup-node to write an .npmrc
+          # with _authToken=${NODE_AUTH_TOKEN} which overrides the OIDC exchange
+          # and causes 404 on PUT when NODE_AUTH_TOKEN is empty or stale.
 
       - name: install
         run: npm ci
