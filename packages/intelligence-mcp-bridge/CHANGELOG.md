@@ -4,6 +4,16 @@ All notable changes to `@hafla/intelligence-mcp-bridge` will be documented in th
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`extractSseJson` now respects SSE event boundaries — returns the LAST event's data, not a concatenation across events.** Caught by `gemini-code-assist[bot]` on PR #2 ([discussion r3256298335](https://github.com/evinops-hafla/hafla-intelligence-gateway/pull/2#discussion_r3256298335)). The 1.0.1 implementation iterated every `data:` line in the response body regardless of which SSE event it belonged to, joined them with `\n`, and `JSON.parse`d the result. The docstring already promised "last event," so this was a contract violation. For the current Hafla gateway flow it didn't fire (the gateway emits exactly one `event: message` per request-response), but any prefix `ping` / keepalive / progress event from a future MCP server SDK upgrade would break the parser silently. Fix: snapshot accumulated `data:` lines on each blank line into `lastDataLines`, reset `currentDataLines`; at end-of-body return whichever buffer is non-empty (handles bodies without a trailing blank line per SSE spec). Three regression tests added covering: (1) ping-then-message ordering, (2) unterminated final event, (3) comment + ping suffix not clobbering the prior message.
+
+### Verification
+
+- `node --test tests/index.test.js` → 40/40 pass on Node 25.9.0 (was 37/37; +3 multi-event SSE tests).
+
 ## [1.0.1] — 2026-05-18
 
 ### Added — defensive hygiene (post-PR-review, 2026-05-18 Gemini review)

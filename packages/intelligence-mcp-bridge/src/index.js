@@ -206,19 +206,45 @@ export function decodeJwtPayloadNoVerify(token) {
  * Exported for unit tests.
  */
 export function extractSseJson(body) {
-  const dataLines = [];
+  // Respect event boundaries per the W3C SSE spec: a blank line dispatches
+  // the current event. Track the most recently-completed event's data so the
+  // gateway can prefix the actual JSON-RPC `message` event with any number
+  // of `ping`/keepalive/comment events without breaking the parser.
+  //
+  // Earlier draft concatenated ALL `data:` lines across all events into a
+  // single JSON.parse — silently produced invalid JSON whenever the gateway
+  // emitted more than one event in a response. Caught by gemini-code-assist
+  // on PR #2 (https://github.com/evinops-hafla/hafla-intelligence-gateway/
+  // pull/2#discussion_r3256298335). Fix: snapshot data on each blank line,
+  // return the last non-empty event's payload at end-of-body.
+  let currentDataLines = [];
+  let lastDataLines = [];
   for (const line of body.split(/\r?\n/)) {
-    if (line.startsWith('data:')) {
+    if (line === '' || line.trim() === '') {
+      // Blank line → dispatch current event if it had any data lines.
+      // Events with no data: lines (e.g. pure `event: ping\n\n`) don't
+      // overwrite the last-known data — they're keepalive frames.
+      if (currentDataLines.length > 0) {
+        lastDataLines = currentDataLines;
+        currentDataLines = [];
+      }
+    } else if (line.startsWith('data:')) {
       // Strip the "data:" prefix and one optional leading space (SSE quirk:
       // "data: foo" and "data:foo" are both legal; the leading space is
       // stripped per the spec)
-      dataLines.push(line.slice(5).replace(/^ /, ''));
+      currentDataLines.push(line.slice(5).replace(/^ /, ''));
     }
+    // event:/id:/retry:/comment lines are ignored — we only need the JSON
+    // payload from the latest `data:` block.
   }
-  if (dataLines.length === 0) {
+  // Bodies often end without a trailing blank line; if the last event is
+  // unterminated, treat its accumulated data lines as the final event.
+  const finalData =
+    currentDataLines.length > 0 ? currentDataLines : lastDataLines;
+  if (finalData.length === 0) {
     throw new Error('SSE body contained no data: lines');
   }
-  return JSON.parse(dataLines.join('\n'));
+  return JSON.parse(finalData.join('\n'));
 }
 
 // ── gcloud invocation — injectable for tests ────────────────────────────────

@@ -788,6 +788,53 @@ describe('extractSseJson', () => {
   test('throws when body has no data: lines', () => {
     assert.throws(() => extractSseJson('event: ping\n\n'), /no data: lines/);
   });
+
+  // Regression tests for gemini-code-assist's PR #2 discussion r3256298335 —
+  // the earlier draft concatenated `data:` lines across event boundaries,
+  // producing invalid JSON when the gateway prefixed the actual reply with
+  // any keepalive / comment / progress event.
+
+  test('returns LAST event when body has multiple complete events (ping then message)', () => {
+    // Common server pattern: keepalive `ping` before the actual JSON-RPC
+    // reply. With the buggy concatenation logic, the parser would attempt
+    // JSON.parse('null\n{"jsonrpc":...}') and throw.
+    const body =
+      'event: ping\n' +
+      'data: null\n' +
+      '\n' +
+      'event: message\n' +
+      'data: {"jsonrpc":"2.0","id":42,"result":"OK"}\n' +
+      '\n';
+    const parsed = extractSseJson(body);
+    assert.equal(parsed.id, 42);
+    assert.equal(parsed.result, 'OK');
+  });
+
+  test('returns LAST event when final event has no trailing blank line', () => {
+    // SSE bodies sometimes terminate without the spec-recommended trailing
+    // blank line. The parser must still treat the accumulated data as the
+    // final event.
+    const body =
+      'event: message\n' +
+      'data: {"jsonrpc":"2.0","id":99,"result":"NO_TRAIL"}';
+    const parsed = extractSseJson(body);
+    assert.equal(parsed.id, 99);
+    assert.equal(parsed.result, 'NO_TRAIL');
+  });
+
+  test('ignores ping/keepalive events that have no data: lines', () => {
+    // Pure `event: ping` followed by blank line should not clobber the
+    // last-known data buffer.
+    const body =
+      'event: message\n' +
+      'data: {"jsonrpc":"2.0","id":1,"result":"first"}\n' +
+      '\n' +
+      ': keepalive comment\n' +
+      'event: ping\n' +
+      '\n';
+    const parsed = extractSseJson(body);
+    assert.equal(parsed.result, 'first');
+  });
 });
 
 describe('forwardRequest — SSE response (gateway returns text/event-stream)', () => {
