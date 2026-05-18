@@ -4,6 +4,22 @@ All notable changes to `@hafla/intelligence-mcp-bridge` will be documented in th
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — defensive hygiene from 2026-05-18 Gemini review
+
+### Added
+
+- **`CLOUDSDK_CORE_DISABLE_PROMPTS=1` env var on all `gcloud` subprocess calls.** Forecloses any future gcloud version that might add interactive prompts to `print-identity-token` or `auth list` — a stdio-bridge subprocess can't service interactive prompts without hanging. `execFile` already isolates gcloud's stdout/stderr into buffers (no leakage to the bridge's MCP JSON-RPC stream); this is purely defensive. No current failure mode. (`src/index.js` `execGcloud`.)
+- **`AbortController`-based shutdown drain** for in-flight `forwardRequest` HTTP calls. On `SIGTERM`/`SIGINT`, the bridge already waits up to 2s for in-flight responses to settle. If the drain times out, the bridge now `.abort()`s each in-flight `AbortController`, which calls `req.destroy()` on the underlying socket — so the remote (Cloud Run) sees an explicit TCP FIN/RST rather than waiting for keepalive timeout on a process-exited client. Brief 50ms delay between abort and `process.exit` so the OS can flush the FIN/RST packets. Best-practice hygiene for HTTP clients exiting with active requests; impact is minimal at single-user stdio-bridge scale but the right shape if the bridge ever runs in higher-throughput contexts (CI / Cloud Run / Vertex). New params: `forwardRequest({..., abortSignal})`, `handleMessage({..., abortSignal})`. Both are optional and back-compatible — callers that don't pass `abortSignal` see no behavioural change.
+
+### Verification
+
+- `node --test tests/index.test.js` → 37/37 pass (was 35/35; +2 abort-path tests).
+- New tests cover: (a) abort fires `req.destroy()` + resolves with `-32000 Aborted on shutdown` error frame; (b) callers that don't pass `abortSignal` see unchanged behaviour (regression guard).
+
+### Compatibility
+
+- All new params are optional and additive. No breaking change at the public API or CLI surface. Bumps test count only; no version bump required for these polish changes alone, but they'd ship in the next 1.0.x or 1.1.0.
+
 ## [1.0.1] — 2026-05-16
 
 ### Fixed

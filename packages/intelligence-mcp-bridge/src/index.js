@@ -231,7 +231,18 @@ export function extractSseJson(body) {
  */
 export async function execGcloud(args, { execFn = execFileAsync } = {}) {
   try {
-    const { stdout } = await execFn(GCLOUD_BIN, args, { timeout: 15_000 });
+    // Defensive hygiene: CLOUDSDK_CORE_DISABLE_PROMPTS=1 guarantees gcloud
+    // never tries to read from stdin or emit interactive prompts. With the
+    // bridge spawned as a stdio subprocess by MCP clients, an interactive
+    // prompt would hang the bridge indefinitely. `execFile` already isolates
+    // gcloud's stdout/stderr into buffers (no leakage to the parent's MCP
+    // JSON-RPC stream), but disabling prompts forecloses any future gcloud
+    // version that might add interactive surface to `print-identity-token`
+    // or `auth list`. Reviewer 2026-05-18 (defensive; no current failure).
+    const { stdout } = await execFn(GCLOUD_BIN, args, {
+      timeout: 15_000,
+      env: { ...process.env, CLOUDSDK_CORE_DISABLE_PROMPTS: '1' }
+    });
     return stdout.toString().trim();
   } catch (err) {
     const stderr = err.stderr?.toString?.() ?? '';
@@ -563,7 +574,16 @@ export async function forwardRequest(
     httpRequestFn = httpsRequest,
     gatewayUrl = config.gatewayUrl,
     gatewayPath = config.gatewayPath,
-    requestTimeoutMs = config.requestTimeoutMs
+    requestTimeoutMs = config.requestTimeoutMs,
+    // Optional AbortSignal. If aborted (e.g., during shutdown-drain timeout),
+    // the underlying `req` is destroyed and the promise resolves with a
+    // JSON-RPC abort-error frame. Without this, `process.exit()` would tear
+    // down sockets at the OS level without an explicit TCP FIN/RST initiation
+    // from Node, leaving the remote (Cloud Run) to clean up on its own
+    // keepalive timeout. Best-practice hygiene; impact is minimal at single-
+    // user stdio-bridge scale but cleaner if the bridge ever runs in
+    // higher-throughput contexts. Reviewer 2026-05-18.
+    abortSignal
   }
 ) {
   if (!message || typeof message !== 'object') {
@@ -720,6 +740,31 @@ export async function forwardRequest(
       });
     });
 
+    // Wire optional abort signal — destroys the underlying socket so the
+    // remote sees an explicit TCP FIN/RST rather than waiting for keepalive
+    // timeout on a process-exited client. Idempotent: if abortSignal is
+    // already aborted at this point (rare; shutdown happened between
+    // forwardRequest entry and req creation), destroy immediately.
+    if (abortSignal) {
+      if (abortSignal.aborted) {
+        req.destroy(new Error('aborted before send'));
+      } else {
+        abortSignal.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timeoutId);
+            req.destroy(new Error('aborted on shutdown drain'));
+            resolve({
+              jsonrpc: '2.0',
+              error: { code: -32000, message: 'Aborted on shutdown' },
+              id: message.id ?? null
+            });
+          },
+          { once: true }
+        );
+      }
+    }
+
     req.write(messageStr);
     req.end();
   });
@@ -744,7 +789,13 @@ export async function forwardRequest(
  */
 export async function handleMessage(
   rawLine,
-  { tokenCache, pushFn, forwardRequestFn = forwardRequest, logFn = log } = {}
+  {
+    tokenCache,
+    pushFn,
+    forwardRequestFn = forwardRequest,
+    logFn = log,
+    abortSignal
+  } = {}
 ) {
   const line = typeof rawLine === 'string' ? rawLine : rawLine.toString();
   if (!line.trim()) return;
@@ -768,7 +819,10 @@ export async function handleMessage(
   }
 
   try {
-    const response = await forwardRequestFn(message, { tokenCache });
+    const response = await forwardRequestFn(message, {
+      tokenCache,
+      abortSignal
+    });
     pushFn(JSON.stringify(response) + '\n');
   } catch (err) {
     logFn.error('Unexpected forwardRequest error', { error: err.message });
@@ -830,6 +884,15 @@ async function main() {
   // closes, dropping its response on the floor.
   const inFlight = new Set();
 
+  // AbortControllers per in-flight request. On shutdown-drain timeout we
+  // iterate this Set and call .abort() on each so the underlying `req` is
+  // destroyed and the remote sees an explicit FIN/RST rather than waiting
+  // for keepalive timeout. At single-user stdio-bridge scale this is
+  // hygiene rather than urgent (Cloud Run handles abandoned sockets within
+  // seconds), but it's the documented best practice for HTTP clients
+  // exiting with active requests. Reviewer 2026-05-18.
+  const abortControllers = new Set();
+
   // Fix HIGH #1 (head-of-line blocking): the previous design called the
   // Transform `callback(null, response)` INSIDE forwardRequest's `.then()`,
   // which made the stream wait for the HTTP round-trip before reading the
@@ -844,9 +907,12 @@ async function main() {
     decodeStrings: false,
     transform(chunk, encoding, callback) {
       const t = this;
+      const controller = new AbortController();
+      abortControllers.add(controller);
       const promise = handleMessage(chunk, {
         tokenCache,
-        pushFn: (out) => t.push(out)
+        pushFn: (out) => t.push(out),
+        abortSignal: controller.signal
       })
         .catch((err) => {
           // Defensive backstop. handleMessage wraps forwardRequest in
@@ -861,7 +927,10 @@ async function main() {
             error: err?.message ?? String(err)
           });
         })
-        .finally(() => inFlight.delete(promise));
+        .finally(() => {
+          inFlight.delete(promise);
+          abortControllers.delete(controller);
+        });
       inFlight.add(promise);
       callback(); // free the stream IMMEDIATELY — don't await forwardRequest
     },
@@ -916,10 +985,25 @@ async function main() {
     // clearTimeout is a no-op — safe to call unconditionally.
     clearTimeout(timeoutHandle);
     if (result === 'timeout') {
-      log.warn('Drain timed out — exiting with dropped responses', {
-        droppedCount: inFlight.size,
-        drainTimeoutMs
-      });
+      log.warn(
+        'Drain timed out — aborting in-flight requests then exiting',
+        {
+          droppedCount: inFlight.size,
+          abortedRequests: abortControllers.size,
+          drainTimeoutMs
+        }
+      );
+      // Explicitly destroy each in-flight socket so the remote sees FIN/RST
+      // rather than waiting for keepalive. Best practice for HTTP clients
+      // exiting with active requests; impact is minimal at single-user
+      // stdio-bridge scale but matters more if the bridge ever runs in a
+      // higher-throughput context.
+      for (const controller of abortControllers) {
+        controller.abort();
+      }
+      // Brief delay so the OS can flush the FIN/RST packets before
+      // process.exit kills us. 50ms is enough at LAN/Cloud Run RTT.
+      await new Promise((r) => setTimeout(r, 50));
       process.exit(1);
     }
     log.info('Drain complete — exiting', { signal });

@@ -871,6 +871,85 @@ describe('forwardRequest — SSE response (gateway returns text/event-stream)', 
   });
 });
 
+describe('forwardRequest — abort signal (2026-05-18 hygiene)', () => {
+  // Build a request mock that captures the req object so we can assert
+  // .destroy() was called on abort, AND that does NOT auto-callback so we
+  // can hold the request open until we abort.
+  function pendingRequestMock() {
+    const captured = { req: null, destroyed: false };
+    const fn = (options, callback) => {
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.end = () => {}; // pending — does NOT invoke callback; held open
+      req.destroy = () => {
+        captured.destroyed = true;
+      };
+      captured.req = req;
+      return req;
+    };
+    fn.captured = captured;
+    return fn;
+  }
+
+  test('abort fires req.destroy() and resolves with -32000 shutdown error', async () => {
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const httpMock = pendingRequestMock();
+    const controller = new AbortController();
+    const requestPromise = forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/list', id: 99 },
+      {
+        tokenCache,
+        httpRequestFn: httpMock,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 60_000, // long enough that abort wins the race
+        abortSignal: controller.signal
+      }
+    );
+    // Give forwardRequest a microtask to mint the token + attach the abort
+    // listener before we trigger the abort.
+    await new Promise((r) => setImmediate(r));
+    controller.abort();
+    const result = await requestPromise;
+    assert.equal(
+      httpMock.captured.destroyed,
+      true,
+      'req.destroy() must be called when abortSignal fires'
+    );
+    assert.equal(result.error.code, -32000);
+    assert.match(result.error.message, /Aborted on shutdown/);
+    assert.equal(result.id, 99);
+  });
+
+  test('abort when no abortSignal passed: unchanged behaviour', async () => {
+    // Regression guard — callers that don't opt in (e.g., tests pre-1.0.2,
+    // hypothetical embedders) must see no behavioural change.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/list', id: 100 },
+      {
+        tokenCache,
+        httpRequestFn: mockHttpRequest({
+          statusCode: 200,
+          body: JSON.stringify({ jsonrpc: '2.0', result: { ok: 1 }, id: 100 })
+        }),
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+        // no abortSignal
+      }
+    );
+    assert.equal(result.id, 100);
+    assert.deepEqual(result.result, { ok: 1 });
+  });
+});
+
 describe('forwardRequest', () => {
   test('200 response is parsed and returned', async () => {
     const tokenCache = createTokenCache({
