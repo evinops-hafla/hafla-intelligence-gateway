@@ -38,6 +38,8 @@ import {
   extractSseJson
 } from '../src/index.js';
 
+import { assertNode24 } from '../src/version-check.js';
+
 // ── JWT-shaped token builder for cross-check tests ──────────────────────────
 // Cross-check decodes the minted token's payload; tests need real JWT-shaped
 // inputs (header.payload.fakesig) so the decoder doesn't reject them.
@@ -1089,5 +1091,26 @@ describe('forwardRequest', () => {
     );
     assert.equal(result.error.code, -32000);
     assert.match(result.error.message, /503/);
+  });
+});
+
+// ── assertNode24 ─────────────────────────────────────────────────────────────
+
+describe('assertNode24', () => {
+  test('does not throw on Node 24', () => {
+    assert.doesNotThrow(() => assertNode24('v24.15.0'));
+  });
+
+  test('throws with actionable message on Node 22', () => {
+    assert.throws(
+      () => assertNode24('v22.0.0'),
+      (err) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /requires Node 24 LTS/);
+        assert.match(err.message, /v22\.0\.0/);
+        assert.match(err.message, /version manager/);
+        return true;
+      }
+    );
   });
 });

@@ -21,22 +21,43 @@ Talk about "the MCP Gateway server" when you mean the Cloud Run service; "the In
 
 | Package                                                                | Type         | Status                  |
 | ---------------------------------------------------------------------- | ------------ | ----------------------- |
-| [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge` | 1.0.0 — initial release |
+| [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge` | 1.0.3 — Node 24 LTS pin |
 | `packages/plugin/`                                                     | Claude Code plugin / Gemini CLI extension | Planned                 |
 
 ### `@hafla/intelligence-mcp-bridge`
 
-stdio↔HTTPS shim that mints Google ID tokens via the user's own `gcloud` and forwards JSON-RPC to `mcp.hafla.com`. Zero runtime dependencies. See [packages/intelligence-mcp-bridge/README.md](packages/intelligence-mcp-bridge/README.md) for install instructions for engineers and the CRM team.
+stdio↔HTTPS shim that mints Google ID tokens via the user's own `gcloud` and forwards JSON-RPC to `mcp.hafla.com`. Zero runtime dependencies. See [packages/intelligence-mcp-bridge/README.md](packages/intelligence-mcp-bridge/README.md) for install instructions.
 
 ```json
 {
   "mcpServers": {
     "hafla-evwa-idl-gateway": {
-      "command": "npx",
-      "args": ["-y", "@hafla/intelligence-mcp-bridge@1.0.0"]
+      "command": "/path/to/node-version-manager/node",
+      "args": ["-e", "require('child_process').execFileSync(require('path').join(require('os').homedir(), '.npm', '_npx', 'HASH', 'node_modules', '.bin', 'intelligence-mcp-bridge'), { stdio: 'inherit' })"]
     }
   }
 }
+```
+
+See the package README § "Prerequisites" for the correct `command` path and the full client config snippet.
+
+---
+
+## Prerequisites
+
+This bridge requires **Node 24 LTS** (currently `24.15.0` or any newer patch in the 24.x line).
+
+We strongly recommend installing Node via a version manager rather than the OS installer.
+
+- **macOS / Linux:** [`nvm`](https://github.com/nvm-sh/nvm) (recommended) or [`fnm`](https://github.com/Schniz/fnm)
+- **Windows:** [`fnm`](https://github.com/Schniz/fnm) (recommended) or [`nvm-windows`](https://github.com/coreybutler/nvm-windows)
+
+Once your manager is installed, the `.nvmrc` in this repo pins the right version automatically:
+
+```bash
+nvm install  # or: fnm install
+nvm use      # or: fnm use
+node -v      # should print v24.15.x
 ```
 
 ---
@@ -48,12 +69,15 @@ intelligence-gateway/
 ├── packages/
 │   └── intelligence-mcp-bridge/    # @hafla/intelligence-mcp-bridge on npm
 │       ├── src/index.js            # stdio↔HTTPS forwarder + token mint/cache
+│       ├── src/version-check.js    # Node 24 LTS runtime guard
 │       ├── tests/index.test.js     # node:test unit tests
 │       ├── package.json
 │       ├── README.md               # operator-facing install guide
 │       ├── CHANGELOG.md
 │       └── LICENSE                 # MIT (root LICENSE; the package symlinks via npm `files`)
 ├── package.json                    # npm workspaces root
+├── .nvmrc                          # 24.15.0
+├── .npmrc                          # engine-strict=true
 ├── README.md
 └── LICENSE
 ```
@@ -62,11 +86,12 @@ intelligence-gateway/
 
 ## Development
 
-Node ≥20 required (the bridge supports anything from 20 upwards; the workspaces root pins the same minimum).
+Node 24 LTS required. Use a Node version manager and run `nvm use` (or `fnm use`) to activate the version pinned in `.nvmrc` before installing or running tests.
 
 ```bash
 git clone git@github.com:evinops-hafla/hafla-intelligence-gateway.git
 cd hafla-intelligence-gateway
+nvm use                              # activate Node 24 LTS from .nvmrc
 npm install                          # installs nothing today (zero deps) — sets up workspaces
 npm test                             # runs each package's `npm test`
 ```
@@ -84,15 +109,11 @@ The first line of stderr is a `Pre-flight OK` log; the response on stdout is a J
 
 ## Publishing (maintainers only)
 
-The bridge publishes via npm with provenance (OIDC trusted publisher recommended; manual `npm publish` works too):
+The bridge publishes via npm with provenance (OIDC trusted publisher recommended; manual `npm publish` works too). See [packages/intelligence-mcp-bridge/CHANGELOG.md](packages/intelligence-mcp-bridge/CHANGELOG.md) for the current release and version history.
 
 ```bash
-cd packages/intelligence-mcp-bridge
-npm pack --dry-run                   # confirm tarball contents
-npm test                             # green
-npm version <patch|minor|major>      # bumps version + creates a git tag
-npm publish                          # publishConfig handles --access public + provenance
-git push --follow-tags
+# From hafla-intelligence/ monorepo root — use the node24-pin-plan.md release workflow
+npx -y @hafla/intelligence-mcp-bridge@1.0.3
 ```
 
 See the package's own README for the user-facing install / upgrade flow.

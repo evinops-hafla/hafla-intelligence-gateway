@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+
+import { assertNode24 } from './version-check.js';
+try { assertNode24(); } catch (e) { console.error(e.message); process.exit(1); }
+
 /**
  * MCP stdio bridge for the Hafla Intelligence Gateway at mcp.hafla.com.
  *
