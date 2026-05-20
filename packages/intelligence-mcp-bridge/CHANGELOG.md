@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- **`BRIDGE_SHUTDOWN_DRAIN_MS` NaN-coercion bug.** When this env var was
+  set to a non-numeric string, `Number.parseInt` returned `NaN` and
+  `setTimeout(fn, NaN)` coerced silently to `setTimeout(fn, 0)` — causing
+  the bridge to exit immediately with no drain window. Extracted
+  `parseDrainTimeoutMs` into `src/drain-timeout.js`; uses `Number.isFinite`
+  to reject `NaN` and fall back to the 2 s default while still preserving
+  an explicit `=0` (operator opts out of drain entirely).
+
+### Changed
+
+- **README MCP client config corrected to the two-path form.** The
+  prior README used a one-path form (`"command": "npx"` + args) that
+  silently fails on macOS because GUI apps (Claude Desktop) inherit
+  launchd's PATH, not the shell's — `npx` is never on launchd PATH even
+  when nvm is set up correctly. The documented config now requires
+  two explicit absolute paths: one for `node` (the `command` field) and
+  one for the `npx` script (first element of `args`), both obtained via
+  `which node` / `which npx` after `nvm use`. A fragility note explains
+  path requirements per version manager (nvm / fnm / Volta / nvm-windows)
+  and when to update (Node minor/patch upgrade, bridge version bump).
+
 ## [1.0.3] — 2026-05-20
 
 **Note on versioning.** Strictly per semver, hard-pinning Node 24 LTS
