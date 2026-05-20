@@ -109,14 +109,43 @@ The first line of stderr is a `Pre-flight OK` log; the response on stdout is a J
 
 ## Publishing (maintainers only)
 
-The bridge publishes via npm with provenance (OIDC trusted publisher recommended; manual `npm publish` works too). See [packages/intelligence-mcp-bridge/CHANGELOG.md](packages/intelligence-mcp-bridge/CHANGELOG.md) for the current release and version history.
+The bridge publishes via npm with provenance (OIDC trusted publisher). See [packages/intelligence-mcp-bridge/CHANGELOG.md](packages/intelligence-mcp-bridge/CHANGELOG.md) for version history.
+
+**Workflow:** review-first, release-from-main. Open a PR with the substantive change (do NOT bump `version` or finalize a versioned CHANGELOG entry on the chore branch); let `ci.yml` + `gemini-code-assist[bot]` review fire; address findings; merge; then run the release sequence below ON `main`. The internal Hafla `09-bridge-package-release-workflow-e375.md` spec has the full gated sequence; the short form for maintainers is:
 
 ```bash
-# From hafla-intelligence/ monorepo root — use the node24-pin-plan.md release workflow
-npx -y @hafla/intelligence-mcp-bridge@1.0.3
+# After merging to main and pulling locally:
+nvm use                                                              # picks up .nvmrc → 24.15.0
+cd packages/intelligence-mcp-bridge
+npm test                                                             # all tests must pass
+npm pack --dry-run                                                   # confirm tarball contents
+
+# 1. Bump version WITHOUT npm's auto-commit + auto-tag (we orchestrate the atomic commit ourselves):
+npm version <patch|minor|major> --no-git-tag-version
+
+# 2. Edit CHANGELOG.md: rename [Unreleased] → [<version>] — <YYYY-MM-DD>; add a fresh empty [Unreleased] above.
+
+# 3. Sync the root workspace lockfile from intelligence-gateway/ root:
+cd ../..
+npm install --package-lock-only
+
+# 4. Atomic release commit (one commit containing version + CHANGELOG + lockfile sync):
+git add packages/intelligence-mcp-bridge/package.json \
+        packages/intelligence-mcp-bridge/CHANGELOG.md \
+        package-lock.json
+git commit -m "chore(bridge): release <version> — <one-line summary>"
+
+# 5. Annotated tag (MUST use -a; plain `git tag` creates a lightweight tag
+#    that `git push --follow-tags` silently skips):
+git tag -a v<version> -m "v<version>"
+
+# 6. Push branch + tag together → triggers release.yml → npm publish:
+git push --follow-tags
+gh run watch                                                         # confirm CI publish green
+npm view @hafla/intelligence-mcp-bridge@<version> version            # confirm on npm
 ```
 
-See the package's own README for the user-facing install / upgrade flow.
+The user-facing install / upgrade flow is in the package's own README — see [packages/intelligence-mcp-bridge/README.md](packages/intelligence-mcp-bridge/README.md).
 
 ---
 
