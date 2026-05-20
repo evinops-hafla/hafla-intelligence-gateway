@@ -6,9 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-05-20
+
+**Note on versioning.** Strictly per semver, hard-pinning Node 24 LTS
+from `>=20` is a major bump (would be `2.0.0`). This release ships as
+`1.0.3` because there are no production consumers of this package
+outside the Hafla Google Workspace org today; the install is gated at
+`mcp.hafla.com`, not at the bridge. Republishing as `2.0.0` after
+deleting `1.x` would be more disruption than the org will absorb. If
+you are on Node 20 or 22 and your install fails, upgrade to Node 24
+LTS — see README § "Prerequisites".
+
 ### Changed
 
-- **`BRIDGE_SHUTDOWN_DRAIN_MS` env var** — the 2s graceful-shutdown drain timeout is now operator-tunable via this environment variable (default: `2000`). Useful when the bridge runs under a process supervisor or alongside long-running `safe_sql_sandbox` queries (e.g., set `BRIDGE_SHUTDOWN_DRAIN_MS=10000` for a 10s window). Has no effect in the common single-user, on-demand invocation model.
+- `engines.node` pinned to the Node 24 LTS track (`^24.15.0`)
+- Added `.nvmrc` (`24.15.0`) and `.npmrc` (`engine-strict=true`)
+- Added a Node-major-version guard in the bridge entrypoint that exits
+  with a clear message on Node ≠ 24
+- README rewritten to recommend a Node version manager
+  (nvm / fnm / nvm-windows / asdf) — no specific manager is enforced,
+  and `NVM_DIR` is NOT checked (would break Claude Desktop subprocess env)
+- README install command pinned to
+  `npx -y @hafla/intelligence-mcp-bridge@1.0.3` (declarative,
+  audit-friendly, no registry round-trip per session)
+- CI matrix collapsed to `['24.15.0']`
+- **`BRIDGE_SHUTDOWN_DRAIN_MS` env var** — the 2s graceful-shutdown drain
+  timeout is now operator-tunable via this environment variable
+  (default: `2000`). Useful when the bridge runs under a process
+  supervisor or alongside long-running `safe_sql_sandbox` queries
+  (e.g., set `BRIDGE_SHUTDOWN_DRAIN_MS=10000` for a 10s window). Has no
+  effect in the common single-user, on-demand invocation model.
 
 ## [1.0.2] — 2026-05-18
 
