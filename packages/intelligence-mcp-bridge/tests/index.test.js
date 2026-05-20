@@ -39,6 +39,10 @@ import {
 } from '../src/index.js';
 
 import { assertNode24 } from '../src/version-check.js';
+import {
+  parseDrainTimeoutMs,
+  DEFAULT_DRAIN_TIMEOUT_MS
+} from '../src/drain-timeout.js';
 
 // ── JWT-shaped token builder for cross-check tests ──────────────────────────
 // Cross-check decodes the minted token's payload; tests need real JWT-shaped
@@ -1112,5 +1116,49 @@ describe('assertNode24', () => {
         return true;
       }
     );
+  });
+});
+
+// ── parseDrainTimeoutMs ─────────────────────────────────────────────────────
+//
+// Reported by gemini-code-assist on PR #3 (discussion r3276101373).
+// `Number.parseInt('abc', 10)` returns NaN, which setTimeout silently
+// coerces to 0 — causing the bridge to exit immediately and drop in-flight
+// responses on shutdown. parseDrainTimeoutMs uses Number.isFinite to reject
+// NaN while preserving the explicit `=0` case (operator opting out of drain).
+
+describe('parseDrainTimeoutMs', () => {
+  test('returns default when env var is undefined', () => {
+    assert.equal(parseDrainTimeoutMs(undefined), DEFAULT_DRAIN_TIMEOUT_MS);
+  });
+
+  test('returns default when env var is empty string', () => {
+    assert.equal(parseDrainTimeoutMs(''), DEFAULT_DRAIN_TIMEOUT_MS);
+  });
+
+  test('returns parsed integer for valid numeric string', () => {
+    assert.equal(parseDrainTimeoutMs('5000'), 5000);
+    assert.equal(parseDrainTimeoutMs('10000'), 10000);
+  });
+
+  test('returns default for non-numeric string (NaN rejection)', () => {
+    // The bug: without isFinite, Number.parseInt('abc', 10) → NaN, and
+    // setTimeout(_, NaN) coerces to 0 — immediate exit. Must default instead.
+    assert.equal(parseDrainTimeoutMs('abc'), DEFAULT_DRAIN_TIMEOUT_MS);
+    assert.equal(parseDrainTimeoutMs('not-a-number'), DEFAULT_DRAIN_TIMEOUT_MS);
+  });
+
+  test('preserves explicit 0 (operator opts out of drain)', () => {
+    // The reason we use Number.isFinite instead of `|| DEFAULT`:
+    // `Number.parseInt('0', 10) || DEFAULT` would return DEFAULT, silently
+    // overriding the operator's choice. 0 is a legitimate config value.
+    assert.equal(parseDrainTimeoutMs('0'), 0);
+  });
+
+  test('handles partial-numeric prefix per parseInt semantics', () => {
+    // parseInt('500abc', 10) === 500. Documented as accepted behavior:
+    // we trust parseInt's prefix-parsing convention. Operators who
+    // typo "5000ms" get 5000, not the default.
+    assert.equal(parseDrainTimeoutMs('500abc'), 500);
   });
 });

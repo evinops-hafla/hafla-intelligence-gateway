@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { assertNode24 } from './version-check.js';
+import { parseDrainTimeoutMs } from './drain-timeout.js';
 try { assertNode24(); } catch (e) { console.error(e.message); process.exit(1); }
 
 /**
@@ -993,9 +994,8 @@ async function main() {
   // shutdown. Reviewer 2026-05-17 flagged this as NIT; addressing
   // defensively while the branch is pre-merge.
   let shuttingDown = false;
-  const drainTimeoutMs = Number.parseInt(
-    process.env.BRIDGE_SHUTDOWN_DRAIN_MS || '2000',
-    10
+  const drainTimeoutMs = parseDrainTimeoutMs(
+    process.env.BRIDGE_SHUTDOWN_DRAIN_MS
   );
   const onShutdownSignal = async (signal) => {
     if (shuttingDown) {

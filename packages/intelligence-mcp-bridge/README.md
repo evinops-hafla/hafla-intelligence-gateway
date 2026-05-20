@@ -82,23 +82,35 @@ Add (or replace) the `hafla-evwa-idl-gateway` block under `mcpServers`:
   "mcpServers": {
     "hafla-evwa-idl-gateway": {
       "command": "/Users/YOU/.nvm/versions/node/v24.15.0/bin/node",
-      "args": ["-e", "import('@hafla/intelligence-mcp-bridge@1.0.3')"]
+      "args": [
+        "/Users/YOU/.nvm/versions/node/v24.15.0/bin/npx",
+        "-y",
+        "@hafla/intelligence-mcp-bridge@1.0.3"
+      ]
     }
   }
 }
 ```
 
-**Replace `/Users/YOU/.nvm/versions/node/v24.15.0/bin/node`** with the path printed by `which node` after running `nvm use` (or `fnm use`) in your terminal.
+Both paths point at the **same version-manager-managed Node install** — they must match. Get them by running this in your terminal after `nvm use` (or `fnm use`):
 
-> **Fragility note — read before configuring.** The `command` path is hardcoded to your version manager's install location. This path is OS- and manager-specific:
-> - **nvm (macOS/Linux):** `~/.nvm/versions/node/v24.15.0/bin/node`
-> - **Volta (macOS/Linux):** `~/.volta/tools/image/node/24.15.0/bin/node`
-> - **fnm (macOS/Linux):** `~/.fnm/node-versions/v24.15.0/installation/bin/node`
-> - **nvm-windows:** `%APPDATA%\nvm\v24.15.0\node.exe`
+```bash
+which node   # → use this for `command`
+which npx    # → use this for `args[0]`
+```
+
+> **Why does `args[0]` need an absolute path to `npx`?** Plain `"command": "npx"` (or `args: ["npx", ...]`) does NOT work on macOS — GUI apps (Claude Desktop) inherit env from launchd, not your shell's `~/.zshrc`. `npx` is NOT on the launchd PATH even when you did everything right with nvm. The `-e` / `import()` form previously documented here was broken in 1.0.3 — `import('pkg@version')` is not valid Node module-resolution syntax; the `@version` suffix becomes part of the package name and the lookup fails with `ERR_MODULE_NOT_FOUND`. The two-absolute-paths form above is the correct pattern: explicit node binary + explicit npx script + version-pinned package name.
+
+> **Fragility note — read before configuring.** Both hardcoded paths are OS- and version-manager-specific:
 >
-> **On any Node minor/patch upgrade or version-manager reinstall, you MUST update this path in your MCP client config.** If the path drifts, the bridge silently fails to spawn, surfacing only as "MCP server disconnected" in the client with no actionable error chain.
+> - **nvm (macOS/Linux):** `~/.nvm/versions/node/v24.15.0/bin/node` and `…/bin/npx`
+> - **Volta (macOS/Linux):** `~/.volta/tools/image/node/24.15.0/bin/node` and `…/bin/npx`
+> - **fnm (macOS/Linux):** `~/.fnm/node-versions/v24.15.0/installation/bin/node` and `…/bin/npx`
+> - **nvm-windows:** `%APPDATA%\nvm\v24.15.0\node.exe` and `…\npx`
 >
-> Why hardcode instead of using `"command": "npx"`? On macOS, GUI apps (Claude Desktop) inherit their environment from launchd — not your shell's `~/.zshrc`. `npx` is NOT on the launchd PATH even when you did everything right with nvm. Wrapper scripts that `source ~/.nvm/nvm.sh` add their own failure modes on path/version upgrades. Hardcoding the absolute path with a documented upgrade ritual is the least-bad option.
+> **On any Node minor/patch upgrade or version-manager reinstall, you MUST update BOTH paths in your MCP client config.** If either drifts, the bridge silently fails to spawn, surfacing only as "MCP server disconnected" in the client with no actionable error chain.
+>
+> **On bridge upgrades** (e.g., `1.0.3` → `1.0.4`), update the version specifier in `args[2]` too. The `-y` flag tells npx to install-and-run without prompting; the version pin ensures npx hits its local cache after the first run for fast startup.
 
 Restart the MCP client. Done.
 
