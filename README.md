@@ -8,10 +8,10 @@ This repo is the public side of the Hafla intelligence stack: small, audit-frien
 
 ## Two "gateways" — one convention to keep them straight
 
-| Term                              | What                                                                                                              | Where                            |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| **MCP Gateway** (server)          | Cloud Run service at `https://mcp.hafla.com` — IAM-gated HTTP MCP endpoint, AlloyDB + Neo4j + Vertex AI Search   | private — separate repo          |
-| **Intelligence Gateway** (client) | Plugins, skills, agents, bridge — everything an employee installs to reach the MCP Gateway server                 | this repo                        |
+| Term                              | What                                                                                                           | Where                   |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| **MCP Gateway** (server)          | Cloud Run service at `https://mcp.hafla.com` — IAM-gated HTTP MCP endpoint, AlloyDB + Neo4j + Vertex AI Search | private — separate repo |
+| **Intelligence Gateway** (client) | Plugins, skills, agents, bridge — everything an employee installs to reach the MCP Gateway server              | this repo               |
 
 Talk about "the MCP Gateway server" when you mean the Cloud Run service; "the Intelligence Gateway" when you mean this repo or the user-facing pieces in it.
 
@@ -19,27 +19,16 @@ Talk about "the MCP Gateway server" when you mean the Cloud Run service; "the In
 
 ## Packages
 
-| Package                                                                | Type         | Status                  |
-| ---------------------------------------------------------------------- | ------------ | ----------------------- |
-| [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge` | 1.0.3 — Node 24 LTS pin |
-| `packages/plugin/`                                                     | Claude Code plugin / Gemini CLI extension | Planned                 |
+| Package                                                                  | Type                                      | Status                  |
+| ------------------------------------------------------------------------ | ----------------------------------------- | ----------------------- |
+| [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge`    | 1.0.3 — Node 24 LTS pin |
+| `packages/plugin/`                                                       | Claude Code plugin / Gemini CLI extension | Planned                 |
 
 ### `@hafla/intelligence-mcp-bridge`
 
-stdio↔HTTPS shim that mints Google ID tokens via the user's own `gcloud` and forwards JSON-RPC to `mcp.hafla.com`. Zero runtime dependencies. See [packages/intelligence-mcp-bridge/README.md](packages/intelligence-mcp-bridge/README.md) for install instructions.
+stdio↔HTTPS shim that mints Google ID tokens via the user's own `gcloud` and forwards JSON-RPC to `mcp.hafla.com`. Zero runtime dependencies.
 
-```json
-{
-  "mcpServers": {
-    "hafla-evwa-idl-gateway": {
-      "command": "/path/to/node-version-manager/node",
-      "args": ["-e", "require('child_process').execFileSync(require('path').join(require('os').homedir(), '.npm', '_npx', 'HASH', 'node_modules', '.bin', 'intelligence-mcp-bridge'), { stdio: 'inherit' })"]
-    }
-  }
-}
-```
-
-See the package README § "Prerequisites" for the correct `command` path and the full client config snippet.
+**Install + configure:** [packages/intelligence-mcp-bridge/README.md](packages/intelligence-mcp-bridge/README.md) §§ "Prerequisites" and "3. Add this MCP server block to your client config". The package README is the canonical install reference — it covers the launchd-subprocess constraint (macOS GUI apps don't see your shell's `nvm`-managed binaries, so the MCP config requires two explicit absolute paths) and the per-version-manager path table (`nvm` / `fnm` / Volta / `nvm-windows`).
 
 ---
 
