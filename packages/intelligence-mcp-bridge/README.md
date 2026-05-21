@@ -155,8 +155,8 @@ Use ONLY when Form A doesn't work. This is typically because the client spawns s
 **Confirm Path B exists** before pasting into JSON (catches half-installed state — e.g., bridge installed under a different Node version than the one currently active):
 
 | OS                   | Command                                                                          |
-| -------------------- | -------------------------------------------------------------------------------- | --- | ----------------- |
-| macOS                | `test -f "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js" && echo OK |     | echo "NOT FOUND"` |
+| -------------------- | -------------------------------------------------------------------------------- |
+| macOS                | `test -f "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js" && echo OK || echo "NOT FOUND"` |
 | Windows (PowerShell) | `Test-Path "$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"`         |
 
 Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Windows), the bridge is not installed under your active Node — go back to Step 1 and re-run `npm install -g @hafla/intelligence-mcp-bridge@1.0.4`.
