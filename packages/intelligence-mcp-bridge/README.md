@@ -119,7 +119,7 @@ Works for any client that resolves bare commands via the user's shell PATH: **Ge
 }
 ```
 
-No embedded path. PATH lookup resolves `intelligence-mcp-bridge.cmd` on Windows and `intelligence-mcp-bridge` on macOS automatically. No JSON-escape concerns. **The MCP config text stays stable across bridge upgrades and Node upgrades — you do NOT have to edit this JSON.** But if you change Node versions via nvm (including patch upgrades like `nvm install 24.16.0 && nvm use 24.16.0`), you must **reinstall the bridge under the new Node** (`npm install -g @hafla/intelligence-mcp-bridge@1.0.4`) — nvm isolates global packages per Node version, so the old install becomes invisible until you reinstall.
+No embedded path. PATH lookup resolves `intelligence-mcp-bridge.cmd` on Windows and `intelligence-mcp-bridge` on macOS automatically. No JSON-escape concerns. **The MCP config text stays stable across bridge upgrades and Node upgrades — you do NOT have to edit this JSON.** But if you change Node versions via nvm (including patch upgrades like `nvm install 24.16.0 && nvm use 24.16.0`), you must **reinstall the bridge under the new Node** (see [Step 1](#step-1--install-the-bridge)) — nvm isolates global packages per Node version, so the old install becomes invisible until you reinstall.
 
 **Windows fallback:** if your MCP client logs "MCP server disconnected" with the bare `"command": "intelligence-mcp-bridge"`, the client's subprocess spawn may not apply Windows `PATHEXT` resolution. Add the `.cmd` suffix explicitly:
 
@@ -159,7 +159,7 @@ Use ONLY when Form A doesn't work. This is typically because the client spawns s
 | macOS                | `if test -f "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js"; then echo OK; else echo "NOT FOUND"; fi` |
 | Windows (PowerShell) | `Test-Path "$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"`                                           |
 
-Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Windows), the bridge is not installed under your active Node — go back to Step 1 and re-run `npm install -g @hafla/intelligence-mcp-bridge@1.0.4`.
+Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Windows), the bridge is not installed under your active Node — go back to [Step 1](#step-1--install-the-bridge) and reinstall the bridge.
 
 **Windows-specific JSON-syntax rules:**
 
