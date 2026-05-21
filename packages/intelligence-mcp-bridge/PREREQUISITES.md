@@ -323,4 +323,4 @@ The Techy Helper / Power User can't set these — Ops does. If you haven't recei
 
 ## Done
 
-Proceed to [README.md § Prerequisites](./README.md#prerequisites) to install and configure the bridge itself.
+Proceed to [README.md § Prerequisites verify](./README.md#prerequisites-verify) to install and configure the bridge itself.
