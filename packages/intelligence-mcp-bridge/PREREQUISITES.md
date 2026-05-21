@@ -113,7 +113,7 @@ npm uninstall -g @google/gemini-cli
 npm install -g @google/gemini-cli
 ```
 
-**If you see "running scripts is disabled on this system"** instead of a version string: your PowerShell ExecutionPolicy is blocking the `.ps1` shim. Invoke the `.cmd` wrapper directly to sidesteps the `.ps1` resolution path:
+**If you see "running scripts is disabled on this system"** instead of a version string: your PowerShell ExecutionPolicy is blocking the `.ps1` shim. Invoke the `.cmd` wrapper directly to sidestep the `.ps1` resolution path:
 
 ```powershell
 gemini.cmd --version
