@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-05-21
+
+**Note on context.** Operational completion of the 1.0.3 Node 24 LTS pin ship. Two defects flagged by `gemini-code-assist[bot]` on PR #3 after the 1.0.3 tag was already pushed and the publish workflow had already run — both fixed here. 1.0.3 is deprecated post-1.0.4; use 1.0.4 onward. The root README's `### @hafla/intelligence-mcp-bridge` teaser section's install config was also corrected (removed an interim broken `execFileSync(...HASH...)` snippet that would have shipped to GitHub-rendered README readers; replaced with a pointer to the canonical package-README install config).
+
 ### Fixed
 
 - **`BRIDGE_SHUTDOWN_DRAIN_MS` NaN-coercion bug.** When this env var was
@@ -14,7 +18,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   the bridge to exit immediately with no drain window. Extracted
   `parseDrainTimeoutMs` into `src/drain-timeout.js`; uses `Number.isFinite`
   to reject `NaN` and fall back to the 2 s default while still preserving
-  an explicit `=0` (operator opts out of drain entirely).
+  an explicit `=0` (operator opts out of drain entirely). 6 new
+  `node:test` unit tests cover NaN-rejection, 0-preservation, undefined,
+  empty, valid numeric, and parseInt-prefix semantics. All 48 tests pass.
 
 ### Changed
 

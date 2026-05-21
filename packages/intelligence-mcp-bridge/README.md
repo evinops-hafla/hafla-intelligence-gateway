@@ -28,7 +28,7 @@ node -v # should print v24.15.x
 Then install and run the bridge (pinned version — see CHANGELOG for the current release):
 
 ```bash
-npx -y @hafla/intelligence-mcp-bridge@1.0.3
+npx -y @hafla/intelligence-mcp-bridge@1.0.4
 ```
 
 Access is gated at the gateway (`mcp.hafla.com`) against the Hafla Google Workspace org — the npm package is a distribution channel, not the trust boundary.
@@ -85,7 +85,7 @@ Add (or replace) the `hafla-evwa-idl-gateway` block under `mcpServers`:
       "args": [
         "/Users/YOU/.nvm/versions/node/v24.15.0/bin/npx",
         "-y",
-        "@hafla/intelligence-mcp-bridge@1.0.3"
+        "@hafla/intelligence-mcp-bridge@1.0.4"
       ]
     }
   }
@@ -165,7 +165,7 @@ The bridge writes actionable diagnostic banners to stderr. Where you see "MCP cl
 
 ## Upgrading
 
-Because `npx -y @hafla/intelligence-mcp-bridge@1.0.3` is **pinned to an exact version**, npm caches that specifier under `~/.npm/_npx/<hash>/` and keeps re-using the cached copy across restarts. New versions ship via three steps:
+Because `npx -y @hafla/intelligence-mcp-bridge@1.0.4` is **pinned to an exact version**, npm caches that specifier under `~/.npm/_npx/<hash>/` and keeps re-using the cached copy across restarts. New versions ship via three steps:
 
 1. Edit the `args` in your `.mcp.json` / `settings.json` to the new version, e.g. `"@hafla/intelligence-mcp-bridge@1.0.4"`.
 2. Restart the MCP client.

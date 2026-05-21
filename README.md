@@ -21,7 +21,7 @@ Talk about "the MCP Gateway server" when you mean the Cloud Run service; "the In
 
 | Package                                                                  | Type                                      | Status                  |
 | ------------------------------------------------------------------------ | ----------------------------------------- | ----------------------- |
-| [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge`    | 1.0.3 — Node 24 LTS pin |
+| [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge`    | 1.0.4 — Node 24 LTS pin + post-release fixes |
 | `packages/plugin/`                                                       | Claude Code plugin / Gemini CLI extension | Planned                 |
 
 ### `@hafla/intelligence-mcp-bridge`

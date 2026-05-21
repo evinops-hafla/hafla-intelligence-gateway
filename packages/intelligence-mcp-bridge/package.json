@@ -1,6 +1,6 @@
 {
   "name": "@hafla/intelligence-mcp-bridge",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "stdio↔HTTPS bridge to the Hafla MCP Gateway at mcp.hafla.com, with gcloud-minted Google ID token auth.",
   "type": "module",
   "bin": {
