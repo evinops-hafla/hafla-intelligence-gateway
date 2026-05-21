@@ -94,10 +94,10 @@ Pick your client's config file:
 
 **If the file does not exist** (fresh machine): skip the backup, but ensure the parent directory exists before Step 4 (some editors won't auto-create it on save):
 
-| OS                   | Command                                                                       |
-| -------------------- | ----------------------------------------------------------------------------- |
-| macOS                | `mkdir -p ~/.gemini` (substitute your client's parent dir)                    |
-| Windows (PowerShell) | `New-Item -ItemType Directory -Force "$env:USERPROFILE\.gemini" \| Out-Null`  |
+| OS                   | Command                                                                      |
+| -------------------- | ---------------------------------------------------------------------------- |
+| macOS                | `mkdir -p ~/.gemini` (substitute your client's parent dir)                   |
+| Windows (PowerShell) | `New-Item -ItemType Directory -Force "$env:USERPROFILE\.gemini" \| Out-Null` |
 
 Step 4 then creates the config file with your MCP block.
 
@@ -150,16 +150,16 @@ Use ONLY when Form A doesn't work. This is typically because the client spawns s
 | macOS                | `node -p "process.execPath"` | `echo "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js"` |
 | Windows (PowerShell) | `node -p "process.execPath"` | `echo "$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"` |
 
-`node -p "process.execPath"` returns the absolute path to the Node binary that is *currently* executing — single value, deterministic, identical syntax across both OSes. Avoids the `which node` / `where.exe node` multi-line ambiguity when multiple Node installs exist.
+`node -p "process.execPath"` returns the absolute path to the Node binary that is _currently_ executing — single value, deterministic, identical syntax across both OSes. Avoids the `which node` / `where.exe node` multi-line ambiguity when multiple Node installs exist.
 
 **Confirm Path B exists** before pasting into JSON (catches half-installed state — e.g., bridge installed under a different Node version than the one currently active):
 
-| OS                   | Command                                                                                       |
-| -------------------- | --------------------------------------------------------------------------------------------- |
-| macOS                | `test -f "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js" && echo OK`             |
-| Windows (PowerShell) | `Test-Path "$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"`                      |
+| OS                   | Command                                                                          |
+| -------------------- | -------------------------------------------------------------------------------- | --- | ----------------- |
+| macOS                | `test -f "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js" && echo OK |     | echo "NOT FOUND"` |
+| Windows (PowerShell) | `Test-Path "$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"`         |
 
-Expected: `OK` (macOS) or `True` (Windows). If absent / `False`, the bridge is not installed under your active Node — go back to Step 1 and re-run `npm install -g @hafla/intelligence-mcp-bridge@1.0.4`.
+Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Windows), the bridge is not installed under your active Node — go back to Step 1 and re-run `npm install -g @hafla/intelligence-mcp-bridge@1.0.4`.
 
 **Windows-specific JSON-syntax rules:**
 
@@ -180,9 +180,7 @@ Expected: `OK` (macOS) or `True` (Windows). If absent / `False`, the bridge is n
   "mcpServers": {
     "hafla-evwa-idl-gateway": {
       "command": "<Path A>",
-      "args": [
-        "<Path B>"
-      ]
+      "args": ["<Path B>"]
     }
   }
 }
