@@ -188,6 +188,17 @@ Otherwise, install Homebrew. The installer prompts for `sudo` once.
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
+**Apple Silicon only:** the installer does NOT auto-add `brew` to your shell PATH; you have to do it explicitly (the installer prints these commands in its "Next steps" output too). Run:
+
+```bash
+echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+eval "$(/opt/homebrew/bin/brew shellenv)"
+```
+
+The first line persists across future shell sessions; the second line activates `brew` in the current session.
+
+On **Intel Macs**, the installer places `brew` at `/usr/local/bin/brew` which is already on the default PATH — no shell-profile edit needed.
+
 Verify:
 
 ```bash
