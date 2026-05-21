@@ -12,15 +12,15 @@ One-time machine setup. Gets you to the state where the bridge install instructi
 
 These checks define "prerequisites met." If all pass on the machine, skip to [README.md](./README.md) — you're done here.
 
-| Check                                                      | Command                                    | Expected output                                            |
-| ---------------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------- |
-| Node 24 LTS is the active Node                             | `node -v`                                  | `v24.15.0` or newer `v24.x.y`                              |
-| npm is recent                                              | `npm -v`                                   | `10.x` or newer                                            |
-| Version manager present (Windows)                          | `nvm version`                              | A version string (e.g. `1.1.12`)                           |
-| Version manager present (macOS)                            | `command -v nvm`                           | `nvm` (a shell function)                                   |
-| MCP client is installed against Node 24 (CLI clients only) | `gemini --version` or `claude --version`   | Version string with **no `EBADENGINE` warning in stderr**  |
-| gcloud SDK installed                                       | `gcloud --version`                         | Prints SDK version                                         |
-| `@hafla.com` account active in gcloud                      | `gcloud auth list`                         | An ACTIVE row matching your `@hafla.com` email             |
+| Check                                                      | Command                                  | Expected output                                           |
+| ---------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------- |
+| Node 24 LTS is the active Node                             | `node -v`                                | `v24.15.0` or newer `v24.x.y`                             |
+| npm is recent                                              | `npm -v`                                 | `10.x` or newer                                           |
+| Version manager present (Windows)                          | `nvm version`                            | A version string (e.g. `1.1.12`)                          |
+| Version manager present (macOS)                            | `command -v nvm`                         | `nvm` (a shell function)                                  |
+| MCP client is installed against Node 24 (CLI clients only) | `gemini --version` or `claude --version` | Version string with **no `EBADENGINE` warning in stderr** |
+| gcloud SDK installed                                       | `gcloud --version`                       | Prints SDK version                                        |
+| `@hafla.com` account active in gcloud                      | `gcloud auth list`                       | An ACTIVE row matching your `@hafla.com` email            |
 
 If any check fails, follow the per-OS playbook below to reach this state. If the per-OS playbook doesn't fit the machine (corporate lockdown, pre-existing tooling, etc.), the goal is still these checks — get the machine there however you can.
 
@@ -50,10 +50,12 @@ One-time. The nvm-windows installer is the only step on Windows that explicitly 
 
 1. Download `nvm-setup.exe` from the [nvm-windows releases page](https://github.com/coreybutler/nvm-windows/releases).
 2. Right-click → **Run as administrator**. Accept the installer defaults.
-3. **Close and reopen PowerShell** so `PATH` picks up the new `nvm` command. Alternatively - Refresh `PATH` in the current PowerShell session so the new `nvm` command is recognized immediately (no terminal restart needed):
+3. **Close and reopen PowerShell** so `PATH` picks up the new `nvm` command. Alternatively - Refresh `PATH` in the current PowerShell session so the new `nvm` command is recognized immediately (no terminal restart needed). The form below appends the freshly-read registry PATH onto your current session PATH, so any session-only additions (venv activations, tool temp exports) are preserved:
 
    ```powershell
-   $env:PATH = [Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [Environment]::GetEnvironmentVariable("PATH","User")
+   $env:PATH = [Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + `
+               [Environment]::GetEnvironmentVariable("PATH","User") + ";" + `
+               $env:PATH
    ```
 
 Verify:
@@ -127,10 +129,12 @@ winget install Google.CloudSDK
 
 **UAC will prompt during install** — the Google Cloud SDK ships as an MSI that requires elevation to register system-wide. Click **Yes** when prompted. You do NOT need to start PowerShell as Administrator for this — UAC handles the elevation for just the MSI step.
 
-Refresh `PATH` in the current PowerShell session so `gcloud` is recognized immediately:
+**Close and reopen PowerShell** so `PATH` picks up the new `gcloud` command. Alternatively - Refresh `PATH` in the current PowerShell session so `gcloud` is recognized immediately (no terminal restart needed). The form below appends the freshly-read registry PATH onto your current session PATH, so any session-only additions (venv activations, tool temp exports) are preserved:
 
 ```powershell
-$env:PATH = [Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [Environment]::GetEnvironmentVariable("PATH","User")
+$env:PATH = [Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + `
+            [Environment]::GetEnvironmentVariable("PATH","User") + ";" + `
+            $env:PATH
 ```
 
 Verify:
