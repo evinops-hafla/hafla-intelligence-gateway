@@ -148,7 +148,7 @@ Use ONLY when Form A doesn't work. This is typically because the client spawns s
 | OS                   | Path A (node)                | Path B (bridge entrypoint)                                          |
 | -------------------- | ---------------------------- | ------------------------------------------------------------------- |
 | macOS                | `node -p "process.execPath"` | `echo "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js"` |
-| Windows (PowerShell) | `node -p "process.execPath"` | `"$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"`      |
+| Windows (PowerShell) | `node -p "process.execPath"` | `echo "$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"` |
 
 `node -p "process.execPath"` returns the absolute path to the Node binary that is *currently* executing — single value, deterministic, identical syntax across both OSes. Avoids the `which node` / `where.exe node` multi-line ambiguity when multiple Node installs exist.
 
