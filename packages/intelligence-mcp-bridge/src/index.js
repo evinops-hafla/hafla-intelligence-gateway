@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+
+import { assertNode24 } from './version-check.js';
+import { parseDrainTimeoutMs } from './drain-timeout.js';
+try { assertNode24(); } catch (e) { console.error(e.message); process.exit(1); }
+
 /**
  * MCP stdio bridge for the Hafla Intelligence Gateway at mcp.hafla.com.
  *
@@ -57,6 +62,7 @@
  *   - Each module gets the same header-comment convention as this file
  */
 
+import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -597,7 +603,7 @@ export async function forwardRequest(
   message,
   {
     tokenCache,
-    httpRequestFn = httpsRequest,
+    httpRequestFn = null,
     gatewayUrl = config.gatewayUrl,
     gatewayPath = config.gatewayPath,
     requestTimeoutMs = config.requestTimeoutMs,
@@ -656,7 +662,9 @@ export async function forwardRequest(
       }
     };
 
-    const req = httpRequestFn(options, (res) => {
+    const effectiveFn =
+      httpRequestFn ?? (url.protocol === 'http:' ? httpRequest : httpsRequest);
+    const req = effectiveFn(options, (res) => {
       // Engage Node's internal StringDecoder so partial multi-byte UTF-8
       // sequences across TCP chunk boundaries are buffered safely. Without
       // this, a 4-byte emoji or 2-3 byte Arabic codepoint split across two
@@ -986,7 +994,9 @@ async function main() {
   // shutdown. Reviewer 2026-05-17 flagged this as NIT; addressing
   // defensively while the branch is pre-merge.
   let shuttingDown = false;
-  const drainTimeoutMs = 2000;
+  const drainTimeoutMs = parseDrainTimeoutMs(
+    process.env.BRIDGE_SHUTDOWN_DRAIN_MS
+  );
   const onShutdownSignal = async (signal) => {
     if (shuttingDown) {
       log.warn('Shutdown signal received again — forcing exit', { signal });

@@ -4,6 +4,68 @@ All notable changes to `@hafla/intelligence-mcp-bridge` will be documented in th
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [1.0.4] — 2026-05-21
+
+**Note on context.** Operational completion of the 1.0.3 Node 24 LTS pin ship. Two defects flagged by `gemini-code-assist[bot]` on PR #3 after the 1.0.3 tag was already pushed and the publish workflow had already run — both fixed here. 1.0.3 is deprecated post-1.0.4; use 1.0.4 onward. The root README's `### @hafla/intelligence-mcp-bridge` teaser section's install config was also corrected (removed an interim broken `execFileSync(...HASH...)` snippet that would have shipped to GitHub-rendered README readers; replaced with a pointer to the canonical package-README install config).
+
+### Fixed
+
+- **`BRIDGE_SHUTDOWN_DRAIN_MS` NaN-coercion bug.** When this env var was
+  set to a non-numeric string, `Number.parseInt` returned `NaN` and
+  `setTimeout(fn, NaN)` coerced silently to `setTimeout(fn, 0)` — causing
+  the bridge to exit immediately with no drain window. Extracted
+  `parseDrainTimeoutMs` into `src/drain-timeout.js`; uses `Number.isFinite`
+  to reject `NaN` and fall back to the 2 s default while still preserving
+  an explicit `=0` (operator opts out of drain entirely). 6 new
+  `node:test` unit tests cover NaN-rejection, 0-preservation, undefined,
+  empty, valid numeric, and parseInt-prefix semantics. All 48 tests pass.
+
+### Changed
+
+- **README MCP client config corrected to the two-path form.** The
+  prior README used a one-path form (`"command": "npx"` + args) that
+  silently fails on macOS because GUI apps (Claude Desktop) inherit
+  launchd's PATH, not the shell's — `npx` is never on launchd PATH even
+  when nvm is set up correctly. The documented config now requires
+  two explicit absolute paths: one for `node` (the `command` field) and
+  one for the `npx` script (first element of `args`), both obtained via
+  `which node` / `which npx` after `nvm use`. A fragility note explains
+  path requirements per version manager (nvm / fnm / Volta / nvm-windows)
+  and when to update (Node minor/patch upgrade, bridge version bump).
+
+## [1.0.3] — 2026-05-20
+
+**Note on versioning.** Strictly per semver, hard-pinning Node 24 LTS
+from `>=20` is a major bump (would be `2.0.0`). This release ships as
+`1.0.3` because there are no production consumers of this package
+outside the Hafla Google Workspace org today; the install is gated at
+`mcp.hafla.com`, not at the bridge. Republishing as `2.0.0` after
+deleting `1.x` would be more disruption than the org will absorb. If
+you are on Node 20 or 22 and your install fails, upgrade to Node 24
+LTS — see README § "Prerequisites".
+
+### Changed
+
+- `engines.node` pinned to the Node 24 LTS track (`^24.15.0`)
+- Added `.nvmrc` (`24.15.0`) and `.npmrc` (`engine-strict=true`)
+- Added a Node-major-version guard in the bridge entrypoint that exits
+  with a clear message on Node ≠ 24
+- README rewritten to recommend a Node version manager
+  (nvm / fnm / nvm-windows / asdf) — no specific manager is enforced,
+  and `NVM_DIR` is NOT checked (would break Claude Desktop subprocess env)
+- README install command pinned to
+  `npx -y @hafla/intelligence-mcp-bridge@1.0.3` (declarative,
+  audit-friendly, no registry round-trip per session)
+- CI matrix collapsed to `['24.15.0']`
+- **`BRIDGE_SHUTDOWN_DRAIN_MS` env var** — the 2s graceful-shutdown drain
+  timeout is now operator-tunable via this environment variable
+  (default: `2000`). Useful when the bridge runs under a process
+  supervisor or alongside long-running `safe_sql_sandbox` queries
+  (e.g., set `BRIDGE_SHUTDOWN_DRAIN_MS=10000` for a 10s window). Has no
+  effect in the common single-user, on-demand invocation model.
+
 ## [1.0.2] — 2026-05-18
 
 ### Fixed

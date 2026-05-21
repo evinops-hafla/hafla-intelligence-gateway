@@ -8,6 +8,33 @@ The bridge mints a fresh 60-minute Google ID token via your own `gcloud` session
 
 ## Prerequisites
 
+### Node 24 LTS
+
+This bridge requires **Node 24 LTS** (currently `24.15.0` or any newer patch in the 24.x line).
+
+We strongly recommend installing Node via a version manager rather than the OS installer — switching versions and applying security patches becomes a one-liner.
+
+- **macOS / Linux:** [`nvm`](https://github.com/nvm-sh/nvm) (recommended) or [`fnm`](https://github.com/Schniz/fnm)
+- **Windows:** [`fnm`](https://github.com/Schniz/fnm) (recommended, cross-platform) or [`nvm-windows`](https://github.com/coreybutler/nvm-windows)
+
+All four respect the `.nvmrc` file in the project, so once your manager is installed:
+
+```bash
+nvm install # or: fnm install
+nvm use # or: fnm use
+node -v # should print v24.15.x
+```
+
+Then install and run the bridge (pinned version — see CHANGELOG for the current release):
+
+```bash
+npx -y @hafla/intelligence-mcp-bridge@1.0.4
+```
+
+Access is gated at the gateway (`mcp.hafla.com`) against the Hafla Google Workspace org — the npm package is a distribution channel, not the trust boundary.
+
+### Workspace access
+
 Ops must have done two one-time things for you:
 
 1. Added you to the `team@hafla.com` Google Workspace group.
@@ -21,11 +48,11 @@ If you have not received confirmation from Ops, the bridge will start, but the g
 
 ### 1. Install the Google Cloud SDK (one-time, skip if you already have `gcloud`)
 
-| OS            | Command                                                                                                                                                                                |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **macOS**     | `brew install --cask google-cloud-sdk`                                                                                                                                                 |
-| **Windows**   | `winget install Google.CloudSDK` &nbsp;_(or)_ `choco install gcloudsdk` &nbsp;_(or)_ download the installer at [cloud.google.com/sdk/docs/install#windows](https://cloud.google.com/sdk/docs/install#windows) |
-| **Linux**     | Follow [cloud.google.com/sdk/docs/install#linux](https://cloud.google.com/sdk/docs/install#linux)                                                                                      |
+| OS          | Command                                                                                                                                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **macOS**   | `brew install --cask google-cloud-sdk`                                                                                                                                                                        |
+| **Windows** | `winget install Google.CloudSDK` &nbsp;_(or)_ `choco install gcloudsdk` &nbsp;_(or)_ download the installer at [cloud.google.com/sdk/docs/install#windows](https://cloud.google.com/sdk/docs/install#windows) |
+| **Linux**   | Follow [cloud.google.com/sdk/docs/install#linux](https://cloud.google.com/sdk/docs/install#linux)                                                                                                             |
 
 ### 2. Sign in with your `@hafla.com` account
 
@@ -41,12 +68,12 @@ The bridge's pre-flight rejects any non-`@hafla.com` active account before sendi
 
 The JSON block is identical on every OS — only the file path differs.
 
-| Client          | Config file (macOS / Linux)     | Config file (Windows)                       |
-| --------------- | ------------------------------- | ------------------------------------------- |
-| Claude Code     | `~/.claude.json`                | `%USERPROFILE%\.claude.json`                |
-| Claude Code (project-scoped) | `<project>/.mcp.json` | `<project>\.mcp.json`                       |
-| Claude Desktop  | `~/Library/Application Support/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json` |
-| Gemini CLI      | `~/.gemini/settings.json`       | `%USERPROFILE%\.gemini\settings.json`       |
+| Client                       | Config file (macOS / Linux)                                       | Config file (Windows)                         |
+| ---------------------------- | ----------------------------------------------------------------- | --------------------------------------------- |
+| Claude Code                  | `~/.claude.json`                                                  | `%USERPROFILE%\.claude.json`                  |
+| Claude Code (project-scoped) | `<project>/.mcp.json`                                             | `<project>\.mcp.json`                         |
+| Claude Desktop               | `~/Library/Application Support/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Gemini CLI                   | `~/.gemini/settings.json`                                         | `%USERPROFILE%\.gemini\settings.json`         |
 
 Add (or replace) the `hafla-evwa-idl-gateway` block under `mcpServers`:
 
@@ -54,12 +81,36 @@ Add (or replace) the `hafla-evwa-idl-gateway` block under `mcpServers`:
 {
   "mcpServers": {
     "hafla-evwa-idl-gateway": {
-      "command": "npx",
-      "args": ["-y", "@hafla/intelligence-mcp-bridge@1.0.0"]
+      "command": "/Users/YOU/.nvm/versions/node/v24.15.0/bin/node",
+      "args": [
+        "/Users/YOU/.nvm/versions/node/v24.15.0/bin/npx",
+        "-y",
+        "@hafla/intelligence-mcp-bridge@1.0.4"
+      ]
     }
   }
 }
 ```
+
+Both paths point at the **same version-manager-managed Node install** — they must match. Get them by running this in your terminal after `nvm use` (or `fnm use`):
+
+```bash
+which node   # → use this for `command`
+which npx    # → use this for `args[0]`
+```
+
+> **Why does `args[0]` need an absolute path to `npx`?** Plain `"command": "npx"` (or `args: ["npx", ...]`) does NOT work on macOS — GUI apps (Claude Desktop) inherit env from launchd, not your shell's `~/.zshrc`. `npx` is NOT on the launchd PATH even when you did everything right with nvm. The `-e` / `import()` form previously documented here was broken in 1.0.3 — `import('pkg@version')` is not valid Node module-resolution syntax; the `@version` suffix becomes part of the package name and the lookup fails with `ERR_MODULE_NOT_FOUND`. The two-absolute-paths form above is the correct pattern: explicit node binary + explicit npx script + version-pinned package name.
+
+> **Fragility note — read before configuring.** Both hardcoded paths are OS- and version-manager-specific:
+>
+> - **nvm (macOS/Linux):** `~/.nvm/versions/node/v24.15.0/bin/node` and `…/bin/npx`
+> - **Volta (macOS/Linux):** `~/.volta/tools/image/node/24.15.0/bin/node` and `…/bin/npx`
+> - **fnm (macOS/Linux):** `~/.fnm/node-versions/v24.15.0/installation/bin/node` and `…/bin/npx`
+> - **nvm-windows:** `%APPDATA%\nvm\v24.15.0\node.exe` and `…\npx`
+>
+> **On any Node minor/patch upgrade or version-manager reinstall, you MUST update BOTH paths in your MCP client config.** If either drifts, the bridge silently fails to spawn, surfacing only as "MCP server disconnected" in the client with no actionable error chain.
+>
+> **On bridge upgrades** (e.g., `1.0.3` → `1.0.4`), update the version specifier in `args[2]` too. The `-y` flag tells npx to install-and-run without prompting; the version pin ensures npx hits its local cache after the first run for fast startup.
 
 Restart the MCP client. Done.
 
@@ -69,13 +120,13 @@ Restart the MCP client. Done.
 
 Five read-only tools, all backed by Hafla's data lakes + identity layer (live at `mcp.hafla.com`):
 
-| Tool                        | What it does                                                       |
-| --------------------------- | ------------------------------------------------------------------ |
-| `safe_sql_sandbox`          | Parameterised read-only AlloyDB SQL across all lakes               |
-| `safe_cypher_sandbox`       | Parameterised read-only Neo4j Cypher over the identity graph      |
-| `analyze_identity_graph`    | Cross-lake identity resolution — one unified profile per person   |
-| `get_ticket_360`            | Full Zendesk ticket with linked WhatsApp chats and Slack threads  |
-| `search_internal_knowledge` | Semantic search over the WhatsApp / Slack conversation corpus     |
+| Tool                        | What it does                                                     |
+| --------------------------- | ---------------------------------------------------------------- |
+| `safe_sql_sandbox`          | Parameterised read-only AlloyDB SQL across all lakes             |
+| `safe_cypher_sandbox`       | Parameterised read-only Neo4j Cypher over the identity graph     |
+| `analyze_identity_graph`    | Cross-lake identity resolution — one unified profile per person  |
+| `get_ticket_360`            | Full Zendesk ticket with linked WhatsApp chats and Slack threads |
+| `search_internal_knowledge` | Semantic search over the WhatsApp / Slack conversation corpus    |
 
 All five are read-only at the database layer — the bridge cannot write.
 
@@ -98,24 +149,25 @@ The bridge writes actionable diagnostic banners to stderr. Where you see "MCP cl
 - **Claude Code / Claude Desktop:** the client's own log file (varies by OS — check the client's documentation)
 - **Gemini CLI:** the terminal where you launched the client
 
-| Symptom / banner                                                                  | Cause                                                                                | Fix                                                                                                                                                                                                                                |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `gcloud CLI not found`                                                            | Google Cloud SDK isn't installed (or not on PATH)                                    | Re-run the install command from Step 1. On Windows, may need a restart for PATH to take effect.                                                                                                                                    |
-| `Active gcloud account is X — must be an @hafla.com account`                      | You're logged into `gcloud` with a personal account                                  | `gcloud config set account <you>@hafla.com` — then `gcloud auth list` to confirm the `*` is on your @hafla.com row. If your @hafla.com account is missing, `gcloud auth login` first.                                              |
-| `gateway returned 401 — token audience likely mismatched`                         | Cloud Run edge rejected the token                                                    | Most common cause: you're not yet in the `team@hafla.com` Google Group — ping Ops. Less common: the gateway deploy is missing `https://mcp.hafla.com` in `customAudiences` — that's an Ops fix. Sometimes a cached token pre-dates your group add — re-run `gcloud auth login` to mint a fresh one. |
-| `gateway returned 403 employee_inactive`                                          | You're in the group but not active in OpsUsers                                       | Ping Ops to set `isEmployeeActive=true` on your `haflaCore.OpsUsers` row.                                                                                                                                                          |
-| `Failed to mint Google ID token`                                                  | `gcloud` could not produce an identity token                                         | Usual causes (the banner lists them): (1) credentials expired → `gcloud auth login`; (2) wrong active project → `gcloud config get-value project`; (3) older gcloud SDK → `gcloud components update`.                              |
-| Silent failure / no response in the client                                        | MCP client cannot spawn `npx` or `node`                                              | Verify `node` is on PATH (`node --version`) and is **20.0 or newer**. To get more diagnostics, add `"env": { "DEBUG": "1" }` to the server block and tail the MCP client's log.                                                    |
-| **(Windows)** `gcloud CLI not found` even though gcloud is installed              | gcloud's `bin/` isn't on PATH (the installer doesn't always add it)                  | In PowerShell: `where.exe gcloud`. If empty, add `%LOCALAPPDATA%\Google\Cloud SDK\google-cloud-sdk\bin\` to PATH via **System → Environment Variables**, then restart the MCP client.                                              |
-| **(Windows)** MCP client fails to spawn the bridge — no stderr at all             | `npx.cmd` not on PATH, or Node ≥20 not available                                     | In PowerShell: `where.exe npx` and `node --version`. Under nvm-windows, run `nvm use <version>` first; the bridge requires Node ≥20.                                                                                                |
+| Symptom / banner                                                      | Cause                                                               | Fix                                                                                                                                                                                                                                                                                                 |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `requires Node 24 LTS (you are on vXX.X.X)`                          | Node version is not 24.x                                            | Install Node 24 LTS via a version manager (see Prerequisites above). After `nvm use`, update the `command` path in your MCP client config to the new `which node` output.                                                                                                                           |
+| `gcloud CLI not found`                                                | Google Cloud SDK isn't installed (or not on PATH)                   | Re-run the install command from Step 1. On Windows, may need a restart for PATH to take effect.                                                                                                                                                                                                     |
+| `Active gcloud account is X — must be an @hafla.com account`          | You're logged into `gcloud` with a personal account                 | `gcloud config set account <you>@hafla.com` — then `gcloud auth list` to confirm the `*` is on your @hafla.com row. If your @hafla.com account is missing, `gcloud auth login` first.                                                                                                               |
+| `gateway returned 401 — token audience likely mismatched`             | Cloud Run edge rejected the token                                   | Most common cause: you're not yet in the `team@hafla.com` Google Group — ping Ops. Less common: the gateway deploy is missing `https://mcp.hafla.com` in `customAudiences` — that's an Ops fix. Sometimes a cached token pre-dates your group add — re-run `gcloud auth login` to mint a fresh one. |
+| `gateway returned 403 employee_inactive`                              | You're in the group but not active in OpsUsers                      | Ping Ops to set `isEmployeeActive=true` on your `haflaCore.OpsUsers` row.                                                                                                                                                                                                                           |
+| `Failed to mint Google ID token`                                      | `gcloud` could not produce an identity token                        | Usual causes (the banner lists them): (1) credentials expired → `gcloud auth login`; (2) wrong active project → `gcloud config get-value project`; (3) older gcloud SDK → `gcloud components update`.                                                                                               |
+| Silent failure / no response in the client                            | MCP client cannot spawn the bridge                                  | Confirm the `command` path in your MCP config is the correct absolute path to `node` — run `which node` after `nvm use` and compare. Requires **Node 24 LTS**. To get more diagnostics, add `"env": { "DEBUG": "1" }` to the server block and tail the MCP client's log.                           |
+| **(Windows)** `gcloud CLI not found` even though gcloud is installed  | gcloud's `bin/` isn't on PATH (the installer doesn't always add it) | In PowerShell: `where.exe gcloud`. If empty, add `%LOCALAPPDATA%\Google\Cloud SDK\google-cloud-sdk\bin\` to PATH via **System → Environment Variables**, then restart the MCP client.                                                                                                               |
+| **(Windows)** MCP client fails to spawn the bridge — no stderr at all | Hardcoded `command` path is stale or incorrect                      | In PowerShell: run `fnm use` then `where.exe node` and update the `command` path in your MCP config to match. The bridge requires **Node 24 LTS**.                                                                                                                                                  |
 
 ---
 
 ## Upgrading
 
-Because `npx -y @hafla/intelligence-mcp-bridge@1.0.0` is **pinned to an exact version**, npm caches that specifier under `~/.npm/_npx/<hash>/` and keeps re-using the cached copy across restarts. New versions ship via three steps:
+Because `npx -y @hafla/intelligence-mcp-bridge@1.0.4` is **pinned to an exact version**, npm caches that specifier under `~/.npm/_npx/<hash>/` and keeps re-using the cached copy across restarts. New versions ship via three steps:
 
-1. Edit the `args` in your `.mcp.json` / `settings.json` to the new version, e.g. `"@hafla/intelligence-mcp-bridge@1.0.1"`.
+1. Edit the `args` in your `.mcp.json` / `settings.json` to the new version, e.g. `"@hafla/intelligence-mcp-bridge@1.0.4"`.
 2. Restart the MCP client.
 3. `npx` pulls the new tarball on first invocation; the previous cache entry stays put under the old hash.
 
