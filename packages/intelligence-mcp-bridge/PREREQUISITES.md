@@ -46,7 +46,7 @@ GUI clients (Cursor, Claude Desktop) are not Node-managed — install them separ
 
 ### 1. Install nvm-windows (Administrator required)
 
-One-time. The nvm-windows installer is the only step on Windows that needs elevation — every subsequent command runs as the regular user.
+One-time. The nvm-windows installer is the only step on Windows that explicitly requires you to **Run as administrator**. You may still see UAC prompts during later steps — the gcloud SDK install (Step 4) ships as an MSI that triggers UAC, and on locked-down corporate Windows machines `nvm use` (Step 2) can fail with an access-denied error that needs admin. Both are handled inline at their respective steps. Every other command runs as the regular user.
 
 1. Download `nvm-setup.exe` from the [nvm-windows releases page](https://github.com/coreybutler/nvm-windows/releases).
 2. Right-click → **Run as administrator**. Accept the installer defaults.
