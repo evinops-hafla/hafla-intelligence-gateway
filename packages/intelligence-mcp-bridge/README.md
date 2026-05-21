@@ -133,6 +133,8 @@ No embedded path. PATH lookup resolves `intelligence-mcp-bridge.cmd` on Windows 
 }
 ```
 
+If `intelligence-mcp-bridge.cmd` still doesn't spawn (some clients use raw `CreateProcess` and cannot execute `.cmd` files without `cmd.exe /c`), switch to **Form B** below.
+
 If you're editing an existing config that already has `mcpServers`, add the `hafla-evwa-idl-gateway` block as a peer to your existing entries — don't replace the file.
 
 #### Form B — absolute paths (fallback)
