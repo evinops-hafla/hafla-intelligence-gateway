@@ -119,7 +119,7 @@ Works for any client that resolves bare commands via the user's shell PATH: **Ge
 }
 ```
 
-No embedded path. PATH lookup resolves `intelligence-mcp-bridge.cmd` on Windows and `intelligence-mcp-bridge` on macOS automatically. Survives Node minor/patch upgrades without a config edit. No JSON-escape concerns.
+No embedded path. PATH lookup resolves `intelligence-mcp-bridge.cmd` on Windows and `intelligence-mcp-bridge` on macOS automatically. No JSON-escape concerns. **Config edit is not needed across Node patch upgrades, BUT** if you switch Node versions via nvm (e.g. `nvm install 24.16.0 && nvm use 24.16.0`), you must reinstall the bridge under the new Node — nvm isolates global packages per Node version, so the old install becomes invisible.
 
 **Windows fallback:** if your MCP client logs "MCP server disconnected" with the bare `"command": "intelligence-mcp-bridge"`, the client's subprocess spawn may not apply Windows `PATHEXT` resolution. Add the `.cmd` suffix explicitly:
 
@@ -145,22 +145,33 @@ Use ONLY when Form A doesn't work. This is typically because the client spawns s
 
 **Derive your paths** (run on your machine; do NOT copy from an example):
 
-| OS                   | Path A (node)    | Path B (bridge entrypoint)                                          |
-| -------------------- | ---------------- | ------------------------------------------------------------------- |
-| macOS                | `which node`     | `echo "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js"` |
-| Windows (PowerShell) | `where.exe node` | `"$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"`      |
+| OS                   | Path A (node)                | Path B (bridge entrypoint)                                          |
+| -------------------- | ---------------------------- | ------------------------------------------------------------------- |
+| macOS                | `node -p "process.execPath"` | `echo "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js"` |
+| Windows (PowerShell) | `node -p "process.execPath"` | `"$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"`      |
+
+`node -p "process.execPath"` returns the absolute path to the Node binary that is *currently* executing — single value, deterministic, identical syntax across both OSes. Avoids the `which node` / `where.exe node` multi-line ambiguity when multiple Node installs exist.
+
+**Confirm Path B exists** before pasting into JSON (catches half-installed state — e.g., bridge installed under a different Node version than the one currently active):
+
+| OS                   | Command                                                                                       |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| macOS                | `test -f "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js" && echo OK`             |
+| Windows (PowerShell) | `Test-Path "$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"`                      |
+
+Expected: `OK` (macOS) or `True` (Windows). If absent / `False`, the bridge is not installed under your active Node — go back to Step 1 and re-run `npm install -g @hafla/intelligence-mcp-bridge@1.0.4`.
 
 **Windows-specific JSON-syntax rules:**
 
 1. **Backslash escape.** Windows paths contain `\` — JSON requires every `\` doubled to `\\`, OR convert all to forward slashes `/`. Example: `C:\Users\YOU\node.exe` → `"C:\\Users\\YOU\\node.exe"` or `"C:/Users/YOU/node.exe"`.
-2. **Executable suffix.** Use the full filename including suffix: `node.exe` (not `node`). The suffix is included automatically in `where.exe` output; do not hand-strip it.
-3. **Verify the path actually spawns** BEFORE pasting into JSON. In PowerShell:
+2. **Executable suffix.** Use the full filename including suffix: `node.exe` (not `node`). `node -p "process.execPath"` returns the full path with suffix automatically; do not hand-strip it.
+3. **Verify Path A actually spawns** BEFORE pasting into JSON. In PowerShell:
 
    ```powershell
    & "C:\path\you\derived\node.exe" --version
    ```
 
-   If it errors with `ENOENT` or "not recognized", the path is wrong — re-derive via `where.exe node`.
+   If it errors with `ENOENT` or "not recognized", the path is wrong — re-derive via `node -p "process.execPath"`.
 
 **MCP block (Form B):**
 
@@ -233,9 +244,9 @@ npm install -g @hafla/intelligence-mcp-bridge@<new-version>
 
 Then restart your MCP client.
 
-**Form A users:** no config edit needed — the bin shim resolves to the new version automatically.
+**Form A users:** no config edit needed across patch upgrades — the bin shim resolves to the new version automatically. If you also switched Node versions via nvm (`nvm install 24.16.0 && nvm use 24.16.0`), reinstall the bridge first (`npm install -g @hafla/intelligence-mcp-bridge@<new-version>`) under the new Node; nvm isolates global packages per Node version.
 
-**Form B users:** also re-run `which node` / `where.exe node` if you upgraded Node alongside the bridge — the node binary path may have moved.
+**Form B users:** re-derive **both** Path A (`node -p "process.execPath"`) and Path B (`$(npm root -g)/...` or `$(npm root -g)\...`). When Node version changes under nvm, both the binary path AND the global node_modules root move. Reinstall the bridge under the new Node first; then update both paths in your MCP config.
 
 **Do not switch to `@latest`** — pinning is the supply-chain hygiene boundary. Ops announces every version bump in Slack so the team can update on its own cadence.
 
