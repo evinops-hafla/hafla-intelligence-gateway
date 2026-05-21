@@ -53,9 +53,7 @@ One-time. The nvm-windows installer is the only step on Windows that explicitly 
 3. **Close and reopen PowerShell** so `PATH` picks up the new `nvm` command. Alternatively - Refresh `PATH` in the current PowerShell session so the new `nvm` command is recognized immediately (no terminal restart needed). The form below appends the freshly-read registry PATH onto your current session PATH, so any session-only additions (venv activations, tool temp exports) are preserved:
 
    ```powershell
-   $env:PATH = [Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + `
-               [Environment]::GetEnvironmentVariable("PATH","User") + ";" + `
-               $env:PATH
+   $env:PATH = [Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [Environment]::GetEnvironmentVariable("PATH","User") + ";" + $env:PATH
    ```
 
 Verify:
@@ -132,9 +130,7 @@ winget install Google.CloudSDK
 **Close and reopen PowerShell** so `PATH` picks up the new `gcloud` command. Alternatively - Refresh `PATH` in the current PowerShell session so `gcloud` is recognized immediately (no terminal restart needed). The form below appends the freshly-read registry PATH onto your current session PATH, so any session-only additions (venv activations, tool temp exports) are preserved:
 
 ```powershell
-$env:PATH = [Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + `
-            [Environment]::GetEnvironmentVariable("PATH","User") + ";" + `
-            $env:PATH
+$env:PATH = [Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [Environment]::GetEnvironmentVariable("PATH","User") + ";" + $env:PATH
 ```
 
 Verify:
