@@ -67,7 +67,7 @@ Confirm the `intelligence-mcp-bridge` bin shim resolves on your PATH:
 | macOS                | `which intelligence-mcp-bridge`     |
 | Windows (PowerShell) | `where.exe intelligence-mcp-bridge` |
 
-Expected: a single absolute path (e.g. `/Users/YOU/.nvm/versions/node/v24.15.0/bin/intelligence-mcp-bridge` on macOS; `C:\Users\YOU\AppData\Roaming\nvm\v24.15.0\intelligence-mcp-bridge.cmd` on Windows).
+Expected: **one or more** absolute paths. Example on macOS: `/Users/YOU/.nvm/versions/node/v24.15.0/bin/intelligence-mcp-bridge`. Example on Windows: `C:\Users\YOU\AppData\Roaming\nvm\v24.15.0\intelligence-mcp-bridge.cmd` (you may also see the bare `intelligence-mcp-bridge` and/or `.ps1` siblings — npm creates a small shim family per global install). **Prefer the `.cmd` path on Windows** if multiple are listed; `.ps1` can be blocked by PowerShell ExecutionPolicy.
 
 If empty: reinstall (Step 1) or check that PATH was refreshed in the current shell session.
 
@@ -92,7 +92,14 @@ Pick your client's config file:
 | macOS                | `cp ~/.gemini/settings.json ~/.gemini/settings.json.bak.$(date +%Y%m%d-%H%M%S)`                                                         |
 | Windows (PowerShell) | `Copy-Item "$env:USERPROFILE\.gemini\settings.json" "$env:USERPROFILE\.gemini\settings.json.bak.$(Get-Date -Format 'yyyyMMdd-HHmmss')"` |
 
-**If the file does not exist** (fresh machine): skip the backup. Step 4 will create it.
+**If the file does not exist** (fresh machine): skip the backup, but ensure the parent directory exists before Step 4 (some editors won't auto-create it on save):
+
+| OS                   | Command                                                                       |
+| -------------------- | ----------------------------------------------------------------------------- |
+| macOS                | `mkdir -p ~/.gemini` (substitute your client's parent dir)                    |
+| Windows (PowerShell) | `New-Item -ItemType Directory -Force "$env:USERPROFILE\.gemini" \| Out-Null`  |
+
+Step 4 then creates the config file with your MCP block.
 
 ### Step 4 — Configure your MCP client
 
@@ -113,6 +120,18 @@ Works for any client that resolves bare commands via the user's shell PATH: **Ge
 ```
 
 No embedded path. PATH lookup resolves `intelligence-mcp-bridge.cmd` on Windows and `intelligence-mcp-bridge` on macOS automatically. Survives Node minor/patch upgrades without a config edit. No JSON-escape concerns.
+
+**Windows fallback:** if your MCP client logs "MCP server disconnected" with the bare `"command": "intelligence-mcp-bridge"`, the client's subprocess spawn may not apply Windows `PATHEXT` resolution. Add the `.cmd` suffix explicitly:
+
+```json
+{
+  "mcpServers": {
+    "hafla-evwa-idl-gateway": {
+      "command": "intelligence-mcp-bridge.cmd"
+    }
+  }
+}
+```
 
 If you're editing an existing config that already has `mcpServers`, add the `hafla-evwa-idl-gateway` block as a peer to your existing entries — don't replace the file.
 
