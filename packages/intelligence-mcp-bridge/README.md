@@ -1,4 +1,4 @@
-# @hafla/intelligence-mcp-bridge
+# `@hafla/intelligence-mcp-bridge`
 
 A small stdio↔HTTPS shim that lets Claude Code, Claude Desktop, Cursor, and Gemini CLI reach the **Hafla MCP Gateway** at `mcp.hafla.com`.
 
@@ -6,113 +6,195 @@ The bridge mints a fresh 60-minute Google ID token via your own `gcloud` session
 
 ---
 
-## Prerequisites
+## TL;DR
 
-### Node 24 LTS
-
-This bridge requires **Node 24 LTS** (currently `24.15.0` or any newer patch in the 24.x line).
-
-We strongly recommend installing Node via a version manager rather than the OS installer — switching versions and applying security patches becomes a one-liner.
-
-- **macOS / Linux:** [`nvm`](https://github.com/nvm-sh/nvm) (recommended) or [`fnm`](https://github.com/Schniz/fnm)
-- **Windows:** [`fnm`](https://github.com/Schniz/fnm) (recommended, cross-platform) or [`nvm-windows`](https://github.com/coreybutler/nvm-windows)
-
-All four respect the `.nvmrc` file in the project, so once your manager is installed:
+Prerequisites are in [PREREQUISITES.md](./PREREQUISITES.md). If those are met:
 
 ```bash
-nvm install # or: fnm install
-nvm use # or: fnm use
-node -v # should print v24.15.x
+npm install -g @hafla/intelligence-mcp-bridge@1.0.4
 ```
 
-Then install and run the bridge (pinned version — see CHANGELOG for the current release):
-
-```bash
-npx -y @hafla/intelligence-mcp-bridge@1.0.4
-```
-
-Access is gated at the gateway (`mcp.hafla.com`) against the Hafla Google Workspace org — the npm package is a distribution channel, not the trust boundary.
-
-### Workspace access
-
-Ops must have done two one-time things for you:
-
-1. Added you to the `team@hafla.com` Google Workspace group.
-2. Flagged your account `isEmployeeActive=true` in `haflaCore.OpsUsers`.
-
-If you have not received confirmation from Ops, the bridge will start, but the gateway will return `403 employee_inactive` on the first request.
-
----
-
-## Install — 3 steps
-
-### 1. Install the Google Cloud SDK (one-time, skip if you already have `gcloud`)
-
-| OS          | Command                                                                                                                                                                                                       |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **macOS**   | `brew install --cask google-cloud-sdk`                                                                                                                                                                        |
-| **Windows** | `winget install Google.CloudSDK` &nbsp;_(or)_ `choco install gcloudsdk` &nbsp;_(or)_ download the installer at [cloud.google.com/sdk/docs/install#windows](https://cloud.google.com/sdk/docs/install#windows) |
-| **Linux**   | Follow [cloud.google.com/sdk/docs/install#linux](https://cloud.google.com/sdk/docs/install#linux)                                                                                                             |
-
-### 2. Sign in with your `@hafla.com` account
-
-```bash
-gcloud auth login                              # browser opens → log in with @hafla.com
-gcloud config set account <you>@hafla.com      # only needed if you have other gcloud accounts
-gcloud auth list                               # confirm @hafla.com row shows "*"
-```
-
-The bridge's pre-flight rejects any non-`@hafla.com` active account before sending traffic, so the `gcloud config set account` step matters if you already use `gcloud` for personal projects.
-
-### 3. Add this MCP server block to your client config
-
-The JSON block is identical on every OS — only the file path differs.
-
-| Client                       | Config file (macOS / Linux)                                       | Config file (Windows)                         |
-| ---------------------------- | ----------------------------------------------------------------- | --------------------------------------------- |
-| Claude Code                  | `~/.claude.json`                                                  | `%USERPROFILE%\.claude.json`                  |
-| Claude Code (project-scoped) | `<project>/.mcp.json`                                             | `<project>\.mcp.json`                         |
-| Claude Desktop               | `~/Library/Application Support/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json` |
-| Gemini CLI                   | `~/.gemini/settings.json`                                         | `%USERPROFILE%\.gemini\settings.json`         |
-
-Add (or replace) the `hafla-evwa-idl-gateway` block under `mcpServers`:
+Add this to your MCP client config (Gemini CLI / Claude Code / Cursor):
 
 ```json
 {
   "mcpServers": {
     "hafla-evwa-idl-gateway": {
-      "command": "/Users/YOU/.nvm/versions/node/v24.15.0/bin/node",
-      "args": [
-        "/Users/YOU/.nvm/versions/node/v24.15.0/bin/npx",
-        "-y",
-        "@hafla/intelligence-mcp-bridge@1.0.4"
-      ]
+      "command": "intelligence-mcp-bridge"
     }
   }
 }
 ```
 
-Both paths point at the **same version-manager-managed Node install** — they must match. Get them by running this in your terminal after `nvm use` (or `fnm use`):
+Restart your MCP client. Done.
+
+---
+
+## Prerequisites verify
+
+Before the install playbook below, confirm these seven checks pass. If any fail, complete the setup in [PREREQUISITES.md](./PREREQUISITES.md).
+
+| Check                         | Command                                  | Expected output                                  |
+| ----------------------------- | ---------------------------------------- | ------------------------------------------------ |
+| Node 24 LTS active            | `node -v`                                | `v24.15.0` or newer `v24.x.y`                    |
+| npm recent                    | `npm -v`                                 | `10.x` or newer                                  |
+| Version manager (Windows)     | `nvm version`                            | A version string (e.g. `1.1.12`)                 |
+| Version manager (macOS)       | `command -v nvm`                         | `nvm` (a shell function)                         |
+| MCP client on Node 24         | `gemini --version` or `claude --version` | Version string, no `EBADENGINE` warning          |
+| gcloud SDK installed          | `gcloud --version`                       | Prints SDK version                               |
+| `@hafla.com` active in gcloud | `gcloud auth list`                       | An `ACTIVE` row matching your `@hafla.com` email |
+
+All pass → proceed below.
+
+---
+
+## Install playbook
+
+### Step 1 — Install the bridge
 
 ```bash
-which node   # → use this for `command`
-which npx    # → use this for `args[0]`
+npm install -g @hafla/intelligence-mcp-bridge@1.0.4
 ```
 
-> **Why does `args[0]` need an absolute path to `npx`?** Plain `"command": "npx"` (or `args: ["npx", ...]`) does NOT work on macOS — GUI apps (Claude Desktop) inherit env from launchd, not your shell's `~/.zshrc`. `npx` is NOT on the launchd PATH even when you did everything right with nvm. The `-e` / `import()` form previously documented here was broken in 1.0.3 — `import('pkg@version')` is not valid Node module-resolution syntax; the `@version` suffix becomes part of the package name and the lookup fails with `ERR_MODULE_NOT_FOUND`. The two-absolute-paths form above is the correct pattern: explicit node binary + explicit npx script + version-pinned package name.
+The version is **exact-pinned** (`@1.0.4`, not `@latest`). Pinning is the supply-chain hygiene boundary; Ops announces version bumps in Slack so the team upgrades on a known cadence. See § "Upgrading" below.
 
-> **Fragility note — read before configuring.** Both hardcoded paths are OS- and version-manager-specific:
->
-> - **nvm (macOS/Linux):** `~/.nvm/versions/node/v24.15.0/bin/node` and `…/bin/npx`
-> - **Volta (macOS/Linux):** `~/.volta/tools/image/node/24.15.0/bin/node` and `…/bin/npx`
-> - **fnm (macOS/Linux):** `~/.fnm/node-versions/v24.15.0/installation/bin/node` and `…/bin/npx`
-> - **nvm-windows:** `%APPDATA%\nvm\v24.15.0\node.exe` and `…\npx`
->
-> **On any Node minor/patch upgrade or version-manager reinstall, you MUST update BOTH paths in your MCP client config.** If either drifts, the bridge silently fails to spawn, surfacing only as "MCP server disconnected" in the client with no actionable error chain.
->
-> **On bridge upgrades** (e.g., `1.0.3` → `1.0.4`), update the version specifier in `args[2]` too. The `-y` flag tells npx to install-and-run without prompting; the version pin ensures npx hits its local cache after the first run for fast startup.
+### Step 2 — Verify install
 
-Restart the MCP client. Done.
+Confirm the `intelligence-mcp-bridge` bin shim resolves on your PATH:
+
+| OS                   | Command                             |
+| -------------------- | ----------------------------------- |
+| macOS                | `which intelligence-mcp-bridge`     |
+| Windows (PowerShell) | `where.exe intelligence-mcp-bridge` |
+
+Expected: **one or more** absolute paths. Example on macOS: `/Users/YOU/.nvm/versions/node/v24.15.0/bin/intelligence-mcp-bridge`. Example on Windows: `C:\Users\YOU\AppData\Roaming\nvm\v24.15.0\intelligence-mcp-bridge.cmd` (you may also see the bare `intelligence-mcp-bridge` and/or `.ps1` siblings — npm creates a small shim family per global install). **Prefer the `.cmd` path on Windows** if multiple are listed; `.ps1` can be blocked by PowerShell ExecutionPolicy.
+
+If empty: reinstall (Step 1) or check that PATH was refreshed in the current shell session.
+
+### Step 3 — Back up your MCP client config (if it exists)
+
+The MCP client config file holds your other MCP servers. Before editing it, back it up.
+
+Pick your client's config file:
+
+| Client                       | macOS / Linux                                                     | Windows                                       |
+| ---------------------------- | ----------------------------------------------------------------- | --------------------------------------------- |
+| Gemini CLI                   | `~/.gemini/settings.json`                                         | `%USERPROFILE%\.gemini\settings.json`         |
+| Claude Code (project-scoped) | `<project>/.mcp.json`                                             | `<project>\.mcp.json`                         |
+| Claude Code (user-scoped)    | `~/.claude.json`                                                  | `%USERPROFILE%\.claude.json`                  |
+| Claude Desktop               | `~/Library/Application Support/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Cursor                       | `~/.cursor/mcp.json`                                              | `%USERPROFILE%\.cursor\mcp.json`              |
+
+**If the file exists**, back it up with a date-time suffix:
+
+| OS                   | Command (substitute your client's path)                                                                                                 |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS                | `cp "$HOME/.gemini/settings.json" "$HOME/.gemini/settings.json.bak.$(date +%Y%m%d-%H%M%S)"`                                             |
+| Windows (PowerShell) | `Copy-Item "$env:USERPROFILE\.gemini\settings.json" "$env:USERPROFILE\.gemini\settings.json.bak.$(Get-Date -Format 'yyyyMMdd-HHmmss')"` |
+
+**If the file does not exist** (fresh machine): skip the backup, but ensure the parent directory exists before Step 4 (some editors won't auto-create it on save):
+
+| OS                   | Command                                                                      |
+| -------------------- | ---------------------------------------------------------------------------- |
+| macOS                | `mkdir -p ~/.gemini` (substitute your client's parent dir)                   |
+| Windows (PowerShell) | `New-Item -ItemType Directory -Force "$env:USERPROFILE\.gemini" \| Out-Null` |
+
+Step 4 then creates the config file with your MCP block.
+
+### Step 4 — Configure your MCP client
+
+Two forms supported. **Try Form A first** — it's strictly simpler and works for most clients.
+
+#### Form A — bin shim (recommended)
+
+Works for any client that resolves bare commands via the user's shell PATH: **Gemini CLI, Claude Code (CLI), Cursor**.
+
+```json
+{
+  "mcpServers": {
+    "hafla-evwa-idl-gateway": {
+      "command": "intelligence-mcp-bridge"
+    }
+  }
+}
+```
+
+No embedded path. PATH lookup resolves `intelligence-mcp-bridge.cmd` on Windows and `intelligence-mcp-bridge` on macOS automatically. No JSON-escape concerns. **The MCP config text stays stable across bridge upgrades and Node upgrades — you do NOT have to edit this JSON.** But if you change Node versions via nvm (including patch upgrades like `nvm install 24.16.0 && nvm use 24.16.0`), you must **reinstall the bridge under the new Node** (see [Step 1](#step-1--install-the-bridge)) — nvm isolates global packages per Node version, so the old install becomes invisible until you reinstall.
+
+**Windows fallback:** if your MCP client logs "MCP server disconnected" with the bare `"command": "intelligence-mcp-bridge"`, the client's subprocess spawn may not apply Windows `PATHEXT` resolution. Add the `.cmd` suffix explicitly:
+
+```json
+{
+  "mcpServers": {
+    "hafla-evwa-idl-gateway": {
+      "command": "intelligence-mcp-bridge.cmd"
+    }
+  }
+}
+```
+
+If `intelligence-mcp-bridge.cmd` still doesn't spawn (some clients use raw `CreateProcess` and cannot execute `.cmd` files without `cmd.exe /c`), switch to **Form B** below.
+
+If you're editing an existing config that already has `mcpServers`, add the `hafla-evwa-idl-gateway` block as a peer to your existing entries — don't replace the file.
+
+#### Form B — absolute paths (fallback)
+
+Use ONLY when Form A doesn't work. This is typically because the client spawns subprocesses without inheriting your user shell PATH:
+
+- **Claude Desktop** (launchd on macOS / service spawn on Windows — does NOT inherit shell PATH)
+
+**Derive your paths** (run on your machine; do NOT copy from an example):
+
+| OS                   | Path A (node)                | Path B (bridge entrypoint)                                          |
+| -------------------- | ---------------------------- | ------------------------------------------------------------------- |
+| macOS                | `node -p "process.execPath"` | `echo "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js"` |
+| Windows (PowerShell) | `node -p "process.execPath"` | `echo "$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"` |
+
+`node -p "process.execPath"` returns the absolute path to the Node binary that is _currently_ executing — single value, deterministic, identical syntax across both OSes. Avoids the `which node` / `where.exe node` multi-line ambiguity when multiple Node installs exist.
+
+**Confirm Path B exists** before pasting into JSON (catches half-installed state — e.g., bridge installed under a different Node version than the one currently active):
+
+| OS                   | Command                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| macOS                | `if test -f "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js"; then echo OK; else echo "NOT FOUND"; fi` |
+| Windows (PowerShell) | `Test-Path "$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"`                                           |
+
+Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Windows), the bridge is not installed under your active Node — go back to [Step 1](#step-1--install-the-bridge) and reinstall the bridge.
+
+**Windows-specific JSON-syntax rules:**
+
+1. **Backslash escape.** Windows paths contain `\` — JSON requires every `\` doubled to `\\`, OR convert all to forward slashes `/`. Example: `C:\Users\YOU\node.exe` → `"C:\\Users\\YOU\\node.exe"` or `"C:/Users/YOU/node.exe"`.
+2. **Executable suffix.** Use the full filename including suffix: `node.exe` (not `node`). `node -p "process.execPath"` returns the full path with suffix automatically; do not hand-strip it.
+3. **Verify Path A actually spawns** BEFORE pasting into JSON. In PowerShell:
+
+   ```powershell
+   & "C:\path\you\derived\node.exe" --version
+   ```
+
+   If it errors with `ENOENT` or "not recognized", the path is wrong — re-derive via `node -p "process.execPath"`.
+
+**MCP block (Form B):**
+
+```json
+{
+  "mcpServers": {
+    "hafla-evwa-idl-gateway": {
+      "command": "<Path A>",
+      "args": ["<Path B>"]
+    }
+  }
+}
+```
+
+### Step 5 — Reload your MCP client + end-to-end verify
+
+Restart the client (close + reopen for desktop apps; `exit` + relaunch for CLI apps).
+
+Then ask the client:
+
+> Run `safe_sql_sandbox` with `SELECT COUNT(*) FROM "haflaCore"."OpsUsers"`.
+
+A row count comes back, you're done. The first request takes ~1–2 s longer while the bridge mints your first Google ID token; subsequent calls reuse the cached token.
 
 ---
 
@@ -132,55 +214,46 @@ All five are read-only at the database layer — the bridge cannot write.
 
 ---
 
-## Verify
-
-Restart your client and ask it:
-
-> Run `safe_sql_sandbox` with `SELECT COUNT(*) FROM "haflaCore"."OpsUsers"`.
-
-A row count comes back, you're done. The very first request takes ~1–2 s longer while the bridge mints your first Google ID token; subsequent calls reuse the cached token.
-
----
-
 ## Troubleshooting
 
-The bridge writes actionable diagnostic banners to stderr. Where you see "MCP client logs" below, that's:
+Diagnostic banners are written to stderr. The "literal stderr" column gives the exact text to grep against.
 
-- **Claude Code / Claude Desktop:** the client's own log file (varies by OS — check the client's documentation)
-- **Gemini CLI:** the terminal where you launched the client
-
-| Symptom / banner                                                      | Cause                                                               | Fix                                                                                                                                                                                                                                                                                                 |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `requires Node 24 LTS (you are on vXX.X.X)`                          | Node version is not 24.x                                            | Install Node 24 LTS via a version manager (see Prerequisites above). After `nvm use`, update the `command` path in your MCP client config to the new `which node` output.                                                                                                                           |
-| `gcloud CLI not found`                                                | Google Cloud SDK isn't installed (or not on PATH)                   | Re-run the install command from Step 1. On Windows, may need a restart for PATH to take effect.                                                                                                                                                                                                     |
-| `Active gcloud account is X — must be an @hafla.com account`          | You're logged into `gcloud` with a personal account                 | `gcloud config set account <you>@hafla.com` — then `gcloud auth list` to confirm the `*` is on your @hafla.com row. If your @hafla.com account is missing, `gcloud auth login` first.                                                                                                               |
-| `gateway returned 401 — token audience likely mismatched`             | Cloud Run edge rejected the token                                   | Most common cause: you're not yet in the `team@hafla.com` Google Group — ping Ops. Less common: the gateway deploy is missing `https://mcp.hafla.com` in `customAudiences` — that's an Ops fix. Sometimes a cached token pre-dates your group add — re-run `gcloud auth login` to mint a fresh one. |
-| `gateway returned 403 employee_inactive`                              | You're in the group but not active in OpsUsers                      | Ping Ops to set `isEmployeeActive=true` on your `haflaCore.OpsUsers` row.                                                                                                                                                                                                                           |
-| `Failed to mint Google ID token`                                      | `gcloud` could not produce an identity token                        | Usual causes (the banner lists them): (1) credentials expired → `gcloud auth login`; (2) wrong active project → `gcloud config get-value project`; (3) older gcloud SDK → `gcloud components update`.                                                                                               |
-| Silent failure / no response in the client                            | MCP client cannot spawn the bridge                                  | Confirm the `command` path in your MCP config is the correct absolute path to `node` — run `which node` after `nvm use` and compare. Requires **Node 24 LTS**. To get more diagnostics, add `"env": { "DEBUG": "1" }` to the server block and tail the MCP client's log.                           |
-| **(Windows)** `gcloud CLI not found` even though gcloud is installed  | gcloud's `bin/` isn't on PATH (the installer doesn't always add it) | In PowerShell: `where.exe gcloud`. If empty, add `%LOCALAPPDATA%\Google\Cloud SDK\google-cloud-sdk\bin\` to PATH via **System → Environment Variables**, then restart the MCP client.                                                                                                               |
-| **(Windows)** MCP client fails to spawn the bridge — no stderr at all | Hardcoded `command` path is stale or incorrect                      | In PowerShell: run `fnm use` then `where.exe node` and update the `command` path in your MCP config to match. The bridge requires **Node 24 LTS**.                                                                                                                                                  |
+| Symptom                          | Literal stderr (grep target)                                    | Cause                                                | Fix                                                                                                                            |
+| -------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Wrong Node version               | `requires Node 24 LTS (you are on v...)`                        | Node ≠ 24.x                                          | `nvm use 24.15.0`. If on Form B, also re-derive Path A (Node binary path may have moved).                                      |
+| gcloud not found                 | `gcloud CLI not found`                                          | Not installed or PATH issue                          | Run the gcloud step from [PREREQUISITES.md](./PREREQUISITES.md) (Windows Step 4 / macOS Step 5).                               |
+| Wrong gcloud account             | `Active gcloud account is X — must be an @hafla.com account`    | Personal account active                              | `gcloud config set account YOU@hafla.com`; verify with `gcloud auth list`.                                                     |
+| 401 audience mismatch            | `gateway returned 401 — token audience likely mismatched`       | Not in `team@hafla.com` Workspace group              | Ping Ops to be added. If you ARE in the group, run `gcloud auth login` to mint a fresh token.                                  |
+| 403 employee inactive            | `gateway returned 403 employee_inactive`                        | `haflaCore.OpsUsers` row not active                  | Ping Ops to set `isEmployeeActive=true` on your row.                                                                           |
+| Token mint failure               | `Failed to mint Google ID token`                                | Credentials expired or SDK stale                     | `gcloud auth login` to re-authenticate; `gcloud components update` to refresh the SDK.                                         |
+| Silent disconnect                | (no bridge banner — client log shows "MCP server disconnected") | bin shim not on PATH (Form A) or wrong path (Form B) | Re-run Step 2 verify. If Form A bin shim doesn't resolve, switch to Form B. If Form B path is wrong, re-derive on the machine. |
+| Windows: PowerShell script error | `running scripts is disabled on this system`                    | PowerShell ExecutionPolicy blocks `.ps1` shims       | Invoke the `.cmd` wrapper directly: `intelligence-mcp-bridge.cmd` (works regardless of `ExecutionPolicy`).                     |
 
 ---
 
 ## Upgrading
 
-Because `npx -y @hafla/intelligence-mcp-bridge@1.0.4` is **pinned to an exact version**, npm caches that specifier under `~/.npm/_npx/<hash>/` and keeps re-using the cached copy across restarts. New versions ship via three steps:
+The version specifier is **exact-pinned**. To upgrade:
 
-1. Edit the `args` in your `.mcp.json` / `settings.json` to the new version, e.g. `"@hafla/intelligence-mcp-bridge@1.0.4"`.
-2. Restart the MCP client.
-3. `npx` pulls the new tarball on first invocation; the previous cache entry stays put under the old hash.
+```bash
+npm uninstall -g @hafla/intelligence-mcp-bridge
+npm install -g @hafla/intelligence-mcp-bridge@<new-version>
+```
 
-Optional: `npx clear-npx-cache` or remove `~/.npm/_npx/<hash>/` if you want to force a re-download for the same version.
+Then restart your MCP client.
 
-**Do not switch to `@latest`** — pinning is the supply-chain hygiene boundary. Ops announces every version bump in Slack so the team can update on their own cadence.
+**Form A users:** no config edit needed across **bridge** upgrades — the bin shim resolves to the new version automatically. If you also changed Node versions via nvm (any change, including patch upgrades like `nvm install 24.16.0 && nvm use 24.16.0`), reinstall the bridge first (`npm install -g @hafla/intelligence-mcp-bridge@<new-version>`) under the new Node; nvm isolates global packages per Node version.
+
+**Form B users:** re-derive **both** Path A (`node -p "process.execPath"`) and Path B (`$(npm root -g)/...` or `$(npm root -g)\...`). When Node version changes under nvm, both the binary path AND the global node_modules root move. Reinstall the bridge under the new Node first; then update both paths in your MCP config.
+
+**Do not switch to `@latest`** — pinning is the supply-chain hygiene boundary. Ops announces every version bump in Slack so the team can update on its own cadence.
 
 ---
 
 ## What this bridge does NOT do
 
-- Store credentials of any kind. It runs as your user, uses your gcloud session.
-- Open inbound ports. It's stdio↔HTTPS, the client launches it on demand.
+- Store credentials of any kind. It runs as your user and uses your `gcloud` session.
+- Open inbound ports. It's stdio↔HTTPS; the client launches it on demand.
 - Write to anything. Authorisation at the gateway is read-only; SQL/Cypher writes are rejected at the database layer.
 - Contact a server other than `https://mcp.hafla.com` (unless you override `GATEWAY_URL` for local dev).
 
