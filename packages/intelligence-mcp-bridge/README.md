@@ -89,7 +89,7 @@ Pick your client's config file:
 
 | OS                   | Command (substitute your client's path)                                                                                                 |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| macOS                | `cp ~/.gemini/settings.json ~/.gemini/settings.json.bak.$(date +%Y%m%d-%H%M%S)`                                                         |
+| macOS                | `cp "$HOME/.gemini/settings.json" "$HOME/.gemini/settings.json.bak.$(date +%Y%m%d-%H%M%S)"`                                             |
 | Windows (PowerShell) | `Copy-Item "$env:USERPROFILE\.gemini\settings.json" "$env:USERPROFILE\.gemini\settings.json.bak.$(Get-Date -Format 'yyyyMMdd-HHmmss')"` |
 
 **If the file does not exist** (fresh machine): skip the backup, but ensure the parent directory exists before Step 4 (some editors won't auto-create it on save):
