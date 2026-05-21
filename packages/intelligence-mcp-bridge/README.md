@@ -119,7 +119,7 @@ Works for any client that resolves bare commands via the user's shell PATH: **Ge
 }
 ```
 
-No embedded path. PATH lookup resolves `intelligence-mcp-bridge.cmd` on Windows and `intelligence-mcp-bridge` on macOS automatically. No JSON-escape concerns. **Config edit is not needed across Node patch upgrades, BUT** if you switch Node versions via nvm (e.g. `nvm install 24.16.0 && nvm use 24.16.0`), you must reinstall the bridge under the new Node — nvm isolates global packages per Node version, so the old install becomes invisible.
+No embedded path. PATH lookup resolves `intelligence-mcp-bridge.cmd` on Windows and `intelligence-mcp-bridge` on macOS automatically. No JSON-escape concerns. **The MCP config text stays stable across bridge upgrades and Node upgrades — you do NOT have to edit this JSON.** But if you change Node versions via nvm (including patch upgrades like `nvm install 24.16.0 && nvm use 24.16.0`), you must **reinstall the bridge under the new Node** (`npm install -g @hafla/intelligence-mcp-bridge@1.0.4`) — nvm isolates global packages per Node version, so the old install becomes invisible until you reinstall.
 
 **Windows fallback:** if your MCP client logs "MCP server disconnected" with the bare `"command": "intelligence-mcp-bridge"`, the client's subprocess spawn may not apply Windows `PATHEXT` resolution. Add the `.cmd` suffix explicitly:
 
@@ -242,7 +242,7 @@ npm install -g @hafla/intelligence-mcp-bridge@<new-version>
 
 Then restart your MCP client.
 
-**Form A users:** no config edit needed across patch upgrades — the bin shim resolves to the new version automatically. If you also switched Node versions via nvm (`nvm install 24.16.0 && nvm use 24.16.0`), reinstall the bridge first (`npm install -g @hafla/intelligence-mcp-bridge@<new-version>`) under the new Node; nvm isolates global packages per Node version.
+**Form A users:** no config edit needed across **bridge** upgrades — the bin shim resolves to the new version automatically. If you also changed Node versions via nvm (any change, including patch upgrades like `nvm install 24.16.0 && nvm use 24.16.0`), reinstall the bridge first (`npm install -g @hafla/intelligence-mcp-bridge@<new-version>`) under the new Node; nvm isolates global packages per Node version.
 
 **Form B users:** re-derive **both** Path A (`node -p "process.execPath"`) and Path B (`$(npm root -g)/...` or `$(npm root -g)\...`). When Node version changes under nvm, both the binary path AND the global node_modules root move. Reinstall the bridge under the new Node first; then update both paths in your MCP config.
 
