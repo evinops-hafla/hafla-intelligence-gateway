@@ -148,7 +148,9 @@ Use ONLY when Form A doesn't work. This is typically because the client spawns s
   "mcpServers": {
     "hafla-evwa-idl-gateway": {
       "command": "<Path A>",
-      "args": ["<Path B>"]
+      "args": [
+        "<Path B>"
+      ]
     }
   }
 }

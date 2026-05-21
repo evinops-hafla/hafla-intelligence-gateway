@@ -270,6 +270,14 @@ npm uninstall -g @google/gemini-cli
 npm install -g @google/gemini-cli
 ```
 
+**If `npm install -g` fails with `EACCES` (Permission denied)** — your global npm prefix is set to a non-user-writable location, typically a stale `prefix=/usr/local` entry in `~/.npmrc` left over from a previous root-owned Node install (official Node macOS installer, system Node, etc.). Do NOT use `sudo`. Clear the stale prefix and let nvm re-apply its user-writable default:
+
+```bash
+npm config delete prefix
+nvm use 24.15.0
+npm install -g @google/gemini-cli
+```
+
 ### 5. Install gcloud SDK (macOS)
 
 ```bash
