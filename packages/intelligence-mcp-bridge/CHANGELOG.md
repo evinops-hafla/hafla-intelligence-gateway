@@ -26,6 +26,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   `GATEWAY_AUDIENCE` fails validation. Closes a privilege-elevation
   vector (write-to-config → arbitrary command execution as the user
   on every token mint).
+- **Upgrade note — stricter `GATEWAY_AUDIENCE` validation.** Operators
+  who explicitly set `GATEWAY_AUDIENCE` to a non-origin URL on 1.0.4
+  (e.g., one with a path like `https://mcp.hafla.com/mcp`, a query
+  string, a fragment, or shell metacharacters in the host) will see
+  the bridge exit on startup with a diagnostic banner under 1.0.5.
+  Fix: set `GATEWAY_AUDIENCE` to a plain origin URL
+  (`https://mcp.hafla.com`). Default install (no `GATEWAY_AUDIENCE`
+  set) is unaffected.
 
 ### Fixed
 
