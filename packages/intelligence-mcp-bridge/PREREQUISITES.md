@@ -44,6 +44,8 @@ GUI clients (Cursor, Claude Desktop) are not Node-managed — install them separ
 
 ## Windows (PowerShell)
 
+> **⚠️ Windows tip — open a fresh PowerShell after each install step.** When you install nvm-windows, switch Node versions with `nvm use`, or install the gcloud SDK, the new commands may not be recognized in your current PowerShell session — and you'll see `command not found` errors. The reliable fix every time: **close PowerShell and open it fresh.** Each step below also offers an in-session `PATH` refresh as an alternative, but opening a new window is the simplest path and always works.
+
 ### 1. Install nvm-windows (Administrator required)
 
 One-time. The nvm-windows installer is the only step on Windows that explicitly requires you to **Run as administrator**. You may still see UAC prompts during later steps — the gcloud SDK install (Step 4) ships as an MSI that triggers UAC, and on locked-down corporate Windows machines `nvm use` (Step 2) can fail with an access-denied error that needs admin. Both are handled inline at their respective steps. Every other command runs as the regular user.
@@ -72,6 +74,8 @@ Usually no elevation needed. nvm-windows installs Node into a user-writable loca
 nvm install 24.15.0
 nvm use 24.15.0
 ```
+
+**After `nvm use 24.15.0`, always open a new PowerShell window before verifying.** In-session `PATH` refresh isn't reliable for nvm-managed Node version switches — a fresh PowerShell is the simplest, always-works fix.
 
 **If `nvm use` fails with "access denied" or junction/symlink errors:** rerun the `nvm use` command in an Administrator PowerShell. This is rare on default Windows but can happen on locked-down corporate machines where Group Policy blocks junction creation for non-admin users.
 
