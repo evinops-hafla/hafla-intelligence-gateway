@@ -185,7 +185,11 @@ describe('createTokenCache', () => {
       cache.getToken()
     ]);
 
-    assert.equal(mintCount, 2, 'exactly 2 mints total: initial + 1 coalesced re-mint');
+    assert.equal(
+      mintCount,
+      2,
+      'exactly 2 mints total: initial + 1 coalesced re-mint'
+    );
     assert.ok(tokens.every((t) => t === 'token-2'));
   });
 
@@ -221,7 +225,8 @@ describe('createTokenCache', () => {
 
 describe('createTokenCache — Shape B + identity cross-check', () => {
   test('(a) SA active + SA token: mints with --audiences; cross-check passes', async () => {
-    const saEmail = 'mcp-gw-production-sa@hafla-backend-v1.iam.gserviceaccount.com';
+    const saEmail =
+      'mcp-gw-production-sa@hafla-backend-v1.iam.gserviceaccount.com';
     const seenArgs = [];
     const cache = createTokenCache({
       activeAccount: saEmail,
@@ -272,7 +277,11 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
       now: () => 0
     });
     const result = await cache.getToken();
-    assert.equal(result, undefined, 'getToken must return undefined when failFn fires');
+    assert.equal(
+      result,
+      undefined,
+      'getToken must return undefined when failFn fires'
+    );
     assert.equal(cache._state().cached, false, 'token must NOT be cached');
     assert.equal(failFn.calls.length, 1, 'failFn must be called exactly once');
     const message = failFn.calls[0].join('\n');
@@ -317,7 +326,10 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
     // (unset impersonation config) — NOT at adding gcloud flags they
     // don't control (the bridge owns gcloud args).
     assert.match(message, /impersonat/);
-    assert.match(message, /gcloud config unset auth\/impersonate_service_account/);
+    assert.match(
+      message,
+      /gcloud config unset auth\/impersonate_service_account/
+    );
     assert.doesNotMatch(
       message,
       /Identity mismatch/,
@@ -392,12 +404,16 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
     const failFn = collectingFailFn();
     const cache = createTokenCache({
       activeAccount: 'Sidd@HAFLA.com',
-      execGcloudFn: async () => makeJwt({ email: 'sidd@hafla.com', hd: 'hafla.com' }),
+      execGcloudFn: async () =>
+        makeJwt({ email: 'sidd@hafla.com', hd: 'hafla.com' }),
       failFn,
       now: () => 0
     });
     const token = await cache.getToken();
-    assert.ok(token, 'case-variant active vs token must NOT be flagged as mismatch');
+    assert.ok(
+      token,
+      'case-variant active vs token must NOT be flagged as mismatch'
+    );
     assert.equal(failFn.calls.length, 0);
   });
 });
@@ -592,13 +608,16 @@ describe('handleMessage — concurrent dispatch (HIGH #1 fix)', () => {
 
   test('forwardRequest throws → pushes -32603 with original message id', async () => {
     const pushed = [];
-    await handleMessage(JSON.stringify({ jsonrpc: '2.0', method: 'x', id: 42 }), {
-      tokenCache: null,
-      pushFn: (l) => pushed.push(l),
-      forwardRequestFn: async () => {
-        throw new Error('synthetic-failure');
+    await handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'x', id: 42 }),
+      {
+        tokenCache: null,
+        pushFn: (l) => pushed.push(l),
+        forwardRequestFn: async () => {
+          throw new Error('synthetic-failure');
+        }
       }
-    });
+    );
     assert.equal(pushed.length, 1);
     const resp = JSON.parse(pushed[0]);
     assert.equal(resp.error.code, -32603);
@@ -1146,7 +1165,10 @@ describe('parseDrainTimeoutMs', () => {
     // The bug: without isFinite, Number.parseInt('abc', 10) → NaN, and
     // setTimeout(_, NaN) coerces to 0 — immediate exit. Must default instead.
     assert.equal(parseDrainTimeoutMs('abc'), DEFAULT_DRAIN_TIMEOUT_MS);
-    assert.equal(parseDrainTimeoutMs('not-a-number'), DEFAULT_DRAIN_TIMEOUT_MS);
+    assert.equal(
+      parseDrainTimeoutMs('not-a-number'),
+      DEFAULT_DRAIN_TIMEOUT_MS
+    );
   });
 
   test('preserves explicit 0 (operator opts out of drain)', () => {
@@ -1167,7 +1189,7 @@ describe('parseDrainTimeoutMs', () => {
 // ── execGcloud — Windows shell:true flag (CVE-2024-27980 mitigation) ────────
 
 describe('execGcloud — Windows spawn EINVAL fix', () => {
-  test('passes shell:true on Windows', async () => {
+  test('Windows options bag = shell + env + timeout (full shape)', async () => {
     let captured;
     const fakeExec = (_bin, _args, opts) => {
       captured = opts;
@@ -1175,6 +1197,11 @@ describe('execGcloud — Windows spawn EINVAL fix', () => {
     };
     await execGcloud(['auth', 'list'], { execFn: fakeExec, isWin32: true });
     assert.strictEqual(captured.shell, true);
+    assert.deepStrictEqual(Object.keys(captured).sort(), [
+      'env',
+      'shell',
+      'timeout'
+    ]);
   });
 
   test('omits shell on non-Windows', async () => {
@@ -1195,5 +1222,19 @@ describe('execGcloud — Windows spawn EINVAL fix', () => {
     };
     await execGcloud(['auth', 'list'], { execFn: fakeExec, isWin32: false });
     assert.deepStrictEqual(Object.keys(captured).sort(), ['env', 'timeout']);
+  });
+
+  test('default isWin32 resolves from process.platform at call time', async () => {
+    // No isWin32 passed — exercises the default expression in the destructured
+    // params. Guards against a future refactor that hard-codes the default to
+    // a constant boolean. shell:true iff host process.platform === 'win32'.
+    let captured;
+    const fakeExec = (_bin, _args, opts) => {
+      captured = opts;
+      return { stdout: '' };
+    };
+    await execGcloud(['auth', 'list'], { execFn: fakeExec });
+    const expectedShell = process.platform === 'win32' ? true : undefined;
+    assert.strictEqual(captured.shell, expectedShell);
   });
 });

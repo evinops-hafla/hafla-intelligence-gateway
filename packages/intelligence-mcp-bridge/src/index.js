@@ -2,7 +2,12 @@
 
 import { assertNode24 } from './version-check.js';
 import { parseDrainTimeoutMs } from './drain-timeout.js';
-try { assertNode24(); } catch (e) { console.error(e.message); process.exit(1); }
+try {
+  assertNode24();
+} catch (e) {
+  console.error(e.message);
+  process.exit(1);
+}
 
 /**
  * MCP stdio bridge for the Hafla Intelligence Gateway at mcp.hafla.com.
@@ -260,6 +265,16 @@ export function extractSseJson(body) {
  * Throws {message, stderr, code} on failure.
  *
  * Exported for unit-test injection; tests replace it with a stub.
+ *
+ * @param {string[]} args - gcloud subcommand argv (e.g. ['auth', 'list']).
+ * @param {object} [opts]
+ * @param {function} [opts.execFn=execFileAsync] - test seam for the
+ *   child-process call.
+ * @param {boolean} [opts.isWin32=process.platform === 'win32'] - test seam
+ *   for the Windows-specific `shell: true` branch. Default resolves at
+ *   call time. Required because Node 24's CVE-2024-27980 hardening
+ *   rejects .cmd/.bat invocations via execFile unless `shell: true` is
+ *   passed; injecting this avoids tests having to mutate process.platform.
  */
 export async function execGcloud(
   args,
@@ -750,7 +765,9 @@ export async function forwardRequest(
         // protocol-valid (MCP spec 2024-11-05 § "Streamable HTTP"). Detect
         // by Content-Type and parse accordingly. Without this, every tool
         // call returns -32700 to the client when the gateway picks SSE.
-        const contentType = (res.headers?.['content-type'] || '').toLowerCase();
+        const contentType = (
+          res.headers?.['content-type'] || ''
+        ).toLowerCase();
         const isSse = contentType.includes('text/event-stream');
         let payload;
         try {
@@ -1038,14 +1055,11 @@ async function main() {
     // clearTimeout is a no-op — safe to call unconditionally.
     clearTimeout(timeoutHandle);
     if (result === 'timeout') {
-      log.warn(
-        'Drain timed out — aborting in-flight requests then exiting',
-        {
-          droppedCount: inFlight.size,
-          abortedRequests: abortControllers.size,
-          drainTimeoutMs
-        }
-      );
+      log.warn('Drain timed out — aborting in-flight requests then exiting', {
+        droppedCount: inFlight.size,
+        abortedRequests: abortControllers.size,
+        drainTimeoutMs
+      });
       // Explicitly destroy each in-flight socket so the remote sees FIN/RST
       // rather than waiting for keepalive. Best practice for HTTP clients
       // exiting with active requests; impact is minimal at single-user
