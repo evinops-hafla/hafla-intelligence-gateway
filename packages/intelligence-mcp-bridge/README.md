@@ -37,7 +37,7 @@ Before the install playbook below, confirm these seven checks pass. If any fail,
 | Check                         | Command                                  | Expected output                                  |
 | ----------------------------- | ---------------------------------------- | ------------------------------------------------ |
 | Node 24 LTS active            | `node -v`                                | `v24.15.0` or newer `v24.x.y`                    |
-| npm recent                    | `npm -v`                                 | `10.x` or newer                                  |
+| npm recent                    | `npm -v`                                 | `11.x` or newer                                  |
 | Version manager (Windows)     | `nvm version`                            | A version string (e.g. `1.1.12`)                 |
 | Version manager (macOS)       | `command -v nvm`                         | `nvm` (a shell function)                         |
 | MCP client on Node 24         | `gemini --version` or `claude --version` | Version string, no `EBADENGINE` warning          |

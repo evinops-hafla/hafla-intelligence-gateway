@@ -15,7 +15,7 @@ These checks define "prerequisites met." If all pass on the machine, skip to [RE
 | Check                                                      | Command                                  | Expected output                                           |
 | ---------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------- |
 | Node 24 LTS is the active Node                             | `node -v`                                | `v24.15.0` or newer `v24.x.y`                             |
-| npm is recent                                              | `npm -v`                                 | `10.x` or newer                                           |
+| npm is recent                                              | `npm -v`                                 | `11.x` or newer                                           |
 | Version manager present (Windows)                          | `nvm version`                            | A version string (e.g. `1.1.12`)                          |
 | Version manager present (macOS)                            | `command -v nvm`                         | `nvm` (a shell function)                                  |
 | MCP client is installed against Node 24 (CLI clients only) | `gemini --version` or `claude --version` | Version string with **no `EBADENGINE` warning in stderr** |
@@ -86,7 +86,7 @@ node -v
 npm -v
 ```
 
-Expected: `v24.15.0` and `10.x` or newer.
+Expected: `v24.15.0` and `11.x` or newer.
 
 ### 3. Install your MCP client (Windows)
 
@@ -254,7 +254,7 @@ node -v
 npm -v
 ```
 
-Expected: `v24.15.0` and `10.x` or newer.
+Expected: `v24.15.0` and `11.x` or newer.
 
 ### 4. Install your MCP client (macOS)
 
