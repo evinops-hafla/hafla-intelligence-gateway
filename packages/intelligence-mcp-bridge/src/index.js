@@ -104,7 +104,13 @@ const rawGatewayUrl = process.env.GATEWAY_URL || 'https://mcp.hafla.com';
   const isLocalDev =
     u.hostname === 'localhost' ||
     u.hostname === '127.0.0.1' ||
-    u.hostname === '0.0.0.0';
+    u.hostname === '0.0.0.0' ||
+    // IPv6 loopback. WHATWG URL parser exposes `url.hostname` for
+    // `http://[::1]:8080` as the bracketed form `[::1]` (normalized from
+    // any of `[0:0:0:0:0:0:0:1]` etc.). Recent Node defaults to IPv6 in
+    // many local-dev paths; rejecting this caused the bridge to refuse
+    // legitimate loopback configs.
+    u.hostname === '[::1]';
   if (u.protocol !== 'https:' && !isLocalDev) {
     process.stderr.write(
       `\n┌── intelligence-mcp-bridge: refusing plaintext HTTP for non-local GATEWAY_URL\n│ Got: ${rawGatewayUrl}\n│ Fix: set GATEWAY_URL to https:// (or localhost for dev)\n└──\n\n`
@@ -133,6 +139,33 @@ const config = {
   tokenLifetimeMs: 60 * 60_000,
   debug: process.env.DEBUG === '1'
 };
+
+// ── GATEWAY_PATH validation (closes HTTPS-bypass / token-leak vector) ──────
+//
+// `forwardRequest` builds the target URL via `new URL(gatewayPath, gatewayUrl)`.
+// Per WHATWG URL spec, if the first argument is an ABSOLUTE URL, the base
+// (second arg) is ignored entirely. An operator-controlled
+// `GATEWAY_PATH=http://evil.example.com` would therefore:
+//   1. Make `url.protocol === 'http:'` → effectiveFn picks `httpRequest`
+//      (plaintext), bypassing the GATEWAY_URL HTTPS enforcement above.
+//   2. Make `url.hostname === 'evil.example.com'` → the gcloud-minted
+//      Google ID token (Authorization: Bearer …) is exfiltrated to the
+//      attacker host over plaintext HTTP on every request.
+// Same trust-boundary class as the GATEWAY_AUDIENCE shell-injection
+// vector closed in commits 23e44ba + 93ede79: operator-controllable env,
+// write-to-config → token leak / RCE-class escalation.
+//
+// We refuse any GATEWAY_PATH that contains a URL scheme prefix. Canonical
+// values are path fragments like `/mcp` or `/api/v2/mcp` — never absolute
+// URLs. A scheme prefix matches RFC 3986 §3.1: ALPHA *( ALPHA / DIGIT /
+// "+" / "-" / "." ) followed by ":". Case-insensitive (URL schemes are
+// case-insensitive per spec; cmd.exe / browsers accept "HTTPS://" etc.).
+if (/^[a-z][a-z0-9+.-]*:/i.test(config.gatewayPath)) {
+  process.stderr.write(
+    `\n┌── intelligence-mcp-bridge: invalid GATEWAY_PATH — must be a path, not a URL\n│ Got: ${config.gatewayPath}\n│ Fix: GATEWAY_PATH should be a path fragment (e.g., /mcp). Set GATEWAY_URL for the host portion.\n└──\n\n`
+  );
+  process.exit(1);
+}
 
 // ── Audience validation (defends args-safety invariant under shell:true) ────
 
@@ -177,6 +210,19 @@ const config = {
  * normalization the parser may have applied). The module-load site below
  * does this. Throws Error on any failure; callers handle by printing a
  * diagnostic banner and exiting.
+ *
+ * Note on scheme enforcement: unlike `GATEWAY_URL` (which is the
+ * transport — `http://` is rejected for non-localhost hosts because
+ * Google ID tokens would leak on the wire), `GATEWAY_AUDIENCE` is
+ * purely an identifier string templated into the JWT `aud` claim. It
+ * never travels as a transport, only as a string the gateway server
+ * compares against its own expected audience. We therefore do NOT
+ * enforce `https://` here. A scheme mismatch (e.g.,
+ * `GATEWAY_AUDIENCE=http://mcp.hafla.com` when the gateway expects
+ * `https://mcp.hafla.com`) produces an operator-debuggable 401 from
+ * the gateway, not a security event. Skipping the check also keeps
+ * legitimate `http://localhost:<port>` audiences usable for local-dev
+ * against a gateway emulator.
  *
  * Exported for direct unit testing.
  */
@@ -590,11 +636,15 @@ export function createTokenCache({
         `     account is human but impersonation config requires an audience.`,
         `     Unset impersonation: gcloud config unset auth/impersonate_service_account`
       );
-      // failFn → process.exit(1) in production (synchronous; this return is
-      // unreachable). Tests inject a non-throwing collector (collectingFailFn)
-      // — the `return` is what halts execution under test so we don't fall
-      // through to caching a token that was never minted.
-      return undefined;
+      // failFn → process.exit(1) in production (synchronous; the throw
+      // below is unreachable). Tests inject a non-throwing collector
+      // (collectingFailFn) — the THROW guarantees the promise rejects
+      // cleanly instead of caching/returning undefined, so any caller
+      // that awaits getToken() in a test (or in a hypothetical future
+      // supervisor mode where failFn doesn't terminate) gets a clean
+      // failure rather than `Authorization: Bearer undefined` over the
+      // wire.
+      throw new Error(`Failed to mint Google ID token: ${err.message}`);
     }
 
     // Post-mint identity cross-check (Path A / BS-3 resolution).
@@ -630,7 +680,13 @@ export function createTokenCache({
           'This usually means gcloud returned an unexpected output format.',
           'Try: gcloud components update'
         );
-        return undefined;
+        // throw (rather than return) so that if failFn doesn't terminate
+        // the process (e.g., test injection, future supervisor mode),
+        // the promise rejects cleanly instead of resolving to undefined
+        // and sending "Bearer undefined" downstream.
+        throw new Error(
+          `Identity token rejected: not a valid JWT (${err.message})`
+        );
       }
 
       if (typeof claims.email !== 'string') {
@@ -667,7 +723,9 @@ export function createTokenCache({
           '  with ops to either grant the SA the right config, or run the',
           '  bridge under a different SA whose tokens include email.'
         );
-        return undefined;
+        // throw to guarantee promise rejection if failFn doesn't terminate;
+        // see comment at the first throw site in this function.
+        throw new Error('Identity token rejected: missing email claim');
       }
 
       if (claims.email.toLowerCase() !== activeAccount.toLowerCase()) {
@@ -694,7 +752,11 @@ export function createTokenCache({
           'SA IS your active account — "gcloud auth list" should show',
           'the SA as active. The cross-check passes in that case.'
         );
-        return undefined;
+        // throw to guarantee promise rejection if failFn doesn't terminate;
+        // see comment at the first throw site in this function.
+        throw new Error(
+          `Identity mismatch: token for "${claims.email}" rejected (active account: "${activeAccount}")`
+        );
       }
     }
 
@@ -789,6 +851,19 @@ export async function forwardRequest(
   const messageStr = JSON.stringify(message);
   const url = new URL(gatewayPath, gatewayUrl);
 
+  // Defense-in-depth backstop for GATEWAY_PATH HTTPS-bypass:
+  // module-load already rejects gatewayPath values containing a URL
+  // scheme, but if any future code path constructs `url` dynamically
+  // (e.g., a path derived from per-request input), this catches an
+  // origin escape before we hand a Bearer token to the wrong host.
+  // The primary boundary is the module-load check above; this is the
+  // belt to its suspenders.
+  if (url.origin !== new URL(gatewayUrl).origin) {
+    throw new Error(
+      `forwardRequest: constructed URL origin (${url.origin}) does not match GATEWAY_URL origin (${new URL(gatewayUrl).origin}) — refusing to send token`
+    );
+  }
+
   return new Promise((resolve) => {
     const timeoutId = setTimeout(() => {
       req.destroy();
@@ -810,7 +885,10 @@ export async function forwardRequest(
     const options = {
       hostname: url.hostname,
       port: url.port || (url.protocol === 'https:' ? 443 : 80),
-      path: url.pathname,
+      // Preserve query string: url.pathname alone drops `?...`. The
+      // gateway accepts query params for routing (multi-tenant, env
+      // selection); silent drop would break those flows undetectably.
+      path: url.pathname + url.search,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

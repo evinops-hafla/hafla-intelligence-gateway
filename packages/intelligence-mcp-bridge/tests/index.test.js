@@ -277,12 +277,11 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
       failFn,
       now: () => 0
     });
-    const result = await cache.getToken();
-    assert.equal(
-      result,
-      undefined,
-      'getToken must return undefined when failFn fires'
-    );
+    // Issue #4 fix: getToken() now REJECTS on identity-mismatch instead of
+    // resolving to undefined. This guarantees that if a future supervisor /
+    // test injects a non-terminating failFn, callers awaiting getToken()
+    // get a clean rejection rather than "Bearer undefined" downstream.
+    await assert.rejects(cache.getToken(), /Identity mismatch/);
     assert.equal(cache._state().cached, false, 'token must NOT be cached');
     assert.equal(failFn.calls.length, 1, 'failFn must be called exactly once');
     const message = failFn.calls[0].join('\n');
@@ -301,7 +300,7 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
       failFn,
       now: () => 0
     });
-    await cache.getToken();
+    await assert.rejects(cache.getToken(), /Identity mismatch/);
     assert.equal(cache._state().cached, false);
     const message = failFn.calls[0].join('\n');
     assert.match(message, /Identity mismatch/);
@@ -316,7 +315,7 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
       failFn,
       now: () => 0
     });
-    await cache.getToken();
+    await assert.rejects(cache.getToken(), /missing email claim/);
     assert.equal(cache._state().cached, false);
     const message = failFn.calls[0].join('\n');
     // Dedicated "missing email" framing — different from the identity-
@@ -365,7 +364,7 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
       failFn,
       now: () => 0
     });
-    await cache.getToken();
+    await assert.rejects(cache.getToken(), /Failed to mint Google ID token/);
     assert.equal(failFn.calls.length, 1);
     assert.equal(cache._state().cached, false);
     const message = failFn.calls[0].join('\n');
@@ -393,7 +392,7 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
       failFn,
       now: () => 0
     });
-    await cache.getToken();
+    await assert.rejects(cache.getToken(), /not a valid JWT/);
     assert.equal(failFn.calls.length, 1);
     assert.equal(cache._state().cached, false);
     const message = failFn.calls[0].join('\n');
@@ -1435,5 +1434,122 @@ describe('validateAudience — origin + no-metachars contract', () => {
     // The input had a trailing slash; the parser-normalized origin omits it.
     // If the caller doesn't assign back, downstream sees the trailing slash.
     assert.notEqual(result, 'https://mcp.hafla.com/');
+  });
+});
+
+// ── forwardRequest — Issue #1 backstop + Issue #2 query-string preservation ──
+//
+// Module-load rejects GATEWAY_PATH containing a URL scheme (Issue #1
+// primary boundary, smoke-tested separately via `GATEWAY_PATH=http://evil
+// node src/index.js` → exit 1). The block below covers:
+//
+//   (a) the in-flight origin-mismatch backstop inside forwardRequest, which
+//       protects against any future code path that derives gatewayPath
+//       dynamically and bypasses module-load validation.
+//   (b) query-string preservation in the constructed `path` option.
+
+// Mock that captures whatever options the bridge passes — used by tests
+// that need to inspect `path` rather than the response payload.
+function capturingHttpRequest({ statusCode, body }) {
+  const captured = {};
+  const fn = (options, callback) => {
+    Object.assign(captured, options);
+    const req = new EventEmitter();
+    req.write = () => {};
+    req.end = () => {
+      const res = new EventEmitter();
+      res.statusCode = statusCode;
+      res.setEncoding = () => {};
+      callback(res);
+      setImmediate(() => {
+        res.emit('data', body);
+        res.emit('end');
+      });
+    };
+    req.destroy = () => {};
+    return req;
+  };
+  fn.captured = captured;
+  return fn;
+}
+
+describe('forwardRequest — GATEWAY_PATH safety + query-string preservation', () => {
+  test('rejects an absolute URL as gatewayPath (Issue #1 in-flight backstop)', async () => {
+    // Module-load validation is the primary boundary; this test exercises
+    // the post-construct backstop by overriding gatewayPath at the
+    // forwardRequest call site (simulating a future code path that
+    // derives gatewayPath dynamically). Without the backstop, the bridge
+    // would send `Authorization: Bearer <google-id-token>` over plaintext
+    // HTTP to the attacker-controlled host.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    await assert.rejects(
+      forwardRequest(
+        { jsonrpc: '2.0', method: 'tools/list', id: 1 },
+        {
+          tokenCache,
+          httpRequestFn: capturingHttpRequest({ statusCode: 200, body: '{}' }),
+          gatewayUrl: 'https://mcp.hafla.com',
+          // Absolute URL → new URL(gatewayPath, gatewayUrl) ignores base
+          // and resolves to attacker host. Backstop must reject.
+          gatewayPath: 'http://attacker.example.com/exfil',
+          requestTimeoutMs: 1000
+        }
+      ),
+      /refusing to send token/
+    );
+  });
+
+  test('preserves query string in constructed path (Issue #2)', async () => {
+    // Without the url.search append, GATEWAY_PATH=/mcp?tenant=xyz would
+    // arrive at the gateway as `path=/mcp`, silently dropping the routing
+    // hint. Captures the options.path the bridge hands to httpRequest and
+    // asserts both the pathname AND the query survive.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const capture = capturingHttpRequest({
+      statusCode: 200,
+      body: JSON.stringify({ jsonrpc: '2.0', result: {}, id: 1 })
+    });
+    await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/list', id: 1 },
+      {
+        tokenCache,
+        httpRequestFn: capture,
+        gatewayUrl: 'https://mcp.hafla.com',
+        gatewayPath: '/mcp?tenant=xyz&env=staging',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(capture.captured.path, '/mcp?tenant=xyz&env=staging');
+  });
+
+  test('path option still works when there is no query string', async () => {
+    // Regression guard: url.search is the empty string when no query is
+    // present, so `url.pathname + url.search` must equal `url.pathname`
+    // exactly — no trailing `?`. Locks the no-query baseline.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const capture = capturingHttpRequest({
+      statusCode: 200,
+      body: JSON.stringify({ jsonrpc: '2.0', result: {}, id: 1 })
+    });
+    await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/list', id: 1 },
+      {
+        tokenCache,
+        httpRequestFn: capture,
+        gatewayUrl: 'https://mcp.hafla.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(capture.captured.path, '/mcp');
   });
 });
