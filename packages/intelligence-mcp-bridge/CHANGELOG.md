@@ -6,9 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-## [1.0.4] — 2026-05-21
+### Fixed
 
-**Note on context.** Operational completion of the 1.0.3 Node 24 LTS pin ship. Two defects flagged by `gemini-code-assist[bot]` on PR #3 after the 1.0.3 tag was already pushed and the publish workflow had already run — both fixed here. 1.0.3 is deprecated post-1.0.4; use 1.0.4 onward. The root README's `### @hafla/intelligence-mcp-bridge` teaser section's install config was also corrected (removed an interim broken `execFileSync(...HASH...)` snippet that would have shipped to GitHub-rendered README readers; replaced with a pointer to the canonical package-README install config).
+- Windows: bridge no longer fails with `spawn EINVAL` when minting Google
+  ID tokens via `gcloud.cmd`. Root cause: Node 24's CVE-2024-27980
+  hardening rejects `.cmd`/`.bat` shims via `execFile` unless `shell: true`
+  is passed. The fix is platform-conditional (`shell: true` on win32 only).
+  Non-Windows code path is unchanged.
+
+### Documentation
+
+- PREREQUISITES.md (Windows): added top-of-section callout for PATH refresh
+  after Node / gcloud install. Added explicit guidance to always open a new
+  PowerShell window after `nvm use 24.15.0`.
+- README.md (Step 5 — Reload your MCP client + end-to-end verify):
+  added "What to expect on first launch" note — Gemini CLI's Folder
+  Trust prompt + second Google sign-in are expected Gemini CLI
+  behaviors, not bridge errors. Placed at Step 5 (where the prompts
+  actually fire) rather than under Form A which is a shared spec
+  across Gemini CLI / Claude Code CLI / Cursor.
 
 ### Security
 
@@ -34,6 +50,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   Fix: set `GATEWAY_AUDIENCE` to a plain origin URL
   (`https://mcp.hafla.com`). Default install (no `GATEWAY_AUDIENCE`
   set) is unaffected.
+
+## [1.0.4] — 2026-05-21
+
+**Note on context.** Operational completion of the 1.0.3 Node 24 LTS pin ship. Two defects flagged by `gemini-code-assist[bot]` on PR #3 after the 1.0.3 tag was already pushed and the publish workflow had already run — both fixed here. 1.0.3 is deprecated post-1.0.4; use 1.0.4 onward. The root README's `### @hafla/intelligence-mcp-bridge` teaser section's install config was also corrected (removed an interim broken `execFileSync(...HASH...)` snippet that would have shipped to GitHub-rendered README readers; replaced with a pointer to the canonical package-README install config).
 
 ### Fixed
 
