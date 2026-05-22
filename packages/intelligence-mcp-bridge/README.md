@@ -11,7 +11,7 @@ The bridge mints a fresh 60-minute Google ID token via your own `gcloud` session
 Prerequisites are in [PREREQUISITES.md](./PREREQUISITES.md). If those are met:
 
 ```bash
-npm install -g @hafla/intelligence-mcp-bridge@1.0.4
+npm install -g @hafla/intelligence-mcp-bridge@1.0.5
 ```
 
 Add this to your MCP client config (Gemini CLI / Claude Code / Cursor):
@@ -53,7 +53,7 @@ All pass → proceed below.
 ### Step 1 — Install the bridge
 
 ```bash
-npm install -g @hafla/intelligence-mcp-bridge@1.0.4
+npm install -g @hafla/intelligence-mcp-bridge@1.0.5
 ```
 
 The version is **exact-pinned** (`@1.0.4`, not `@latest`). Pinning is the supply-chain hygiene boundary; Ops announces version bumps in Slack so the team upgrades on a known cadence. See § "Upgrading" below.
