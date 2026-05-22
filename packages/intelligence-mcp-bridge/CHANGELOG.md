@@ -10,6 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 **Note on context.** Operational completion of the 1.0.3 Node 24 LTS pin ship. Two defects flagged by `gemini-code-assist[bot]` on PR #3 after the 1.0.3 tag was already pushed and the publish workflow had already run — both fixed here. 1.0.3 is deprecated post-1.0.4; use 1.0.4 onward. The root README's `### @hafla/intelligence-mcp-bridge` teaser section's install config was also corrected (removed an interim broken `execFileSync(...HASH...)` snippet that would have shipped to GitHub-rendered README readers; replaced with a pointer to the canonical package-README install config).
 
+### Security
+
+- **Windows shell-injection mitigation in `--audiences=` flag.** The
+  `shell: true` workaround for CVE-2024-27980 below makes `cmd.exe`
+  interpret shell metacharacters in the concatenated command line
+  before `gcloud` sees argv. `config.audience` (sourced from
+  `GATEWAY_AUDIENCE` env) was previously read verbatim with no
+  validation, allowing a malicious operator-set value containing `&`,
+  `|`, `^`, `%`, etc. to execute arbitrary commands when the bridge
+  minted a token. Added `validateAudience()` (exported) called at
+  module load: enforces (1) parses as URL, (2) origin-only (no
+  path/query/hash/userinfo), (3) zero shell metacharacters in the
+  raw string. Bridge exits with a diagnostic banner if
+  `GATEWAY_AUDIENCE` fails validation. Closes a privilege-elevation
+  vector (write-to-config → arbitrary command execution as the user
+  on every token mint).
+
 ### Fixed
 
 - **`BRIDGE_SHUTDOWN_DRAIN_MS` NaN-coercion bug.** When this env var was
