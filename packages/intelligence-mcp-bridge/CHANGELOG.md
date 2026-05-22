@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [1.0.5] — 2026-05-22
+
 ### Fixed
 
 - Windows: bridge no longer fails with `spawn EINVAL` when minting Google
@@ -34,22 +36,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   before `gcloud` sees argv. `config.audience` (sourced from
   `GATEWAY_AUDIENCE` env) was previously read verbatim with no
   validation, allowing a malicious operator-set value containing `&`,
-  `|`, `^`, `%`, etc. to execute arbitrary commands when the bridge
-  minted a token. Added `validateAudience()` (exported) called at
-  module load: enforces (1) parses as URL, (2) origin-only (no
-  path/query/hash/userinfo), (3) zero shell metacharacters in the
-  raw string. Bridge exits with a diagnostic banner if
-  `GATEWAY_AUDIENCE` fails validation. Closes a privilege-elevation
-  vector (write-to-config → arbitrary command execution as the user
-  on every token mint).
+  `|`, `^`, `%`, newline, tab, etc. to execute arbitrary commands when
+  the bridge minted a token. Added `validateAudience()` (exported)
+  called at module load: enforces (1) zero control characters or
+  whitespace in the raw input — rejected up-front BEFORE URL parsing,
+  because the WHATWG URL parser silently strips ASCII tab / CR / LF
+  per spec and would let a `GATEWAY_AUDIENCE` like
+  `https://mcp.hafla.com\ncalc.exe` survive validation while retaining
+  the newline downstream; (2) parses as URL via `new URL()`;
+  (3) origin-only (no path/query/hash/userinfo); (4) zero printable
+  shell metacharacters in the raw string. The module-load call site
+  assigns the parser-normalized origin back to `config.audience` so
+  downstream code uses the validated value, not the raw env string.
+  Bridge exits with a diagnostic banner if `GATEWAY_AUDIENCE` fails
+  validation. Closes a privilege-elevation vector (write-to-config →
+  arbitrary command execution as the user on every token mint).
 - **Upgrade note — stricter `GATEWAY_AUDIENCE` validation.** Operators
   who explicitly set `GATEWAY_AUDIENCE` to a non-origin URL on 1.0.4
   (e.g., one with a path like `https://mcp.hafla.com/mcp`, a query
-  string, a fragment, or shell metacharacters in the host) will see
-  the bridge exit on startup with a diagnostic banner under 1.0.5.
-  Fix: set `GATEWAY_AUDIENCE` to a plain origin URL
-  (`https://mcp.hafla.com`). Default install (no `GATEWAY_AUDIENCE`
-  set) is unaffected.
+  string, a fragment, shell metacharacters, OR any whitespace / control
+  characters anywhere in the value) will see the bridge exit on startup
+  with a diagnostic banner under 1.0.5. Fix: set `GATEWAY_AUDIENCE` to
+  a plain origin URL (`https://mcp.hafla.com`). Default install (no
+  `GATEWAY_AUDIENCE` set) is unaffected.
 
 ## [1.0.4] — 2026-05-21
 
