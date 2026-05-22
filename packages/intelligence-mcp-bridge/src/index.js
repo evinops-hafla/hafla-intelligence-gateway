@@ -160,6 +160,23 @@ const config = {
 // URLs. A scheme prefix matches RFC 3986 §3.1: ALPHA *( ALPHA / DIGIT /
 // "+" / "-" / "." ) followed by ":". Case-insensitive (URL schemes are
 // case-insensitive per spec; cmd.exe / browsers accept "HTTPS://" etc.).
+//
+// Constraint 1: reject control characters / whitespace BEFORE the scheme
+// regex runs. WHATWG URL parser strips leading ASCII whitespace per spec,
+// so a value like `\nhttp://attacker.com` would bypass an anchored
+// `^[a-z]` regex (position 0 is `\n`, not in `[a-z]`) AND then get the
+// `\n` stripped during URL parsing — same WHATWG-strip class that bit
+// validateAudience in 23e44ba. The in-flight backstop in forwardRequest
+// (origin check) would catch this, but the module-load gate is supposed
+// to fail fast for operator misconfig; the backstop is belt, not
+// suspenders. Mirror validateAudience's `[\x00-\x20\x7f]` upfront reject
+// for symmetry.
+if (/[\x00-\x20\x7f]/.test(config.gatewayPath)) {
+  process.stderr.write(
+    `\n┌── intelligence-mcp-bridge: invalid GATEWAY_PATH — contains control characters or whitespace\n│ Got: ${JSON.stringify(config.gatewayPath)}\n│ Fix: GATEWAY_PATH should be a clean path fragment (e.g., /mcp). Strip whitespace, newlines, tabs, NUL.\n└──\n\n`
+  );
+  process.exit(1);
+}
 if (/^[a-z][a-z0-9+.-]*:/i.test(config.gatewayPath)) {
   process.stderr.write(
     `\n┌── intelligence-mcp-bridge: invalid GATEWAY_PATH — must be a path, not a URL\n│ Got: ${config.gatewayPath}\n│ Fix: GATEWAY_PATH should be a path fragment (e.g., /mcp). Set GATEWAY_URL for the host portion.\n└──\n\n`

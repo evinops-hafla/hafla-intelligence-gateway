@@ -59,6 +59,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   with a diagnostic banner under 1.0.5. Fix: set `GATEWAY_AUDIENCE` to
   a plain origin URL (`https://mcp.hafla.com`). Default install (no
   `GATEWAY_AUDIENCE` set) is unaffected.
+- **`GATEWAY_PATH` HTTPS-bypass / token-leak mitigation.** `forwardRequest`
+  builds the target URL via `new URL(gatewayPath, gatewayUrl)`. Per WHATWG
+  URL spec, if the first argument is absolute the base is ignored entirely.
+  An operator-controllable `GATEWAY_PATH=http://attacker.example.com` would
+  therefore (1) flip `url.protocol` to `http:` so the bridge picks
+  `httpRequest` (plaintext), and (2) point `url.hostname` at the attacker
+  host — exfiltrating the gcloud-minted Google ID token (`Authorization:
+Bearer …`) over plaintext HTTP on every request. Closed with a two-layer
+  defense: module-load rejects any `GATEWAY_PATH` containing a URL scheme
+  prefix (RFC 3986 §3.1, case-insensitive) OR any control characters /
+  whitespace (mirrors the `validateAudience` upfront-reject pattern to
+  close the WHATWG-strip-then-bypass class); `forwardRequest` adds an
+  in-flight backstop that throws if the constructed URL's origin differs
+  from `gatewayUrl`'s origin. Same trust-boundary class as the
+  `GATEWAY_AUDIENCE` shell-injection vector — operator-controllable env
+  → token leak / RCE-class escalation.
+- **Upgrade note — stricter `GATEWAY_PATH` validation.** Operators who
+  set `GATEWAY_PATH` to anything other than a clean path fragment
+  (e.g., a full URL like `https://mcp.hafla.com/mcp`, or a value with
+  leading/embedded whitespace/control characters) will see the bridge
+  exit on startup with a diagnostic banner under 1.0.5. Fix: set
+  `GATEWAY_PATH` to a path fragment (`/mcp`, `/api/v2/mcp`) and put the
+  host portion in `GATEWAY_URL`. Default install (no `GATEWAY_PATH`
+  set, falls back to `/mcp`) is unaffected.
+
+### Changed
+
+- `forwardRequest` now preserves query strings in `GATEWAY_PATH` — the
+  `path` option handed to `http(s).request` is now `url.pathname +
+url.search` (previously `url.pathname` alone, which silently dropped
+  `?...` segments). Operator-visible only if `GATEWAY_PATH` contains a
+  query string for routing (e.g., multi-tenant selection); default
+  install is unaffected. Regression test pins the no-query baseline so
+  `url.pathname + ''` doesn't produce a trailing `?`.
+- Local-dev `isLocalDev` whitelist now includes IPv6 loopback `[::1]`
+  (recognized by WHATWG URL parser as the bracketed hostname form).
+  Previously `GATEWAY_URL=http://[::1]:8080` was rejected with "refusing
+  plaintext HTTP"; recent Node defaults to IPv6 on many local-dev paths,
+  so this was blocking legitimate loopback configs.
+- `createTokenCache` failure paths (gcloud token mint failure, identity
+  cross-check JWT parse failure, missing-email-claim rejection,
+  identity-mismatch rejection) now `throw new Error(...)` after calling
+  `failFn(...)` instead of `return undefined`. Production behavior is
+  unchanged because `failFn` calls `process.exit(1)` synchronously before
+  the throw is reached. Tests (and any hypothetical future supervisor
+  mode where `failFn` doesn't terminate) now see a clean promise
+  rejection rather than a `Authorization: Bearer undefined` header
+  reaching the gateway and producing an obscure 401.
 
 ## [1.0.4] — 2026-05-21
 

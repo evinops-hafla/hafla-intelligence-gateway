@@ -56,7 +56,7 @@ All pass → proceed below.
 npm install -g @hafla/intelligence-mcp-bridge@1.0.5
 ```
 
-The version is **exact-pinned** (`@1.0.4`, not `@latest`). Pinning is the supply-chain hygiene boundary; Ops announces version bumps in Slack so the team upgrades on a known cadence. See § "Upgrading" below.
+The version is **exact-pinned** (`@1.0.5`, not `@latest`). Pinning is the supply-chain hygiene boundary; Ops announces version bumps in Slack so the team upgrades on a known cadence. See § "Upgrading" below.
 
 ### Step 2 — Verify install
 
