@@ -261,7 +261,10 @@ export function extractSseJson(body) {
  *
  * Exported for unit-test injection; tests replace it with a stub.
  */
-export async function execGcloud(args, { execFn = execFileAsync } = {}) {
+export async function execGcloud(
+  args,
+  { execFn = execFileAsync, isWin32 = process.platform === 'win32' } = {}
+) {
   try {
     // Defensive hygiene: CLOUDSDK_CORE_DISABLE_PROMPTS=1 guarantees gcloud
     // never tries to read from stdin or emit interactive prompts. With the
@@ -271,7 +274,21 @@ export async function execGcloud(args, { execFn = execFileAsync } = {}) {
     // JSON-RPC stream), but disabling prompts forecloses any future gcloud
     // version that might add interactive surface to `print-identity-token`
     // or `auth list`. Reviewer 2026-05-18 (defensive; no current failure).
+    //
+    // Windows: Node 24 rejects .cmd / .bat via execFile (CVE-2024-27980
+    // hardening, April 2024) unless `shell: true` is passed. Safe here:
+    // `args` contains hardcoded subcommand verbs plus the gcloud
+    // `--audiences=<config.audience>` flag whose value is URL-validated
+    // at module load (see config.audience derivation). No MCP-client or
+    // end-user input ever reaches argv. If you add a new execGcloud call
+    // site, audit the args source — this invariant is load-bearing.
+    // Note: `process.platform === 'win32'` on Git Bash / MSYS too (those
+    // bundle a Windows-native Node); `shell: true` uses `process.env.ComSpec`
+    // (cmd.exe) regardless of parent shell, so the fix is shell-agnostic
+    // on Windows.
+    const execOpts = isWin32 ? { shell: true } : {};
     const { stdout } = await execFn(GCLOUD_BIN, args, {
+      ...execOpts,
       timeout: 15_000,
       env: { ...process.env, CLOUDSDK_CORE_DISABLE_PROMPTS: '1' }
     });

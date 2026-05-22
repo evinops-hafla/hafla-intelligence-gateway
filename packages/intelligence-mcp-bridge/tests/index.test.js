@@ -35,7 +35,8 @@ import {
   forwardRequest,
   decodeJwtPayloadNoVerify,
   handleMessage,
-  extractSseJson
+  extractSseJson,
+  execGcloud
 } from '../src/index.js';
 
 import { assertNode24 } from '../src/version-check.js';
@@ -1160,5 +1161,39 @@ describe('parseDrainTimeoutMs', () => {
     // we trust parseInt's prefix-parsing convention. Operators who
     // typo "5000ms" get 5000, not the default.
     assert.equal(parseDrainTimeoutMs('500abc'), 500);
+  });
+});
+
+// ── execGcloud — Windows shell:true flag (CVE-2024-27980 mitigation) ────────
+
+describe('execGcloud — Windows spawn EINVAL fix', () => {
+  test('passes shell:true on Windows', async () => {
+    let captured;
+    const fakeExec = (_bin, _args, opts) => {
+      captured = opts;
+      return { stdout: '' };
+    };
+    await execGcloud(['auth', 'list'], { execFn: fakeExec, isWin32: true });
+    assert.strictEqual(captured.shell, true);
+  });
+
+  test('omits shell on non-Windows', async () => {
+    let captured;
+    const fakeExec = (_bin, _args, opts) => {
+      captured = opts;
+      return { stdout: '' };
+    };
+    await execGcloud(['auth', 'list'], { execFn: fakeExec, isWin32: false });
+    assert.strictEqual(captured.shell, undefined);
+  });
+
+  test('non-Windows options match 1.0.4 shape (timeout + env only)', async () => {
+    let captured;
+    const fakeExec = (_bin, _args, opts) => {
+      captured = opts;
+      return { stdout: '' };
+    };
+    await execGcloud(['auth', 'list'], { execFn: fakeExec, isWin32: false });
+    assert.deepStrictEqual(Object.keys(captured).sort(), ['env', 'timeout']);
   });
 });
