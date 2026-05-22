@@ -151,22 +151,46 @@ const config = {
  *
  * URL parsing alone is insufficient: `&` is legal in URL query strings,
  * `%` survives many URL parsers, and the WHATWG URL parser is forgiving
- * about some malformed inputs. We therefore enforce TWO constraints:
- *   1. Parses as a URL via `new URL()` — catches gross malformations.
- *   2. Origin-only — no path/query/hash/userinfo. The gcloud `--audiences`
+ * about some malformed inputs. We therefore enforce FOUR constraints:
+ *   1. Reject control characters / whitespace in the RAW input
+ *      (anything in the C0 control block plus DEL — covers `\n`, `\r`,
+ *      `\t`, `\0`, and the full 0x00–0x20 + 0x7f range). The WHATWG URL
+ *      parser silently strips ASCII tab / newline per spec, so checking
+ *      the post-parse origin would miss inputs like
+ *      `https://mcp.hafla.com\ncalc.exe` — the parser would happily
+ *      return `https://mcp.hafla.comcalc.exe` while the caller's raw
+ *      string retained the newline that cmd.exe interprets as a command
+ *      separator under shell:true.
+ *   2. Parses as a URL via `new URL()` — catches gross malformations.
+ *   3. Origin-only — no path/query/hash/userinfo. The gcloud `--audiences`
  *      value is canonically a bare origin (e.g., `https://mcp.hafla.com`);
  *      anything beyond the origin is operator misconfiguration AND is
  *      where shell metacharacters live in malicious inputs.
- *   3. No shell metacharacters anywhere in the raw string. Belt-and-
- *      suspenders against URL-parser quirks that might let metachars
- *      survive into the audience string.
+ *   4. No printable shell metacharacters anywhere in the raw string.
+ *      Belt-and-suspenders against URL-parser quirks that might let
+ *      metachars survive into the audience string.
  *
- * Returns the parsed origin on success. Throws Error on any failure;
- * callers handle by printing a diagnostic banner and exiting.
+ * Returns the parsed origin on success. **Callers MUST assign the return
+ * value back to `config.audience`** so downstream code uses the URL
+ * parser's normalized origin (whitespace already stripped by constraint
+ * #1, but assignment also removes any case folding / trailing-slash
+ * normalization the parser may have applied). The module-load site below
+ * does this. Throws Error on any failure; callers handle by printing a
+ * diagnostic banner and exiting.
  *
  * Exported for direct unit testing.
  */
 export function validateAudience(audience) {
+  // Constraint 1: reject control characters / whitespace in the RAW
+  // input BEFORE handing to the URL parser. C0 control block (0x00-0x1f)
+  // plus space (0x20) plus DEL (0x7f). This is the post-23e44ba newline-
+  // injection fix; see JSDoc above for the WHATWG-parser-strips-tab/CR/LF
+  // bypass that motivates the up-front filter.
+  if (/[\x00-\x20\x7f]/.test(audience)) {
+    throw new Error(
+      `GATEWAY_AUDIENCE contains control characters or whitespace (rejected before URL parsing). Got: ${JSON.stringify(audience)}`
+    );
+  }
   let audienceUrl;
   try {
     audienceUrl = new URL(audience);
@@ -189,7 +213,8 @@ export function validateAudience(audience) {
   // cmd.exe metacharacters: & (separator), | (pipe), ; (some contexts),
   // < > (redirects), ( ) (grouping), ^ (escape), " ' (quoting),
   // ` (POSIX backtick), $ (POSIX expansion), ! (cmd delayed expansion),
-  // % (cmd env expansion), \ (path/escape).
+  // % (cmd env expansion), \ (path/escape). Control chars / whitespace
+  // are already rejected by constraint 1 above.
   const SHELL_METACHARS = /[&|;<>()^"'`$!%\\]/;
   if (SHELL_METACHARS.test(audience)) {
     throw new Error(
@@ -200,10 +225,15 @@ export function validateAudience(audience) {
 }
 
 // Module-load enforcement — process exits with diagnostic banner if
-// GATEWAY_AUDIENCE (or its fallback) fails validation. This is the
-// load-bearing safety boundary for execGcloud's shell:true on Windows.
+// GATEWAY_AUDIENCE (or its fallback) fails validation. The return value
+// is ASSIGNED back to config.audience so downstream callers (createTokenCache,
+// execGcloud) use the URL-parser's normalized origin rather than the raw
+// env string. Without the assignment, validation passing would not prevent
+// the raw string with any URL-parser-stripped characters from reaching
+// execGcloud's argv under shell:true on Windows. This is the load-bearing
+// safety boundary for execGcloud's shell:true on Windows.
 try {
-  validateAudience(config.audience);
+  config.audience = validateAudience(config.audience);
 } catch (err) {
   process.stderr.write(
     `\n┌── intelligence-mcp-bridge: ${err.message}\n│ Fix: set GATEWAY_AUDIENCE to a plain origin URL (e.g., https://mcp.hafla.com)\n└──\n\n`

