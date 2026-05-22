@@ -45,23 +45,27 @@ try {
  *
  * TODO(1.1.0) — Module split (Software Architecture review, 2026-05-16).
  *
- * File is currently ~794 lines in a single module. Acceptable for 1.0.1
- * (single-binary npm package; zero deps; supply-chain audit story benefits
- * from one file). Deferred from 1.0.1 review cycle as Option C: ship the
- * 4 design-review fixes here, do the module split as a separate 1.1.0
- * release with its own review surface.
+ * File grew from ~794 lines (1.0.1) to ~1100 lines (1.0.5) — still in a
+ * single module. Acceptable through 1.0.x (single-binary npm package; zero
+ * deps; supply-chain audit story benefits from one file). Deferred from
+ * 1.0.1 review cycle as Option C: ship targeted fixes here, do the module
+ * split as a separate 1.1.0 release with its own review surface.
  *
- * Suggested split (section headers below align with the boundaries):
- *   - src/config.js       — config parsing + HTTPS enforcement (lines 48-97)
- *   - src/log.js          — log, diagnosticBanner, fail (lines 99-134)
- *   - src/jwt.js          — decodeJwtPayloadNoVerify (lines 136-156)
- *   - src/gcloud.js       — execGcloud, preFlight (lines 158-247)
- *   - src/token-cache.js  — createTokenCache (lines 249-472)
- *   - src/rpc.js          — forwardRequest, handleMessage (lines 474-770)
- *   - src/index.js        — main() + entry guard (lines 773-794)
+ * Suggested split (responsibilities — find the matching `// ──` section
+ * headers below for current line locations; explicit line numbers
+ * omitted because they drift on every src/index.js edit):
+ *   - src/config.js       — config parsing + HTTPS enforcement
+ *   - src/log.js          — log, diagnosticBanner, fail
+ *   - src/jwt.js          — decodeJwtPayloadNoVerify
+ *   - src/sse.js          — extractSseJson (helper for src/rpc.js)
+ *   - src/gcloud.js       — execGcloud, preFlight
+ *   - src/token-cache.js  — createTokenCache
+ *   - src/rpc.js          — forwardRequest, handleMessage
+ *   - src/index.js        — main() + entry guard
  *
  * Constraints when doing the split:
- *   - Preserve all 26 tests; bridge behaviour must stay byte-equivalent
+ *   - Preserve all current tests (52 as of 1.0.5); bridge behaviour must
+ *     stay byte-equivalent
  *   - `npm pack --dry-run` must still produce a single tarball
  *   - Keep zero npm runtime dependencies (Node stdlib only)
  *   - Each module gets the same header-comment convention as this file

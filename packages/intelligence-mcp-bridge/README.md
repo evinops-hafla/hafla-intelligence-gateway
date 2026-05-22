@@ -193,7 +193,7 @@ Restart the client (close + reopen for desktop apps; `exit` + relaunch for CLI a
 **Gemini CLI users — what to expect on first launch:** Gemini CLI may show two prompts the bridge cannot suppress:
 
 1. **Folder Trust prompt** — Gemini CLI asks you to trust the current workspace folder. Click **Trust folder**. Without this, MCP servers (including this bridge) won't load.
-2. **Second Google sign-in** — Gemini CLI's own OAuth scope is separate from the `gcloud auth login` you completed in PREREQUISITES. Sign in again with your `@hafla.com` Google account. The bridge still uses the gcloud-minted token for `mcp.hafla.com` calls; this second sign-in is purely Gemini-CLI-side and only needed once.
+2. **Second Google sign-in** — Gemini CLI's own OAuth scope is separate from the `gcloud auth login` you completed in PREREQUISITES. Sign in again with your `@hafla.com` Google account. The bridge still uses the gcloud-minted token for `mcp.hafla.com` calls; this second sign-in is purely Gemini-CLI-side and typically only needed once (Gemini CLI may re-prompt later if its own OAuth token expires or its scope changes).
 
 Both prompts are expected Gemini CLI behaviors, not bridge errors.
 
