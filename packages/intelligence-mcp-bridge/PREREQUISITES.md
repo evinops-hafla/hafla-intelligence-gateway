@@ -15,7 +15,7 @@ These checks define "prerequisites met." If all pass on the machine, skip to [RE
 | Check                                                      | Command                                  | Expected output                                           |
 | ---------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------- |
 | Node 24 LTS is the active Node                             | `node -v`                                | `v24.15.0` or newer `v24.x.y`                             |
-| npm is recent                                              | `npm -v`                                 | `10.x` or newer                                           |
+| npm is recent                                              | `npm -v`                                 | `11.x` or newer                                           |
 | Version manager present (Windows)                          | `nvm version`                            | A version string (e.g. `1.1.12`)                          |
 | Version manager present (macOS)                            | `command -v nvm`                         | `nvm` (a shell function)                                  |
 | MCP client is installed against Node 24 (CLI clients only) | `gemini --version` or `claude --version` | Version string with **no `EBADENGINE` warning in stderr** |
@@ -43,6 +43,8 @@ GUI clients (Cursor, Claude Desktop) are not Node-managed — install them separ
 ---
 
 ## Windows (PowerShell)
+
+> **⚠️ Windows tip — open a fresh PowerShell after each install step.** When you install nvm-windows, switch Node versions with `nvm use`, or install the gcloud SDK, the new commands may not be recognized in your current PowerShell session — and you'll see `command not found` errors. The reliable fix every time: **close PowerShell and open it fresh.** Each step below also offers an in-session `PATH` refresh as an alternative, but opening a new window is the simplest path and always works.
 
 ### 1. Install nvm-windows (Administrator required)
 
@@ -73,6 +75,8 @@ nvm install 24.15.0
 nvm use 24.15.0
 ```
 
+**After `nvm use 24.15.0`, always open a new PowerShell window before verifying.** In-session `PATH` refresh isn't reliable for nvm-managed Node version switches — a fresh PowerShell is the simplest, always-works fix.
+
 **If `nvm use` fails with "access denied" or junction/symlink errors:** rerun the `nvm use` command in an Administrator PowerShell. This is rare on default Windows but can happen on locked-down corporate machines where Group Policy blocks junction creation for non-admin users.
 
 Verify:
@@ -82,7 +86,7 @@ node -v
 npm -v
 ```
 
-Expected: `v24.15.0` and `10.x` or newer.
+Expected: `v24.15.0` and `11.x` or newer.
 
 ### 3. Install your MCP client (Windows)
 
@@ -250,7 +254,7 @@ node -v
 npm -v
 ```
 
-Expected: `v24.15.0` and `10.x` or newer.
+Expected: `v24.15.0` and `11.x` or newer.
 
 ### 4. Install your MCP client (macOS)
 

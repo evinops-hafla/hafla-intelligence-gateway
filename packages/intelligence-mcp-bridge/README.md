@@ -11,7 +11,7 @@ The bridge mints a fresh 60-minute Google ID token via your own `gcloud` session
 Prerequisites are in [PREREQUISITES.md](./PREREQUISITES.md). If those are met:
 
 ```bash
-npm install -g @hafla/intelligence-mcp-bridge@1.0.4
+npm install -g @hafla/intelligence-mcp-bridge@1.0.5
 ```
 
 Add this to your MCP client config (Gemini CLI / Claude Code / Cursor):
@@ -37,7 +37,7 @@ Before the install playbook below, confirm these seven checks pass. If any fail,
 | Check                         | Command                                  | Expected output                                  |
 | ----------------------------- | ---------------------------------------- | ------------------------------------------------ |
 | Node 24 LTS active            | `node -v`                                | `v24.15.0` or newer `v24.x.y`                    |
-| npm recent                    | `npm -v`                                 | `10.x` or newer                                  |
+| npm recent                    | `npm -v`                                 | `11.x` or newer                                  |
 | Version manager (Windows)     | `nvm version`                            | A version string (e.g. `1.1.12`)                 |
 | Version manager (macOS)       | `command -v nvm`                         | `nvm` (a shell function)                         |
 | MCP client on Node 24         | `gemini --version` or `claude --version` | Version string, no `EBADENGINE` warning          |
@@ -53,10 +53,10 @@ All pass → proceed below.
 ### Step 1 — Install the bridge
 
 ```bash
-npm install -g @hafla/intelligence-mcp-bridge@1.0.4
+npm install -g @hafla/intelligence-mcp-bridge@1.0.5
 ```
 
-The version is **exact-pinned** (`@1.0.4`, not `@latest`). Pinning is the supply-chain hygiene boundary; Ops announces version bumps in Slack so the team upgrades on a known cadence. See § "Upgrading" below.
+The version is **exact-pinned** (`@1.0.5`, not `@latest`). Pinning is the supply-chain hygiene boundary; Ops announces version bumps in Slack so the team upgrades on a known cadence. See § "Upgrading" below.
 
 ### Step 2 — Verify install
 
@@ -189,6 +189,13 @@ Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Wi
 ### Step 5 — Reload your MCP client + end-to-end verify
 
 Restart the client (close + reopen for desktop apps; `exit` + relaunch for CLI apps).
+
+**Gemini CLI users — what to expect on first launch:** Gemini CLI may show two prompts the bridge cannot suppress:
+
+1. **Folder Trust prompt** — Gemini CLI asks you to trust the current workspace folder. Click **Trust folder**. Without this, MCP servers (including this bridge) won't load.
+2. **Second Google sign-in** — Gemini CLI's own OAuth scope is separate from the `gcloud auth login` you completed in PREREQUISITES. Sign in again with your `@hafla.com` Google account. The bridge still uses the gcloud-minted token for `mcp.hafla.com` calls; this second sign-in is purely Gemini-CLI-side and typically only needed once (Gemini CLI may re-prompt later if its own OAuth token expires or its scope changes).
+
+Both prompts are expected Gemini CLI behaviors, not bridge errors.
 
 Then ask the client:
 

@@ -2,7 +2,12 @@
 
 import { assertNode24 } from './version-check.js';
 import { parseDrainTimeoutMs } from './drain-timeout.js';
-try { assertNode24(); } catch (e) { console.error(e.message); process.exit(1); }
+try {
+  assertNode24();
+} catch (e) {
+  console.error(e.message);
+  process.exit(1);
+}
 
 /**
  * MCP stdio bridge for the Hafla Intelligence Gateway at mcp.hafla.com.
@@ -40,23 +45,27 @@ try { assertNode24(); } catch (e) { console.error(e.message); process.exit(1); }
  *
  * TODO(1.1.0) — Module split (Software Architecture review, 2026-05-16).
  *
- * File is currently ~794 lines in a single module. Acceptable for 1.0.1
- * (single-binary npm package; zero deps; supply-chain audit story benefits
- * from one file). Deferred from 1.0.1 review cycle as Option C: ship the
- * 4 design-review fixes here, do the module split as a separate 1.1.0
- * release with its own review surface.
+ * File grew from ~794 lines (1.0.1) to ~1100 lines (1.0.5) — still in a
+ * single module. Acceptable through 1.0.x (single-binary npm package; zero
+ * deps; supply-chain audit story benefits from one file). Deferred from
+ * 1.0.1 review cycle as Option C: ship targeted fixes here, do the module
+ * split as a separate 1.1.0 release with its own review surface.
  *
- * Suggested split (section headers below align with the boundaries):
- *   - src/config.js       — config parsing + HTTPS enforcement (lines 48-97)
- *   - src/log.js          — log, diagnosticBanner, fail (lines 99-134)
- *   - src/jwt.js          — decodeJwtPayloadNoVerify (lines 136-156)
- *   - src/gcloud.js       — execGcloud, preFlight (lines 158-247)
- *   - src/token-cache.js  — createTokenCache (lines 249-472)
- *   - src/rpc.js          — forwardRequest, handleMessage (lines 474-770)
- *   - src/index.js        — main() + entry guard (lines 773-794)
+ * Suggested split (responsibilities — find the matching `// ──` section
+ * headers below for current line locations; explicit line numbers
+ * omitted because they drift on every src/index.js edit):
+ *   - src/config.js       — config parsing + HTTPS enforcement
+ *   - src/log.js          — log, diagnosticBanner, fail
+ *   - src/jwt.js          — decodeJwtPayloadNoVerify
+ *   - src/sse.js          — extractSseJson (helper for src/rpc.js)
+ *   - src/gcloud.js       — execGcloud, preFlight
+ *   - src/token-cache.js  — createTokenCache
+ *   - src/rpc.js          — forwardRequest, handleMessage
+ *   - src/index.js        — main() + entry guard
  *
  * Constraints when doing the split:
- *   - Preserve all 26 tests; bridge behaviour must stay byte-equivalent
+ *   - Preserve all current tests (52 as of 1.0.5); bridge behaviour must
+ *     stay byte-equivalent
  *   - `npm pack --dry-run` must still produce a single tarball
  *   - Keep zero npm runtime dependencies (Node stdlib only)
  *   - Each module gets the same header-comment convention as this file
@@ -95,7 +104,13 @@ const rawGatewayUrl = process.env.GATEWAY_URL || 'https://mcp.hafla.com';
   const isLocalDev =
     u.hostname === 'localhost' ||
     u.hostname === '127.0.0.1' ||
-    u.hostname === '0.0.0.0';
+    u.hostname === '0.0.0.0' ||
+    // IPv6 loopback. WHATWG URL parser exposes `url.hostname` for
+    // `http://[::1]:8080` as the bracketed form `[::1]` (normalized from
+    // any of `[0:0:0:0:0:0:0:1]` etc.). Recent Node defaults to IPv6 in
+    // many local-dev paths; rejecting this caused the bridge to refuse
+    // legitimate loopback configs.
+    u.hostname === '[::1]';
   if (u.protocol !== 'https:' && !isLocalDev) {
     process.stderr.write(
       `\n┌── intelligence-mcp-bridge: refusing plaintext HTTP for non-local GATEWAY_URL\n│ Got: ${rawGatewayUrl}\n│ Fix: set GATEWAY_URL to https:// (or localhost for dev)\n└──\n\n`
@@ -124,6 +139,182 @@ const config = {
   tokenLifetimeMs: 60 * 60_000,
   debug: process.env.DEBUG === '1'
 };
+
+// ── GATEWAY_PATH validation (closes HTTPS-bypass / token-leak vector) ──────
+//
+// `forwardRequest` builds the target URL via `new URL(gatewayPath, gatewayUrl)`.
+// Per WHATWG URL spec, if the first argument is an ABSOLUTE URL, the base
+// (second arg) is ignored entirely. An operator-controlled
+// `GATEWAY_PATH=http://evil.example.com` would therefore:
+//   1. Make `url.protocol === 'http:'` → effectiveFn picks `httpRequest`
+//      (plaintext), bypassing the GATEWAY_URL HTTPS enforcement above.
+//   2. Make `url.hostname === 'evil.example.com'` → the gcloud-minted
+//      Google ID token (Authorization: Bearer …) is exfiltrated to the
+//      attacker host over plaintext HTTP on every request.
+// Same trust-boundary class as the GATEWAY_AUDIENCE shell-injection
+// vector closed in commits 23e44ba + 93ede79: operator-controllable env,
+// write-to-config → token leak / RCE-class escalation.
+//
+// We refuse any GATEWAY_PATH that contains a URL scheme prefix. Canonical
+// values are path fragments like `/mcp` or `/api/v2/mcp` — never absolute
+// URLs. A scheme prefix matches RFC 3986 §3.1: ALPHA *( ALPHA / DIGIT /
+// "+" / "-" / "." ) followed by ":". Case-insensitive (URL schemes are
+// case-insensitive per spec; cmd.exe / browsers accept "HTTPS://" etc.).
+//
+// Constraint 1: reject control characters / whitespace BEFORE the scheme
+// regex runs. WHATWG URL parser strips leading ASCII whitespace per spec,
+// so a value like `\nhttp://attacker.com` would bypass an anchored
+// `^[a-z]` regex (position 0 is `\n`, not in `[a-z]`) AND then get the
+// `\n` stripped during URL parsing — same WHATWG-strip class that bit
+// validateAudience in 23e44ba. The in-flight backstop in forwardRequest
+// (origin check) would catch this, but the module-load gate is supposed
+// to fail fast for operator misconfig; the backstop is belt, not
+// suspenders. Mirror validateAudience's `[\x00-\x20\x7f]` upfront reject
+// for symmetry.
+if (/[\x00-\x20\x7f]/.test(config.gatewayPath)) {
+  process.stderr.write(
+    `\n┌── intelligence-mcp-bridge: invalid GATEWAY_PATH — contains control characters or whitespace\n│ Got: ${JSON.stringify(config.gatewayPath)}\n│ Fix: GATEWAY_PATH should be a clean path fragment (e.g., /mcp). Strip whitespace, newlines, tabs, NUL.\n└──\n\n`
+  );
+  process.exit(1);
+}
+// Constraint 2: reject scheme prefix (RFC 3986 §3.1) OR protocol-relative
+// `//` prefix. The `//` case is a second escape vector documented by
+// gemini-code-assist on PR #5 round 3:
+// `new URL('//evil.com', 'https://mcp.hafla.com')` → `https://evil.com/`
+// (scheme inherited from base). url.protocol stays `https:` so the
+// plaintext-leak class doesn't fire, BUT url.hostname becomes the
+// attacker host — token would be sent to wrong origin over HTTPS.
+// JWT aud claim still points at the legitimate gateway, so the leaked
+// token is replay-able against mcp.hafla.com. The forwardRequest
+// origin-mismatch backstop catches this in-flight, but the module-load
+// gate must be symmetric with the scheme-prefix case for consistent
+// fail-fast behaviour and reviewer-comprehensibility.
+if (/^([a-z][a-z0-9+.-]*:|\/\/)/i.test(config.gatewayPath)) {
+  process.stderr.write(
+    `\n┌── intelligence-mcp-bridge: invalid GATEWAY_PATH — must be a path, not a URL\n│ Got: ${config.gatewayPath}\n│ Fix: GATEWAY_PATH should be a path fragment (e.g., /mcp). Set GATEWAY_URL for the host portion.\n│ Note: protocol-relative paths (// prefix) are also rejected — they would inherit the GATEWAY_URL scheme and escape to a different origin.\n└──\n\n`
+  );
+  process.exit(1);
+}
+
+// ── Audience validation (defends args-safety invariant under shell:true) ────
+
+/**
+ * Validate `audience` is a safe value to template into
+ * `--audiences=<audience>` passed to gcloud subprocess.
+ *
+ * Why this is load-bearing: on Windows, execGcloud passes `shell: true`
+ * to work around CVE-2024-27980 (.cmd/.bat rejection by execFile). With
+ * shell:true, Node concatenates args into a single string and hands it
+ * to cmd.exe, which interprets shell metacharacters (&, |, ^, etc.).
+ * The args-safety invariant in execGcloud depends on every templated
+ * arg value being free of metacharacters — otherwise an operator-set
+ * GATEWAY_AUDIENCE containing `&rmdir /s /q C:\Windows\System32` would
+ * execute as code.
+ *
+ * URL parsing alone is insufficient: `&` is legal in URL query strings,
+ * `%` survives many URL parsers, and the WHATWG URL parser is forgiving
+ * about some malformed inputs. We therefore enforce FOUR constraints:
+ *   1. Reject control characters / whitespace in the RAW input
+ *      (anything in the C0 control block plus DEL — covers `\n`, `\r`,
+ *      `\t`, `\0`, and the full 0x00–0x20 + 0x7f range). The WHATWG URL
+ *      parser silently strips ASCII tab / newline per spec, so checking
+ *      the post-parse origin would miss inputs like
+ *      `https://mcp.hafla.com\ncalc.exe` — the parser would happily
+ *      return `https://mcp.hafla.comcalc.exe` while the caller's raw
+ *      string retained the newline that cmd.exe interprets as a command
+ *      separator under shell:true.
+ *   2. Parses as a URL via `new URL()` — catches gross malformations.
+ *   3. Origin-only — no path/query/hash/userinfo. The gcloud `--audiences`
+ *      value is canonically a bare origin (e.g., `https://mcp.hafla.com`);
+ *      anything beyond the origin is operator misconfiguration AND is
+ *      where shell metacharacters live in malicious inputs.
+ *   4. No printable shell metacharacters anywhere in the raw string.
+ *      Belt-and-suspenders against URL-parser quirks that might let
+ *      metachars survive into the audience string.
+ *
+ * Returns the parsed origin on success. **Callers MUST assign the return
+ * value back to `config.audience`** so downstream code uses the URL
+ * parser's normalized origin (whitespace already stripped by constraint
+ * #1, but assignment also removes any case folding / trailing-slash
+ * normalization the parser may have applied). The module-load site below
+ * does this. Throws Error on any failure; callers handle by printing a
+ * diagnostic banner and exiting.
+ *
+ * Note on scheme enforcement: unlike `GATEWAY_URL` (which is the
+ * transport — `http://` is rejected for non-localhost hosts because
+ * Google ID tokens would leak on the wire), `GATEWAY_AUDIENCE` is
+ * purely an identifier string templated into the JWT `aud` claim. It
+ * never travels as a transport, only as a string the gateway server
+ * compares against its own expected audience. We therefore do NOT
+ * enforce `https://` here. A scheme mismatch (e.g.,
+ * `GATEWAY_AUDIENCE=http://mcp.hafla.com` when the gateway expects
+ * `https://mcp.hafla.com`) produces an operator-debuggable 401 from
+ * the gateway, not a security event. Skipping the check also keeps
+ * legitimate `http://localhost:<port>` audiences usable for local-dev
+ * against a gateway emulator.
+ *
+ * Exported for direct unit testing.
+ */
+export function validateAudience(audience) {
+  // Constraint 1: reject control characters / whitespace in the RAW
+  // input BEFORE handing to the URL parser. C0 control block (0x00-0x1f)
+  // plus space (0x20) plus DEL (0x7f). This is the post-23e44ba newline-
+  // injection fix; see JSDoc above for the WHATWG-parser-strips-tab/CR/LF
+  // bypass that motivates the up-front filter.
+  if (/[\x00-\x20\x7f]/.test(audience)) {
+    throw new Error(
+      `GATEWAY_AUDIENCE contains control characters or whitespace (rejected before URL parsing). Got: ${JSON.stringify(audience)}`
+    );
+  }
+  let audienceUrl;
+  try {
+    audienceUrl = new URL(audience);
+  } catch {
+    throw new Error(
+      `invalid GATEWAY_AUDIENCE — could not parse as URL: ${audience}`
+    );
+  }
+  const hasNonOriginParts =
+    (audienceUrl.pathname !== '/' && audienceUrl.pathname !== '') ||
+    audienceUrl.search !== '' ||
+    audienceUrl.hash !== '' ||
+    audienceUrl.username !== '' ||
+    audienceUrl.password !== '';
+  if (hasNonOriginParts) {
+    throw new Error(
+      `GATEWAY_AUDIENCE must be origin-only (no path/query/hash/userinfo). Got: ${audience}. Parsed origin: ${audienceUrl.origin}`
+    );
+  }
+  // cmd.exe metacharacters: & (separator), | (pipe), ; (some contexts),
+  // < > (redirects), ( ) (grouping), ^ (escape), " ' (quoting),
+  // ` (POSIX backtick), $ (POSIX expansion), ! (cmd delayed expansion),
+  // % (cmd env expansion), \ (path/escape). Control chars / whitespace
+  // are already rejected by constraint 1 above.
+  const SHELL_METACHARS = /[&|;<>()^"'`$!%\\]/;
+  if (SHELL_METACHARS.test(audience)) {
+    throw new Error(
+      `GATEWAY_AUDIENCE contains shell metacharacters (any of & | ; < > ( ) ^ " ' \` $ ! % \\). Got: ${audience}`
+    );
+  }
+  return audienceUrl.origin;
+}
+
+// Module-load enforcement — process exits with diagnostic banner if
+// GATEWAY_AUDIENCE (or its fallback) fails validation. The return value
+// is ASSIGNED back to config.audience so downstream callers (createTokenCache,
+// execGcloud) use the URL-parser's normalized origin rather than the raw
+// env string. Without the assignment, validation passing would not prevent
+// the raw string with any URL-parser-stripped characters from reaching
+// execGcloud's argv under shell:true on Windows. This is the load-bearing
+// safety boundary for execGcloud's shell:true on Windows.
+try {
+  config.audience = validateAudience(config.audience);
+} catch (err) {
+  process.stderr.write(
+    `\n┌── intelligence-mcp-bridge: ${err.message}\n│ Fix: set GATEWAY_AUDIENCE to a plain origin URL (e.g., https://mcp.hafla.com)\n└──\n\n`
+  );
+  process.exit(1);
+}
 
 // ── Logging (stderr only — stdout is the MCP channel) ───────────────────────
 
@@ -260,8 +451,21 @@ export function extractSseJson(body) {
  * Throws {message, stderr, code} on failure.
  *
  * Exported for unit-test injection; tests replace it with a stub.
+ *
+ * @param {string[]} args - gcloud subcommand argv (e.g. ['auth', 'list']).
+ * @param {object} [opts]
+ * @param {function} [opts.execFn=execFileAsync] - test seam for the
+ *   child-process call.
+ * @param {boolean} [opts.isWin32=process.platform === 'win32'] - test seam
+ *   for the Windows-specific `shell: true` branch. Default resolves at
+ *   call time. Required because Node 24's CVE-2024-27980 hardening
+ *   rejects .cmd/.bat invocations via execFile unless `shell: true` is
+ *   passed; injecting this avoids tests having to mutate process.platform.
  */
-export async function execGcloud(args, { execFn = execFileAsync } = {}) {
+export async function execGcloud(
+  args,
+  { execFn = execFileAsync, isWin32 = process.platform === 'win32' } = {}
+) {
   try {
     // Defensive hygiene: CLOUDSDK_CORE_DISABLE_PROMPTS=1 guarantees gcloud
     // never tries to read from stdin or emit interactive prompts. With the
@@ -271,7 +475,37 @@ export async function execGcloud(args, { execFn = execFileAsync } = {}) {
     // JSON-RPC stream), but disabling prompts forecloses any future gcloud
     // version that might add interactive surface to `print-identity-token`
     // or `auth list`. Reviewer 2026-05-18 (defensive; no current failure).
+    //
+    // Windows: Node 24 rejects .cmd / .bat via execFile (CVE-2024-27980
+    // hardening, April 2024) unless `shell: true` is passed. With shell:
+    // true, Node concatenates args into a string and hands it to cmd.exe,
+    // which interprets shell metacharacters (&, |, ^, etc.). Safe here
+    // because of TWO load-bearing constraints:
+    //
+    //   (1) `args` is built from hardcoded subcommand verbs plus exactly
+    //       one templated value: `--audiences=<config.audience>`.
+    //   (2) `config.audience` is strictly validated at module load via
+    //       validateAudience() above — it must parse as a URL, be
+    //       origin-only (no path/query/hash/userinfo), AND contain zero
+    //       shell metacharacters. The validation exits the process with
+    //       a diagnostic banner on any failure.
+    //
+    // Together: the only string flowing into argv beyond hardcoded literals
+    // has been pre-checked to be a plain origin URL with no shell-meaningful
+    // chars. No MCP-client or end-user input reaches argv.
+    //
+    // IF YOU ADD A NEW execGcloud CALL SITE with a new templated arg, you
+    // MUST validate that arg at the boundary with the same rigor as
+    // validateAudience(). The shell:true safety here is end-to-end, not
+    // local to this function.
+    //
+    // Note: `process.platform === 'win32'` on Git Bash / MSYS too (those
+    // bundle a Windows-native Node); `shell: true` uses `process.env.ComSpec`
+    // (cmd.exe) regardless of parent shell, so the fix is shell-agnostic
+    // on Windows.
+    const execOpts = isWin32 ? { shell: true } : {};
     const { stdout } = await execFn(GCLOUD_BIN, args, {
+      ...execOpts,
       timeout: 15_000,
       env: { ...process.env, CLOUDSDK_CORE_DISABLE_PROMPTS: '1' }
     });
@@ -431,11 +665,15 @@ export function createTokenCache({
         `     account is human but impersonation config requires an audience.`,
         `     Unset impersonation: gcloud config unset auth/impersonate_service_account`
       );
-      // failFn → process.exit(1) in production (synchronous; this return is
-      // unreachable). Tests inject a non-throwing collector (collectingFailFn)
-      // — the `return` is what halts execution under test so we don't fall
-      // through to caching a token that was never minted.
-      return undefined;
+      // failFn → process.exit(1) in production (synchronous; the throw
+      // below is unreachable). Tests inject a non-throwing collector
+      // (collectingFailFn) — the THROW guarantees the promise rejects
+      // cleanly instead of caching/returning undefined, so any caller
+      // that awaits getToken() in a test (or in a hypothetical future
+      // supervisor mode where failFn doesn't terminate) gets a clean
+      // failure rather than `Authorization: Bearer undefined` over the
+      // wire.
+      throw new Error(`Failed to mint Google ID token: ${err.message}`);
     }
 
     // Post-mint identity cross-check (Path A / BS-3 resolution).
@@ -471,7 +709,13 @@ export function createTokenCache({
           'This usually means gcloud returned an unexpected output format.',
           'Try: gcloud components update'
         );
-        return undefined;
+        // throw (rather than return) so that if failFn doesn't terminate
+        // the process (e.g., test injection, future supervisor mode),
+        // the promise rejects cleanly instead of resolving to undefined
+        // and sending "Bearer undefined" downstream.
+        throw new Error(
+          `Identity token rejected: not a valid JWT (${err.message})`
+        );
       }
 
       if (typeof claims.email !== 'string') {
@@ -508,7 +752,9 @@ export function createTokenCache({
           '  with ops to either grant the SA the right config, or run the',
           '  bridge under a different SA whose tokens include email.'
         );
-        return undefined;
+        // throw to guarantee promise rejection if failFn doesn't terminate;
+        // see comment at the first throw site in this function.
+        throw new Error('Identity token rejected: missing email claim');
       }
 
       if (claims.email.toLowerCase() !== activeAccount.toLowerCase()) {
@@ -535,7 +781,11 @@ export function createTokenCache({
           'SA IS your active account — "gcloud auth list" should show',
           'the SA as active. The cross-check passes in that case.'
         );
-        return undefined;
+        // throw to guarantee promise rejection if failFn doesn't terminate;
+        // see comment at the first throw site in this function.
+        throw new Error(
+          `Identity mismatch: token for "${claims.email}" rejected (active account: "${activeAccount}")`
+        );
       }
     }
 
@@ -630,6 +880,19 @@ export async function forwardRequest(
   const messageStr = JSON.stringify(message);
   const url = new URL(gatewayPath, gatewayUrl);
 
+  // Defense-in-depth backstop for GATEWAY_PATH HTTPS-bypass:
+  // module-load already rejects gatewayPath values containing a URL
+  // scheme, but if any future code path constructs `url` dynamically
+  // (e.g., a path derived from per-request input), this catches an
+  // origin escape before we hand a Bearer token to the wrong host.
+  // The primary boundary is the module-load check above; this is the
+  // belt to its suspenders.
+  if (url.origin !== new URL(gatewayUrl).origin) {
+    throw new Error(
+      `forwardRequest: constructed URL origin (${url.origin}) does not match GATEWAY_URL origin (${new URL(gatewayUrl).origin}) — refusing to send token`
+    );
+  }
+
   return new Promise((resolve) => {
     const timeoutId = setTimeout(() => {
       req.destroy();
@@ -651,7 +914,10 @@ export async function forwardRequest(
     const options = {
       hostname: url.hostname,
       port: url.port || (url.protocol === 'https:' ? 443 : 80),
-      path: url.pathname,
+      // Preserve query string: url.pathname alone drops `?...`. The
+      // gateway accepts query params for routing (multi-tenant, env
+      // selection); silent drop would break those flows undetectably.
+      path: url.pathname + url.search,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -733,7 +999,9 @@ export async function forwardRequest(
         // protocol-valid (MCP spec 2024-11-05 § "Streamable HTTP"). Detect
         // by Content-Type and parse accordingly. Without this, every tool
         // call returns -32700 to the client when the gateway picks SSE.
-        const contentType = (res.headers?.['content-type'] || '').toLowerCase();
+        const contentType = (
+          res.headers?.['content-type'] || ''
+        ).toLowerCase();
         const isSse = contentType.includes('text/event-stream');
         let payload;
         try {
@@ -1021,14 +1289,11 @@ async function main() {
     // clearTimeout is a no-op — safe to call unconditionally.
     clearTimeout(timeoutHandle);
     if (result === 'timeout') {
-      log.warn(
-        'Drain timed out — aborting in-flight requests then exiting',
-        {
-          droppedCount: inFlight.size,
-          abortedRequests: abortControllers.size,
-          drainTimeoutMs
-        }
-      );
+      log.warn('Drain timed out — aborting in-flight requests then exiting', {
+        droppedCount: inFlight.size,
+        abortedRequests: abortControllers.size,
+        drainTimeoutMs
+      });
       // Explicitly destroy each in-flight socket so the remote sees FIN/RST
       // rather than waiting for keepalive. Best practice for HTTP clients
       // exiting with active requests; impact is minimal at single-user

