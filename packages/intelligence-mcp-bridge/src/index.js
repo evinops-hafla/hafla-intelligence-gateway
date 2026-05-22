@@ -177,9 +177,21 @@ if (/[\x00-\x20\x7f]/.test(config.gatewayPath)) {
   );
   process.exit(1);
 }
-if (/^[a-z][a-z0-9+.-]*:/i.test(config.gatewayPath)) {
+// Constraint 2: reject scheme prefix (RFC 3986 §3.1) OR protocol-relative
+// `//` prefix. The `//` case is a second escape vector documented by
+// gemini-code-assist on PR #5 round 3:
+// `new URL('//evil.com', 'https://mcp.hafla.com')` → `https://evil.com/`
+// (scheme inherited from base). url.protocol stays `https:` so the
+// plaintext-leak class doesn't fire, BUT url.hostname becomes the
+// attacker host — token would be sent to wrong origin over HTTPS.
+// JWT aud claim still points at the legitimate gateway, so the leaked
+// token is replay-able against mcp.hafla.com. The forwardRequest
+// origin-mismatch backstop catches this in-flight, but the module-load
+// gate must be symmetric with the scheme-prefix case for consistent
+// fail-fast behaviour and reviewer-comprehensibility.
+if (/^([a-z][a-z0-9+.-]*:|\/\/)/i.test(config.gatewayPath)) {
   process.stderr.write(
-    `\n┌── intelligence-mcp-bridge: invalid GATEWAY_PATH — must be a path, not a URL\n│ Got: ${config.gatewayPath}\n│ Fix: GATEWAY_PATH should be a path fragment (e.g., /mcp). Set GATEWAY_URL for the host portion.\n└──\n\n`
+    `\n┌── intelligence-mcp-bridge: invalid GATEWAY_PATH — must be a path, not a URL\n│ Got: ${config.gatewayPath}\n│ Fix: GATEWAY_PATH should be a path fragment (e.g., /mcp). Set GATEWAY_URL for the host portion.\n│ Note: protocol-relative paths (// prefix) are also rejected — they would inherit the GATEWAY_URL scheme and escape to a different origin.\n└──\n\n`
   );
   process.exit(1);
 }
