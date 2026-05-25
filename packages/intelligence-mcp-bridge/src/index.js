@@ -77,6 +77,8 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
+import { fileURLToPath } from 'node:url';
+import { realpathSync } from 'node:fs';
 
 const execFileAsync = promisify(execFile);
 
@@ -1325,7 +1327,51 @@ async function main() {
 
 // ── Execution guard — skip when imported as a module by tests ───────────────
 
-const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+/**
+ * Decide whether this module is being executed as the main entrypoint.
+ *
+ * The naive `import.meta.url === \`file://${argv[1]}\`` check fails whenever
+ * either side has a symlink in its path: global npm bins (always symlinks),
+ * npx fresh-cache `.bin/` (also symlinks), macOS `/tmp` auto-symlinks, NFS,
+ * Docker bind mounts, ASDF, Volta. Symptom in 1.0.5: silent exit 0 with no
+ * MCP handshake (BS, 2026-05-25).
+ *
+ * Resolution: realpath both sides before comparing. With a typed-fallback so
+ * a missing-file edge case degrades to the literal compare rather than
+ * masking other errors.
+ *
+ * Exported for unit testing.
+ */
+export function checkIsMainModule({
+  argv1,
+  moduleUrl,
+  realpathFn = realpathSync,
+  logger = log
+} = {}) {
+  // REPL / `node -e` / module-imported-as-library: argv[1] is undefined.
+  // Skip silently before touching realpath so the IIFE doesn't log at import
+  // time when this module is loaded by tests or by `node -e "import(...)"`.
+  if (!argv1) return false;
+  try {
+    const mainPath = realpathFn(argv1);
+    const modulePath = realpathFn(fileURLToPath(moduleUrl));
+    return mainPath === modulePath;
+  } catch (err) {
+    // argv1 WAS present (real-looking file path) but realpath failed — broken
+    // symlink, permission denied, race condition. Log for visibility, then
+    // degrade to literal compare so behaviour matches 1.0.5 fallback.
+    logger.warn('isMainModule realpath fallback', {
+      err: err.message,
+      argv1
+    });
+    return moduleUrl === `file://${argv1}`;
+  }
+}
+
+const isMainModule = checkIsMainModule({
+  argv1: process.argv[1],
+  moduleUrl: import.meta.url
+});
 if (isMainModule) {
   try {
     await main();

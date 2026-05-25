@@ -37,7 +37,8 @@ import {
   handleMessage,
   extractSseJson,
   execGcloud,
-  validateAudience
+  validateAudience,
+  checkIsMainModule
 } from '../src/index.js';
 
 import { assertNode24 } from '../src/version-check.js';
@@ -1584,5 +1585,204 @@ describe('forwardRequest — GATEWAY_PATH safety + query-string preservation', (
       ),
       /refusing to send token/
     );
+  });
+});
+
+// ── checkIsMainModule — symlink-safe execution guard (BS, 2026-05-25) ──────
+//
+// 1.0.5 silently exited (code 0, no main()) whenever argv[1] or import.meta.url
+// contained a symlink in its path — global npm bins, npx fresh-cache .bin/,
+// macOS /tmp auto-symlinks. Fixed in 1.0.6 by realpath-ing both sides.
+//
+// These tests cover the four scenarios in release-1.0.6-plan.md § 2.2 #1 plus
+// the shape-assertion test from § 7.5 (the log.warn call uses the (msg, data)
+// arg order matching src/index.js logger contract — assert the JSON shape,
+// not just that warn fired).
+
+import { realpathSync, mkdtempSync, writeFileSync, symlinkSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+function makeTmpDir() {
+  return mkdtempSync(join(realpathSync(tmpdir()), 'mcp-bridge-test-'));
+}
+
+function collectingLogger() {
+  const warnCalls = [];
+  return {
+    warnCalls,
+    warn: (msg, data) => warnCalls.push({ msg, data }),
+    info: () => {},
+    error: () => {},
+    debug: () => {}
+  };
+}
+
+describe('checkIsMainModule', () => {
+  test('returns false when argv1 is undefined (REPL / library import / node -e)', () => {
+    const logger = collectingLogger();
+    const result = checkIsMainModule({
+      argv1: undefined,
+      moduleUrl: 'file:///does/not/matter.js',
+      logger
+    });
+    assert.equal(result, false);
+    // Critical: no log.warn at import time when argv[1] is undefined. Tests
+    // that import this module from node:test would otherwise pollute stderr.
+    assert.equal(logger.warnCalls.length, 0);
+  });
+
+  test('returns false when argv1 is empty string', () => {
+    const logger = collectingLogger();
+    const result = checkIsMainModule({
+      argv1: '',
+      moduleUrl: 'file:///does/not/matter.js',
+      logger
+    });
+    assert.equal(result, false);
+    assert.equal(logger.warnCalls.length, 0);
+  });
+
+  test('matching paths (no symlinks) → true', () => {
+    const dir = makeTmpDir();
+    try {
+      const filePath = join(dir, 'entry.js');
+      writeFileSync(filePath, '// fixture\n');
+      const result = checkIsMainModule({
+        argv1: filePath,
+        moduleUrl: pathToFileURL(filePath).href
+      });
+      assert.equal(result, true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('symlinked argv1 pointing to module → true (global npm bin scenario)', () => {
+    const dir = makeTmpDir();
+    try {
+      const realFile = join(dir, 'real-entry.js');
+      const symlinkFile = join(dir, 'link-to-entry.js');
+      writeFileSync(realFile, '// fixture\n');
+      symlinkSync(realFile, symlinkFile);
+      // argv[1] = symlink path (as passed on the CLI), moduleUrl = real path.
+      // 1.0.5 bug: literal compare → false → silent exit.
+      const result = checkIsMainModule({
+        argv1: symlinkFile,
+        moduleUrl: pathToFileURL(realFile).href
+      });
+      assert.equal(result, true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('symlinked moduleUrl pointing to argv1 → true (npx fresh-cache scenario)', () => {
+    const dir = makeTmpDir();
+    try {
+      const realFile = join(dir, 'real-entry.js');
+      const symlinkFile = join(dir, 'link-to-entry.js');
+      writeFileSync(realFile, '// fixture\n');
+      symlinkSync(realFile, symlinkFile);
+      // Inverse: argv[1] = real path, moduleUrl = symlinked file URL. Node
+      // normally resolves import.meta.url to the real path, but this exercises
+      // the symmetric realpath call on the moduleUrl side.
+      const result = checkIsMainModule({
+        argv1: realFile,
+        moduleUrl: pathToFileURL(symlinkFile).href
+      });
+      assert.equal(result, true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('mismatched paths → false', () => {
+    const dir = makeTmpDir();
+    try {
+      const fileA = join(dir, 'a.js');
+      const fileB = join(dir, 'b.js');
+      writeFileSync(fileA, '// a\n');
+      writeFileSync(fileB, '// b\n');
+      const result = checkIsMainModule({
+        argv1: fileA,
+        moduleUrl: pathToFileURL(fileB).href
+      });
+      assert.equal(result, false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('missing-file argv1 → fallback executes, does not throw', () => {
+    const logger = collectingLogger();
+    const ghostPath = join(makeTmpDir(), 'never-existed.js');
+    // realpathSync(ghostPath) throws ENOENT → catch branch runs → literal
+    // compare against `file://<ghostPath>` → false. The point of this test
+    // is that the function returns cleanly, doesn't propagate the throw.
+    const result = checkIsMainModule({
+      argv1: ghostPath,
+      moduleUrl: 'file:///some/other/path.js',
+      logger
+    });
+    assert.equal(result, false);
+    // log.warn fires because argv1 was a real-looking path (not undefined).
+    assert.equal(logger.warnCalls.length, 1);
+  });
+
+  test('missing-file argv1 where literal compare matches → true via fallback', () => {
+    const logger = collectingLogger();
+    const ghostPath = join(makeTmpDir(), 'never-existed.js');
+    const result = checkIsMainModule({
+      argv1: ghostPath,
+      moduleUrl: `file://${ghostPath}`,
+      logger
+    });
+    assert.equal(result, true);
+    assert.equal(logger.warnCalls.length, 1);
+  });
+
+  // § 7.5 — shape-assertion for the log.warn fallback. The bridge logger
+  // contract is `warn(msg, data)` where data is spread into the JSON record:
+  //   { level: 'warn', msg, ...data }
+  // A prior draft of the fix had the args reversed, which would have produced
+  // a corrupted record:
+  //   { level: 'warn', msg: { err, argv1 }, '0': 'i', '1': 's', ... }
+  // This test asserts the correct shape so a future regression of the arg
+  // order is caught by CI rather than by an operator squinting at stderr.
+  test('shape: log.warn called with (msg, data) — string first, object second', () => {
+    const logger = collectingLogger();
+    const ghostPath = join(makeTmpDir(), 'never-existed.js');
+    checkIsMainModule({
+      argv1: ghostPath,
+      moduleUrl: 'file:///some/other/path.js',
+      logger
+    });
+
+    assert.equal(logger.warnCalls.length, 1);
+    const { msg, data } = logger.warnCalls[0];
+
+    // First arg MUST be the message string, not the data object.
+    assert.equal(typeof msg, 'string');
+    assert.equal(msg, 'isMainModule realpath fallback');
+
+    // Second arg MUST be the data object with err + argv1 fields.
+    assert.equal(typeof data, 'object');
+    assert.notEqual(data, null);
+    assert.equal(typeof data.err, 'string');
+    assert.ok(data.err.length > 0, 'err message should be populated');
+    assert.equal(data.argv1, ghostPath);
+
+    // Simulate the actual JSON serialization the bridge logger performs.
+    // If args were reversed, this would produce character-indexed keys
+    // (msg: {...}, '0': 'i', '1': 's', ...). Assert the canonical shape.
+    const record = JSON.parse(
+      JSON.stringify({ level: 'warn', msg, ...data })
+    );
+    assert.deepEqual(Object.keys(record).sort(), ['argv1', 'err', 'level', 'msg']);
+    assert.equal(record.level, 'warn');
+    assert.equal(record.msg, 'isMainModule realpath fallback');
+    assert.equal(record.argv1, ghostPath);
   });
 });
