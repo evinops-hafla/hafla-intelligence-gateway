@@ -1340,9 +1340,12 @@ async function main() {
  * a missing-file edge case degrades to the literal compare rather than
  * masking other errors.
  *
- * Exported for unit testing.
+ * Exported for unit testing only — the underscore prefix signals this is
+ * NOT part of the public API of @hafla/intelligence-mcp-bridge. The
+ * signature may change in patch releases without backwards-compat
+ * guarantees. Third-party consumers MUST NOT import this directly.
  */
-export function checkIsMainModule({
+export function _checkIsMainModule({
   argv1,
   moduleUrl,
   realpathFn = realpathSync,
@@ -1368,7 +1371,7 @@ export function checkIsMainModule({
   }
 }
 
-const isMainModule = checkIsMainModule({
+const isMainModule = _checkIsMainModule({
   argv1: process.argv[1],
   moduleUrl: import.meta.url
 });

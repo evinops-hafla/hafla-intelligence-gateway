@@ -38,7 +38,7 @@ import {
   extractSseJson,
   execGcloud,
   validateAudience,
-  checkIsMainModule
+  _checkIsMainModule
 } from '../src/index.js';
 
 import { assertNode24 } from '../src/version-check.js';
@@ -1588,7 +1588,7 @@ describe('forwardRequest — GATEWAY_PATH safety + query-string preservation', (
   });
 });
 
-// ── checkIsMainModule — symlink-safe execution guard (BS, 2026-05-25) ──────
+// ── _checkIsMainModule — symlink-safe execution guard (BS, 2026-05-25) ──────
 //
 // 1.0.5 silently exited (code 0, no main()) whenever argv[1] or import.meta.url
 // contained a symlink in its path — global npm bins, npx fresh-cache .bin/,
@@ -1619,10 +1619,10 @@ function collectingLogger() {
   };
 }
 
-describe('checkIsMainModule', () => {
+describe('_checkIsMainModule', () => {
   test('returns false when argv1 is undefined (REPL / library import / node -e)', () => {
     const logger = collectingLogger();
-    const result = checkIsMainModule({
+    const result = _checkIsMainModule({
       argv1: undefined,
       moduleUrl: 'file:///does/not/matter.js',
       logger
@@ -1635,7 +1635,7 @@ describe('checkIsMainModule', () => {
 
   test('returns false when argv1 is empty string', () => {
     const logger = collectingLogger();
-    const result = checkIsMainModule({
+    const result = _checkIsMainModule({
       argv1: '',
       moduleUrl: 'file:///does/not/matter.js',
       logger
@@ -1649,7 +1649,7 @@ describe('checkIsMainModule', () => {
     try {
       const filePath = join(dir, 'entry.js');
       writeFileSync(filePath, '// fixture\n');
-      const result = checkIsMainModule({
+      const result = _checkIsMainModule({
         argv1: filePath,
         moduleUrl: pathToFileURL(filePath).href
       });
@@ -1668,7 +1668,7 @@ describe('checkIsMainModule', () => {
       symlinkSync(realFile, symlinkFile);
       // argv[1] = symlink path (as passed on the CLI), moduleUrl = real path.
       // 1.0.5 bug: literal compare → false → silent exit.
-      const result = checkIsMainModule({
+      const result = _checkIsMainModule({
         argv1: symlinkFile,
         moduleUrl: pathToFileURL(realFile).href
       });
@@ -1688,7 +1688,7 @@ describe('checkIsMainModule', () => {
       // Inverse: argv[1] = real path, moduleUrl = symlinked file URL. Node
       // normally resolves import.meta.url to the real path, but this exercises
       // the symmetric realpath call on the moduleUrl side.
-      const result = checkIsMainModule({
+      const result = _checkIsMainModule({
         argv1: realFile,
         moduleUrl: pathToFileURL(symlinkFile).href
       });
@@ -1705,7 +1705,7 @@ describe('checkIsMainModule', () => {
       const fileB = join(dir, 'b.js');
       writeFileSync(fileA, '// a\n');
       writeFileSync(fileB, '// b\n');
-      const result = checkIsMainModule({
+      const result = _checkIsMainModule({
         argv1: fileA,
         moduleUrl: pathToFileURL(fileB).href
       });
@@ -1721,7 +1721,7 @@ describe('checkIsMainModule', () => {
     // realpathSync(ghostPath) throws ENOENT → catch branch runs → literal
     // compare against `file://<ghostPath>` → false. The point of this test
     // is that the function returns cleanly, doesn't propagate the throw.
-    const result = checkIsMainModule({
+    const result = _checkIsMainModule({
       argv1: ghostPath,
       moduleUrl: 'file:///some/other/path.js',
       logger
@@ -1734,7 +1734,7 @@ describe('checkIsMainModule', () => {
   test('missing-file argv1 where literal compare matches → true via fallback', () => {
     const logger = collectingLogger();
     const ghostPath = join(makeTmpDir(), 'never-existed.js');
-    const result = checkIsMainModule({
+    const result = _checkIsMainModule({
       argv1: ghostPath,
       moduleUrl: `file://${ghostPath}`,
       logger
@@ -1754,7 +1754,7 @@ describe('checkIsMainModule', () => {
   test('shape: log.warn called with (msg, data) — string first, object second', () => {
     const logger = collectingLogger();
     const ghostPath = join(makeTmpDir(), 'never-existed.js');
-    checkIsMainModule({
+    _checkIsMainModule({
       argv1: ghostPath,
       moduleUrl: 'file:///some/other/path.js',
       logger
