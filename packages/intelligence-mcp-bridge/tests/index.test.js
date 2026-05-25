@@ -1743,6 +1743,54 @@ describe('_checkIsMainModule', () => {
     assert.equal(logger.warnCalls.length, 1);
   });
 
+  // Concern #2 (post-review 2026-05-25): the fallback arm (taken when
+  // realpathSync throws) used to do a literal string compare:
+  //   moduleUrl === `file://${argv1}`
+  // On Windows that compared `file:///C:/foo/bar.js` (URL form) against
+  // `file://C:\foo\bar.js` (string concat of file:// + backslash path) →
+  // always false, so the fallback would silently exit main() on Windows
+  // whenever realpath threw. The fix uses path.resolve() on both sides
+  // after converting moduleUrl via fileURLToPath, which normalises the
+  // path separator AND any redundant `.` / `..` / double-separator
+  // segments. This test verifies the normalisation is in place by
+  // constructing inputs that differ ONLY by redundant POSIX segments —
+  // the literal-compare fallback would say false; the resolve()-based
+  // fallback says true.
+  test('fallback normalises paths (defends against Windows backslash + redundant segments)', () => {
+    const logger = collectingLogger();
+    // ghostPath ensures the realpath throw path fires (ENOENT). The
+    // canonical form has no redundant segments. The argv1 variant adds
+    // `/./` redundancy which path.resolve() collapses but literal
+    // compare retains.
+    const canonical = join(makeTmpDir(), 'never-existed.js');
+    const dir = canonical.slice(0, canonical.lastIndexOf('/'));
+    const argv1WithDotSegment = `${dir}/./never-existed.js`;
+    const moduleUrl = pathToFileURL(canonical).href;
+
+    // Pre-flight check: the two argv1 forms ARE different strings.
+    // Without this, the test would be tautological — both fallback
+    // implementations would return the same answer for identical inputs.
+    assert.notEqual(argv1WithDotSegment, canonical);
+
+    const result = _checkIsMainModule({
+      argv1: argv1WithDotSegment,
+      moduleUrl,
+      logger
+    });
+    // With the fix: path.resolve('/foo/./bar') === path.resolve('/foo/bar')
+    // → true. Without the fix: 'file:///foo/bar.js' === 'file:///foo/./bar.js'
+    // → false. So this assertion implicitly verifies the fix is in place.
+    assert.equal(
+      result,
+      true,
+      `fallback should normalise redundant '.' segments. argv1=${argv1WithDotSegment} ` +
+        `canonical=${canonical} moduleUrl=${moduleUrl}`
+    );
+    // Defensive: fallback fired (verified by the warn log) so we're
+    // testing the right arm, not the happy-path realpath compare.
+    assert.equal(logger.warnCalls.length, 1, 'fallback arm must have fired');
+  });
+
   // § 7.5 — shape-assertion for the log.warn fallback. The bridge logger
   // contract is `warn(msg, data)` where data is spread into the JSON record:
   //   { level: 'warn', msg, ...data }

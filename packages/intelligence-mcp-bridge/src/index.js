@@ -79,6 +79,7 @@ import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { realpathSync } from 'node:fs';
+import { resolve as pathResolve } from 'node:path';
 
 const execFileAsync = promisify(execFile);
 
@@ -1362,12 +1363,26 @@ export function _checkIsMainModule({
   } catch (err) {
     // argv1 WAS present (real-looking file path) but realpath failed — broken
     // symlink, permission denied, race condition. Log for visibility, then
-    // degrade to literal compare so behaviour matches 1.0.5 fallback.
+    // degrade to a normalised path compare. NOTE: the 1.0.5 fallback was a
+    // literal string compare against `file://${argv1}`, which broke on
+    // Windows where argv[1] uses backslashes (`C:\path\to\script.js`) but
+    // moduleUrl uses URL-form forward slashes (`file:///C:/path/to/script.js`).
+    // path.resolve() normalises both to the OS-native filesystem form,
+    // closing that Windows-side mismatch in the rare-but-real fallback arm
+    // (broken symlink / EACCES on Windows). On POSIX this is functionally
+    // equivalent to the 1.0.5 fallback for ENOENT cases — both produce the
+    // same answer for the same inputs.
     logger.warn('isMainModule realpath fallback', {
       err: err.message,
       argv1
     });
-    return moduleUrl === `file://${argv1}`;
+    try {
+      return pathResolve(argv1) === pathResolve(fileURLToPath(moduleUrl));
+    } catch {
+      // Last-ditch fallback if even path normalisation fails (e.g., moduleUrl
+      // isn't a valid file:// URL). Match 1.0.5 behaviour for back-compat.
+      return moduleUrl === `file://${argv1}`;
+    }
   }
 }
 
