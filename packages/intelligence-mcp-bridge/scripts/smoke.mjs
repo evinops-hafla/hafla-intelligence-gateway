@@ -24,8 +24,24 @@
  *
  * Usage:
  *   cd packages/intelligence-mcp-bridge && node scripts/smoke.mjs
+ *   node scripts/smoke.mjs --mode=symlink   # default — offline, CI-safe
+ *   node scripts/smoke.mjs --mode=e2e       # local pre-PR, needs gcloud + net
  *
- * Exits 0 on handshake success, non-zero on any failure.
+ * Modes:
+ * - symlink (default): pack → install -g → spawn → assert stderr non-empty
+ *   within a short window. Verifies ONLY that the bridge's main() actually
+ *   ran (i.e. the 1.0.5 symlink class is not regressed). Does NOT touch
+ *   gcloud, does NOT call out to mcp.hafla.com, does NOT require IAM. Safe
+ *   to run on a default GitHub Actions runner, in a clean Docker container,
+ *   or in any sandbox where the operator doesn't have @hafla.com auth.
+ *   This is the CI-gate mode.
+ * - e2e: also pipes a JSON-RPC initialize request to the bridge and asserts
+ *   a well-shaped response comes back (jsonrpc/id/result.protocolVersion/
+ *   result.serverInfo). Exercises the full stack: symlink → gcloud token
+ *   mint → gateway reachability → IAM check → MCP handshake. Local pre-PR
+ *   confidence; not viable as a CI gate.
+ *
+ * Exits 0 on success, non-zero on any failure.
  *
  * Environment requirements:
  * - User-writable global npm prefix. nvm / asdf / Volta / fnm and Homebrew
@@ -72,7 +88,32 @@ const PKG_NAME = '@hafla/intelligence-mcp-bridge';
 // stale tarballs left over from prior release iterations in the repo root.
 const PKG_TARBALL_PREFIX = 'hafla-intelligence-mcp-bridge-';
 const PKG_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const TIMEOUT_MS = 30_000;
+// e2e mode: full JSON-RPC handshake — keep the 30s budget for slow gcloud
+// token mint paths under cold cache.
+const E2E_TIMEOUT_MS = 30_000;
+// symlink mode: we're only waiting for ANY stderr byte proving main() ran.
+// On a happy path the bridge writes the pre-flight banner within ~50ms
+// (verified empirically on macOS Node 24.15.0). 5s is generous overhead
+// for slower CI runners + the npx fresh-cache materialization step.
+const SYMLINK_TIMEOUT_MS = 5_000;
+
+const MODES = ['symlink', 'e2e'];
+const DEFAULT_MODE = 'symlink';
+
+function parseMode(argv) {
+  // Single recognised flag: --mode=<symlink|e2e>. No yargs/commander —
+  // keeping Node-stdlib-only per the cross-platform contract.
+  const flag = argv.find((a) => a.startsWith('--mode='));
+  if (!flag) return DEFAULT_MODE;
+  const value = flag.slice('--mode='.length);
+  if (!MODES.includes(value)) {
+    throw new Error(
+      `unknown --mode value: ${JSON.stringify(value)}. Expected one of: ` +
+        MODES.map((m) => `--mode=${m}`).join(', ')
+    );
+  }
+  return value;
+}
 
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
@@ -267,12 +308,121 @@ function packPackage() {
   return tarballPath;
 }
 
+/**
+ * Symlink-mode assertion. Spawns the bridge from a neutral tmp cwd and
+ * waits up to SYMLINK_TIMEOUT_MS for ANY stderr output. Resolves when
+ * stderr produces its first non-empty chunk — proves main() executed
+ * (i.e. the 1.0.5 symlink class is not regressed).
+ *
+ * Why "any stderr": the bridge writes its first stderr line within ~50ms
+ * of main() starting on every code path that doesn't depend on network
+ * or auth:
+ *   - happy path → "Pre-flight OK" {...}
+ *   - gcloud absent → "intelligence-mcp-bridge: gcloud CLI not found." banner
+ *   - gcloud auth invalid → "Pre-flight failed" banner
+ * The ONLY case that produces zero stderr is checkIsMainModule returning
+ * false (the 1.0.5 silent-exit signature). So "stderr non-empty" is a
+ * faithful proxy for "main() ran" without requiring gcloud / network /
+ * IAM on the executing host. Safe to gate CI on.
+ */
+function invokeAndAssertMainRan() {
+  const cwd = mkdtempSync(join(tmpdir(), 'mcp-bridge-smoke-'));
+  logStep(`[symlink] spawning npx -y ${PKG_NAME} from ${cwd}`);
+
+  return new Promise((resolveP, rejectP) => {
+    const child = spawn(npxCmd, ['-y', PKG_NAME], {
+      cwd,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: process.env
+    });
+
+    let stderrBuf = '';
+    let stdoutBuf = '';
+    let settled = false;
+
+    const finish = (err) => {
+      if (settled) return;
+      settled = true;
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        // ignore — process may already have exited
+      }
+      rmSync(cwd, { recursive: true, force: true });
+      if (err) rejectP(err);
+      else resolveP();
+    };
+
+    const timer = setTimeout(() => {
+      // Timed out with no stderr → no proof main() ran. Treat as the
+      // symlink-regression signature. If stderr DID accumulate but we
+      // missed it (data event coalescing race), the close-handler below
+      // would have fired first; reaching the timeout with non-empty
+      // stderr is unreachable in practice.
+      if (stderrBuf.length > 0) {
+        finish(null);
+        return;
+      }
+      finish(
+        new Error(
+          `Timed out after ${SYMLINK_TIMEOUT_MS}ms with no stderr output. ` +
+            `This is the 1.0.5 silent-exit signature — main() never ran. ` +
+            `Either the symlink-resolution fix has regressed or the IIFE ` +
+            `wiring in src/index.js is broken.`
+        )
+      );
+    }, SYMLINK_TIMEOUT_MS);
+
+    child.stderr.on('data', (chunk) => {
+      stderrBuf += chunk.toString('utf8');
+      // First byte of stderr proves main() ran. Resolve immediately —
+      // don't wait for the bridge's downstream operations (gcloud token
+      // mint, gateway handshake) that we don't care about in this mode.
+      clearTimeout(timer);
+      finish(null);
+    });
+
+    child.stdout.on('data', (chunk) => {
+      stdoutBuf += chunk.toString('utf8');
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      finish(err);
+    });
+
+    child.on('close', (code) => {
+      if (settled) return;
+      clearTimeout(timer);
+      // Process exited before any stderr fired. If stdout has content
+      // (improbable but possible if a future change moves the banner
+      // to stdout), treat that as proof main() ran too. Otherwise this
+      // IS the silent-exit signature.
+      if (stderrBuf.trim() || stdoutBuf.trim()) {
+        finish(null);
+        return;
+      }
+      finish(
+        new Error(
+          `Bridge exited (code=${code}) with empty stdout AND empty stderr. ` +
+            `This is the 1.0.5 silent-exit signature — checkIsMainModule ` +
+            `returned false; main() never ran.`
+        )
+      );
+    });
+
+    // Send stdin EOF immediately. Symlink mode doesn't ask the bridge to
+    // do anything; we just need to see it start up.
+    child.stdin.end();
+  });
+}
+
 function invokeAndAssertHandshake() {
   // Spawn from os.tmpdir() — the neutral cwd that reproduces the 1.0.5 bug.
   // A monorepo cwd with a local install would shadow the global symlink
   // and hide the regression class.
   const cwd = mkdtempSync(join(tmpdir(), 'mcp-bridge-smoke-'));
-  logStep(`spawning npx -y ${PKG_NAME} from ${cwd}`);
+  logStep(`[e2e] spawning npx -y ${PKG_NAME} from ${cwd}`);
 
   return new Promise((resolveP, rejectP) => {
     const child = spawn(npxCmd, ['-y', PKG_NAME], {
@@ -301,28 +451,47 @@ function invokeAndAssertHandshake() {
     const timer = setTimeout(() => {
       finish(
         new Error(
-          `Timed out after ${TIMEOUT_MS}ms waiting for JSON-RPC response.\n` +
+          `Timed out after ${E2E_TIMEOUT_MS}ms waiting for JSON-RPC response.\n` +
             `stdout: ${stdoutBuf}\nstderr: ${stderrBuf}`
         )
       );
-    }, TIMEOUT_MS);
+    }, E2E_TIMEOUT_MS);
 
+    // Track where we've already scanned so a multi-chunk arrival doesn't
+    // re-parse the same prefix. The bridge's stdout contract today is
+    // "JSON-RPC responses, one per newline" — but a future addition (banner,
+    // debug log accidentally going to stdout) shouldn't crash the smoke.
+    // Iterate ALL newline-terminated lines as they accumulate and resolve
+    // on the first one that parses as a JSON-RPC response. Non-JSON lines
+    // are skipped silently (logged in the final diagnostic if no response
+    // ever lands). This makes the smoke resilient to any pre-handshake
+    // stdout noise without coupling the script to the bridge's stdout
+    // formatting.
+    let scannedUpTo = 0;
     child.stdout.on('data', (chunk) => {
       stdoutBuf += chunk.toString('utf8');
-      // The bridge emits one JSON object per newline-terminated line.
-      const newlineIdx = stdoutBuf.indexOf('\n');
-      if (newlineIdx === -1) return;
-      const line = stdoutBuf.slice(0, newlineIdx);
-      let response;
-      try {
-        response = JSON.parse(line);
-      } catch (err) {
-        clearTimeout(timer);
-        finish(new Error(`stdout line is not JSON: ${line} (${err.message})`));
-        return;
+      while (true) {
+        const newlineIdx = stdoutBuf.indexOf('\n', scannedUpTo);
+        if (newlineIdx === -1) return;
+        const line = stdoutBuf.slice(scannedUpTo, newlineIdx);
+        scannedUpTo = newlineIdx + 1;
+        const trimmed = line.trim();
+        // Cheap pre-filter: JSON-RPC responses start with `{`. Skip anything
+        // else without attempting to parse so non-JSON banners / debug lines
+        // don't poison the scan.
+        if (!trimmed.startsWith('{')) continue;
+        let response;
+        try {
+          response = JSON.parse(trimmed);
+        } catch {
+          continue;
+        }
+        if (response.jsonrpc === '2.0') {
+          clearTimeout(timer);
+          finish(null, response);
+          return;
+        }
       }
-      clearTimeout(timer);
-      finish(null, response);
     });
 
     child.stderr.on('data', (chunk) => {
@@ -409,6 +578,16 @@ function assertHandshakeShape(response) {
 }
 
 async function main() {
+  const mode = parseMode(process.argv.slice(2));
+  logStep(`mode=${mode}`);
+  if (mode === 'symlink') {
+    logStep(
+      'Running in isolated symlink mode (offline, no gcloud / network / ' +
+        'IAM required). To exercise the full live JSON-RPC handshake ' +
+        'against mcp.hafla.com, run with --mode=e2e.'
+    );
+  }
+
   // Fail fast on EACCES before any destructive npm command.
   assertGlobalPrefixWritable();
 
@@ -441,9 +620,14 @@ async function main() {
     tarballRef.value = packPackage();
     installGlobalFromTarball(tarballRef.value);
     mutated = true;
-    const response = await invokeAndAssertHandshake();
-    assertHandshakeShape(response);
-    logStep('PASS — JSON-RPC initialize handshake completed');
+    if (mode === 'symlink') {
+      await invokeAndAssertMainRan();
+      logStep('PASS — bridge main() executed (symlink class not regressed)');
+    } else {
+      const response = await invokeAndAssertHandshake();
+      assertHandshakeShape(response);
+      logStep('PASS — JSON-RPC initialize handshake completed');
+    }
   } catch (err) {
     process.stderr.write(`[smoke] FAIL — ${err.message}\n`);
     exitCode = 1;
