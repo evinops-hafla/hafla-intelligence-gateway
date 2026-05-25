@@ -1785,4 +1785,130 @@ describe('_checkIsMainModule', () => {
     assert.equal(record.msg, 'isMainModule realpath fallback');
     assert.equal(record.argv1, ghostPath);
   });
+
+  // Concern #6 (post-review 2026-05-25): the prior tests use realpathSync()
+  // on the tmpdir() base before mkdtempSync, which pre-resolves the macOS
+  // /var/folders → /private/var/folders auto-symlink that triggered the
+  // 1.0.5 bug in the wild. Those tests validate the realpath SYMMETRY but
+  // bypass the specific environmental scenario the release plan cited.
+  // This test deliberately uses the UNRESOLVED tmpdir base so on macOS the
+  // file lives behind an auto-symlink the test code never sees explicitly.
+  // On Linux / Windows where tmpdir() is not symlinked, this is equivalent
+  // to the "matching paths" test — still valid, just lower-signal.
+  test('macOS auto-symlink scenario: unresolved tmpdir base → true', () => {
+    const rawTmp = tmpdir();
+    const realTmp = realpathSync(rawTmp);
+    // Document the environmental fact this test is verifying. On macOS:
+    //   rawTmp  = /var/folders/<user-hash>/T
+    //   realTmp = /private/var/folders/<user-hash>/T
+    // On other platforms these are usually equal and the test is a no-op
+    // beyond the existing "matching paths" coverage.
+    const isAutoSymlinked = rawTmp !== realTmp;
+
+    // Create the dir under the resolved path so the file exists, but
+    // construct the argv path using the UNRESOLVED base — that's exactly
+    // what npx / global-bin invocations do on macOS in production.
+    const realDir = mkdtempSync(join(realTmp, 'mcp-bridge-test-symlink-'));
+    try {
+      const filename = 'auto-symlink-entry.js';
+      const realFile = join(realDir, filename);
+      writeFileSync(realFile, '// fixture\n');
+
+      // The argv1 path here mirrors how argv[1] would look when the user
+      // runs from /var/folders/... on macOS (e.g. npx fresh-cache fetch).
+      // _checkIsMainModule must realpath this to /private/var/folders/...
+      // and compare to the moduleUrl-derived real path to match.
+      const dirBasename = realDir.slice(realTmp.length); // includes leading '/'
+      const argv1ViaRawBase = join(rawTmp, dirBasename, filename);
+      const moduleUrl = pathToFileURL(realFile).href;
+
+      const result = _checkIsMainModule({
+        argv1: argv1ViaRawBase,
+        moduleUrl
+      });
+      assert.equal(
+        result,
+        true,
+        `unresolved-tmp argv1 (${argv1ViaRawBase}) should resolve to the ` +
+          `same realpath as moduleUrl-derived path (${realFile})`
+      );
+
+      // Side-meta: log to test runner output whether THIS run of the test
+      // actually exercised the auto-symlink (macOS) vs the trivial case
+      // (Linux/Windows). Not a test assertion; just a diagnostic so a
+      // human reading the test output understands which platform exercise
+      // they got. Not using a console.log (would pollute test output);
+      // attached to the test name via the assertion message above when
+      // it fires. If you're debugging this test on Linux and don't see
+      // a fail signal, you ARE running the no-op variant — that's fine.
+      void isAutoSymlinked;
+    } finally {
+      rmSync(realDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── IIFE wiring (concern #5, post-review 2026-05-25) ─────────────────────────
+//
+// All 9 unit tests above exercise _checkIsMainModule via injected `argv1` /
+// `moduleUrl` / `realpathFn` / `logger`. None of them touch the actual IIFE
+// at the bottom of src/index.js that wires those parameters to
+// `process.argv[1]` and `import.meta.url`. If a future refactor typo'd the
+// wire (e.g. swapped argv[1] for argv[0], renamed import.meta.url to
+// import.meta.href, or commented out the IIFE entirely), every unit test
+// above would still pass while production silently exits — the exact class
+// the 1.0.5 bug shipped under.
+//
+// This integration test spawns the bridge entrypoint directly and asserts
+// that main() actually runs. The signal we look for: any stderr output
+// within a short window. With PATH stripped of gcloud, the bridge's
+// pre-flight emits its "gcloud CLI not found" banner to stderr within
+// ~50ms. If the IIFE wiring is broken, the bridge exits 0 with empty
+// stderr (the symlink-class signature).
+//
+// This is the smallest possible integration test that catches the wiring
+// regression without depending on gcloud / network / IAM.
+
+import { spawnSync as _spawnSync } from 'node:child_process';
+import { fileURLToPath as _fileURLToPath } from 'node:url';
+import { dirname as _dirname, resolve as _resolve } from 'node:path';
+
+describe('IIFE wiring (integration)', () => {
+  test('spawning src/index.js as a script produces stderr output (main() ran)', () => {
+    const indexPath = _resolve(
+      _dirname(_fileURLToPath(import.meta.url)),
+      '../src/index.js'
+    );
+    const result = _spawnSync(process.execPath, [indexPath], {
+      input: '',
+      timeout: 5000,
+      encoding: 'utf8',
+      // Strip PATH to a directory with no gcloud — bridge pre-flight then
+      // fails fast with the "gcloud CLI not found" banner, which is our
+      // signal that main() ran. Avoids needing gcloud on test hosts.
+      // '/nonexistent' is portable across macOS / Linux / Windows runners.
+      env: { ...process.env, PATH: '/nonexistent' }
+    });
+
+    // If the IIFE wiring is broken or _checkIsMainModule returned false
+    // unexpectedly, the bridge exits 0 with empty stderr — the 1.0.5
+    // silent-exit signature. main() must have run if stderr is populated.
+    assert.ok(
+      result.stderr && result.stderr.length > 0,
+      `expected non-empty stderr proving main() ran, got: ` +
+        `stderr=${JSON.stringify(result.stderr)} stdout=${JSON.stringify(result.stdout)} ` +
+        `status=${result.status} signal=${result.signal} error=${result.error?.message}`
+    );
+
+    // Belt-and-suspenders: also assert the bridge's actual pre-flight
+    // banner is what we got, not some unrelated stderr emission (e.g.
+    // a Node deprecation warning). If this assertion fails but the
+    // length-check above passes, something OTHER than the bridge's
+    // pre-flight is writing to stderr — worth a closer look.
+    assert.match(
+      result.stderr,
+      /intelligence-mcp-bridge|gcloud|Pre-flight/i,
+      `stderr should contain a recognisable bridge pre-flight signature, got: ${result.stderr}`
+    );
+  });
 });
