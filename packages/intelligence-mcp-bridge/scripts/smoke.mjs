@@ -26,16 +26,51 @@
  *   cd packages/intelligence-mcp-bridge && node scripts/smoke.mjs
  *
  * Exits 0 on handshake success, non-zero on any failure.
+ *
+ * Environment requirements:
+ * - User-writable global npm prefix. nvm / asdf / Volta / fnm and Homebrew
+ *   node-on-/opt/homebrew satisfy this by default. Stock system Node with
+ *   prefix at /usr/local/lib/node_modules requires either chowning the
+ *   prefix to your user or setting a user-prefix via `npm config set
+ *   prefix ~/.npm-global`. Do NOT run this script under sudo — sudo hides
+ *   the misconfig signal and pollutes root-owned global state.
+ * - The script enforces this at startup via assertGlobalPrefixWritable()
+ *   so EACCES failures from `npm install -g` surface as a clear diagnostic
+ *   instead of a confusing mid-run crash.
+ *
+ * Note on npx resolution (npm 11+):
+ * - `npx` resolves globally installed packages via npm's internal prefix
+ *   config (`npm config get prefix`) and the global node_modules cache —
+ *   NOT via the POSIX shell PATH variable. Stripping the global bin
+ *   directory from PATH does NOT cause silent fallback to a registry
+ *   fetch (verified empirically against npm 11.15.0). The only way npx
+ *   would fall back to fetching the broken 1.0.5 from the registry is a
+ *   pathological npmrc misconfig where `prefix` points to a different
+ *   directory than the one `npm install -g` actually wrote to, which no
+ *   PATH check would detect anyway. This note exists so future reviewers
+ *   don't re-raise the (mistaken) "PATH dependency" concern.
  */
 
 import { spawnSync, spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, readdirSync, existsSync } from 'node:fs';
+import {
+  mkdtempSync,
+  rmSync,
+  readdirSync,
+  existsSync,
+  accessSync,
+  constants as fsConstants
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 
 const PKG_NAME = '@hafla/intelligence-mcp-bridge';
+// Tarball basename starts with the package name with the leading "@" stripped
+// and the "/" replaced by "-" (npm pack convention). Pre-derived once so the
+// fallback glob in packPackage() can filter narrowly without false-matching
+// stale tarballs left over from prior release iterations in the repo root.
+const PKG_TARBALL_PREFIX = 'hafla-intelligence-mcp-bridge-';
 const PKG_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TIMEOUT_MS = 30_000;
 
@@ -54,6 +89,85 @@ function runNpm(args, opts = {}) {
   });
   if (result.error) throw result.error;
   return result;
+}
+
+/**
+ * Startup guard: prove the npm global prefix is writable by the current
+ * user before doing anything destructive. EACCES from `npm install -g`
+ * mid-run would otherwise leave the prior global install uninstalled but
+ * not yet replaced — confusing half-state. Failing fast at startup keeps
+ * the operator's machine in a known state.
+ *
+ * nvm / asdf / Volta / fnm and Homebrew-on-/opt/homebrew users pass this
+ * trivially. Stock system Node with `/usr/local/lib/node_modules` as the
+ * prefix will fail this check unless the operator owns that directory.
+ * Sudo would mask the signal AND pollute root-owned global state, so the
+ * error message explicitly tells the operator not to reach for sudo.
+ */
+function assertGlobalPrefixWritable() {
+  const result = runNpm(['config', 'get', 'prefix']);
+  const prefix = result.stdout.trim();
+  if (!prefix) {
+    throw new Error(
+      '`npm config get prefix` returned empty — cannot determine global ' +
+        'install destination. Check your npm installation.'
+    );
+  }
+  try {
+    accessSync(prefix, fsConstants.W_OK);
+  } catch {
+    throw new Error(
+      `npm global prefix is not writable: ${prefix}\n` +
+        `  This script needs to write to the global node_modules directory to\n` +
+        `  pack-install-spawn the bridge end-to-end. Options:\n` +
+        `    1. Use a version manager that owns its own prefix (nvm, asdf,\n` +
+        `       Volta, fnm) — recommended.\n` +
+        `    2. Reconfigure npm to a user-owned prefix:\n` +
+        `         mkdir -p ~/.npm-global\n` +
+        `         npm config set prefix ~/.npm-global\n` +
+        `         export PATH=~/.npm-global/bin:$PATH\n` +
+        `    3. (NOT RECOMMENDED) chown the existing prefix to your user.\n` +
+        `  Do NOT run this script under sudo — sudo hides the misconfig\n` +
+        `  signal AND pollutes root-owned global state.`
+    );
+  }
+  logStep(`global prefix writable: ${prefix}`);
+}
+
+/**
+ * Register SIGINT / SIGTERM handlers that print the manual recovery recipe
+ * before exiting. We deliberately do NOT attempt full emergency cleanup
+ * inside the handler — each `npm uninstall -g` / `npm install -g` is a
+ * multi-second spawnSync that itself blocks SIGINT delivery and can be
+ * interrupted again, producing worse half-state than no handler at all.
+ * The handler's contract is "operator gets actionable recovery commands
+ * the moment they Ctrl-C", not "machine ends in pristine state".
+ *
+ * Refs to tarball + prior-state are passed by-handle (objects with .value)
+ * so the closure picks up state mutated AFTER handler registration without
+ * re-registering on every state change.
+ */
+function registerShutdownHandlers({ tarballRef, priorRef }) {
+  const onSignal = (signal) => {
+    process.stderr.write(
+      `\n[smoke] interrupted by ${signal}. Global npm state may be modified.\n` +
+        `[smoke] Manual recovery commands:\n` +
+        `  npm uninstall -g ${PKG_NAME}\n`
+    );
+    if (priorRef.value?.installed) {
+      process.stderr.write(
+        `  npm install -g ${PKG_NAME}@${priorRef.value.version}\n`
+      );
+    }
+    if (tarballRef.value && existsSync(tarballRef.value)) {
+      process.stderr.write(`  rm '${tarballRef.value}'\n`);
+    }
+    // 130 is the conventional "interrupted by SIGINT" exit code. Some CI
+    // runners (notably GitHub Actions) inspect this for run-status framing.
+    process.exit(signal === 'SIGINT' ? 130 : 143);
+  };
+  process.on('SIGINT', () => onSignal('SIGINT'));
+  process.on('SIGTERM', () => onSignal('SIGTERM'));
 }
 
 function snapshotGlobalState() {
@@ -127,12 +241,18 @@ function packPackage() {
   const tarballPath = resolve(PKG_DIR, filename);
   if (!existsSync(tarballPath)) {
     // Some npm versions emit a scoped subpath; fall back to globbing the dir.
-    const candidates = readdirSync(PKG_DIR).filter((n) =>
-      n.endsWith('.tgz')
+    // Filter by package-name prefix so stale .tgz files from prior release
+    // iterations (or other packages packed into the same dir) don't poison
+    // the candidate set. Without the prefix filter, a single stale tgz
+    // would force candidates.length !== 1 and throw spuriously.
+    const candidates = readdirSync(PKG_DIR).filter(
+      (n) => n.startsWith(PKG_TARBALL_PREFIX) && n.endsWith('.tgz')
     );
     if (candidates.length === 1) return resolve(PKG_DIR, candidates[0]);
     throw new Error(
-      `pack reported ${filename} but file not found at ${tarballPath}`
+      `pack reported ${filename} but file not found at ${tarballPath} ` +
+        `(fallback glob found ${candidates.length} candidate(s) matching ` +
+        `${PKG_TARBALL_PREFIX}*.tgz)`
     );
   }
   return tarballPath;
@@ -256,13 +376,25 @@ function assertHandshakeShape(response) {
 }
 
 async function main() {
-  const prior = snapshotGlobalState();
-  let tarball = null;
+  // Fail fast on EACCES before any destructive npm command.
+  assertGlobalPrefixWritable();
+
+  // Register signal handlers with by-handle refs so the closures pick up
+  // tarball + prior state as they get populated below. SIGINT/SIGTERM
+  // skip the finally{} arm in async functions (Node terminates without
+  // running pending awaits), so the handler is our only chance to tell
+  // the operator how to recover. Verified empirically — see CHANGELOG /
+  // commit message.
+  const tarballRef = { value: null };
+  const priorRef = { value: null };
+  registerShutdownHandlers({ tarballRef, priorRef });
+
+  priorRef.value = snapshotGlobalState();
   let exitCode = 0;
   try {
-    tarball = packPackage();
+    tarballRef.value = packPackage();
     uninstallGlobal();
-    installGlobalFromTarball(tarball);
+    installGlobalFromTarball(tarballRef.value);
     const response = await invokeAndAssertHandshake();
     assertHandshakeShape(response);
     logStep('PASS — JSON-RPC initialize handshake completed');
@@ -271,9 +403,9 @@ async function main() {
     exitCode = 1;
   } finally {
     uninstallGlobal();
-    restoreGlobalState(prior);
-    if (tarball && existsSync(tarball)) {
-      rmSync(tarball, { force: true });
+    restoreGlobalState(priorRef.value);
+    if (tarballRef.value && existsSync(tarballRef.value)) {
+      rmSync(tarballRef.value, { force: true });
     }
   }
   process.exit(exitCode);
