@@ -191,8 +191,17 @@ function snapshotGlobalState() {
 
 function uninstallGlobal() {
   logStep(`uninstalling global ${PKG_NAME} (if present)`);
-  // Ignore failures — package may not be installed.
-  runNpm(['uninstall', '-g', PKG_NAME]);
+  // Soft-tolerate failures: npm uninstall of an absent package exits non-zero
+  // on some npm versions, which is normal. But if uninstall fails for a real
+  // reason (corrupted store, permission issue), the operator deserves a clue
+  // so a downstream `npm install -g` failure has context. Log stderr on
+  // non-zero exit; do not throw — the caller has its own recovery semantics.
+  const result = runNpm(['uninstall', '-g', PKG_NAME]);
+  if (result.status !== 0 && result.stderr?.trim()) {
+    logStep(
+      `npm uninstall -g exited ${result.status} (non-fatal): ${result.stderr.trim()}`
+    );
+  }
 }
 
 function installGlobalFromTarball(tarball) {
@@ -327,15 +336,39 @@ function invokeAndAssertHandshake() {
 
     child.on('close', (code) => {
       // If we already settled with a response, this is just the post-kill
-      // exit; ignore. If not settled, the bridge exited without ever
-      // responding — the exact 1.0.5 silent-exit failure mode.
+      // exit; ignore. Otherwise: bridge exited before producing JSON-RPC.
+      // Disambiguate based on observed signals — DO NOT blame the symlink
+      // bug unconditionally. Three causes share the symptom:
+      //   (a) actual symlink regression — exit 0, no stderr, no stdout
+      //   (b) gateway/network unreachable — exit ≠ 0, stderr non-empty
+      //   (c) gcloud auth / pre-flight failure — exit 0 or 1, stderr
+      //       contains the bridge's diagnostic banner
+      // (a) is the only case the smoke is here to gate. (b)/(c) are
+      // environment issues the operator needs to fix, not a regression.
       if (settled) return;
       clearTimeout(timer);
+      const stderrTrim = stderrBuf.trim();
+      const stdoutTrim = stdoutBuf.trim();
+      let diagnosis;
+      if (code === 0 && !stderrTrim && !stdoutTrim) {
+        diagnosis =
+          'SYMLINK REGRESSION — bridge exited 0 with no output. This is the ' +
+          '1.0.5 silent-exit signature. checkIsMainModule did not return ' +
+          'true; main() never ran.';
+      } else {
+        diagnosis =
+          `ENVIRONMENT FAILURE (not the symlink class) — bridge exited ${code} ` +
+          `with output present. The bridge's main() executed but failed ` +
+          `downstream (typically: gcloud absent, gcloud auth invalid, ` +
+          `gateway unreachable, or IAM rejection). Inspect stderr below to ` +
+          `triage.`;
+      }
       finish(
         new Error(
-          `Bridge exited with code ${code} before producing JSON-RPC response.\n` +
-            `This is the 1.0.5 symlink silent-exit signature.\n` +
-            `stdout: ${stdoutBuf}\nstderr: ${stderrBuf}`
+          `Bridge exited (code=${code}) before JSON-RPC response.\n` +
+            `Diagnosis: ${diagnosis}\n` +
+            `stdout: ${stdoutTrim || '<empty>'}\n` +
+            `stderr: ${stderrTrim || '<empty>'}`
         )
       );
     });
@@ -390,11 +423,24 @@ async function main() {
   registerShutdownHandlers({ tarballRef, priorRef });
 
   priorRef.value = snapshotGlobalState();
+
+  // Tracks whether we have actually mutated global npm state. The finally
+  // arm only runs uninstall + restore when this is true. This closes the
+  // failure mode where `packPackage()` throws (transient disk, file
+  // permission, etc.) BEFORE we touch the global install: previously the
+  // finally still ran `uninstallGlobal()` against the operator's prior
+  // working install, then tried to `restoreGlobalState` from the registry —
+  // if the operator was offline (same root cause as the pack failure),
+  // restore would fail and the operator would be left with no global
+  // install at all. Empirically verified that `npm install -g <tarball>`
+  // overwrites an existing install atomically ("changed 1 package"), so
+  // the explicit prior uninstall was never needed in the first place.
+  let mutated = false;
   let exitCode = 0;
   try {
     tarballRef.value = packPackage();
-    uninstallGlobal();
     installGlobalFromTarball(tarballRef.value);
+    mutated = true;
     const response = await invokeAndAssertHandshake();
     assertHandshakeShape(response);
     logStep('PASS — JSON-RPC initialize handshake completed');
@@ -402,8 +448,12 @@ async function main() {
     process.stderr.write(`[smoke] FAIL — ${err.message}\n`);
     exitCode = 1;
   } finally {
-    uninstallGlobal();
-    restoreGlobalState(priorRef.value);
+    if (mutated) {
+      uninstallGlobal();
+      restoreGlobalState(priorRef.value);
+    } else {
+      logStep('global state not modified — skipping restore');
+    }
     if (tarballRef.value && existsSync(tarballRef.value)) {
       rmSync(tarballRef.value, { force: true });
     }
