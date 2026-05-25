@@ -115,8 +115,27 @@ function parseMode(argv) {
   return value;
 }
 
-const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+const isWin32 = process.platform === 'win32';
+const npmCmd = isWin32 ? 'npm.cmd' : 'npm';
+const npxCmd = isWin32 ? 'npx.cmd' : 'npx';
+
+// Node 24 added CVE-2024-27980 hardening that rejects direct spawn of .cmd /
+// .bat files unless `shell: true` is set. The same fix landed in src/index.js
+// for the gcloud execFile call (PR #5). Mirrored here for npm.cmd / npx.cmd.
+// Safe to enable shell:true because every command this script issues is
+// constructed from hardcoded argv arrays (no operator input ever reaches
+// argv positions where shell metacharacters could be interpreted).
+const SPAWN_OPTS_WIN32 = isWin32 ? { shell: true } : {};
+
+// Bridge-output signature: the set of stderr markers that prove output came
+// from the bridge itself rather than from npx/npm warning noise. Used in
+// --mode=symlink to filter out generic environment chatter (e.g.,
+// `npm warn exec ...`, deprecation warnings) that could otherwise resolve
+// the assertion before the bridge has had a chance to print anything.
+// The IIFE wiring test in tests/index.test.js uses the same pattern; this
+// is the smoke counterpart.
+const BRIDGE_STDERR_SIGNATURE =
+  /intelligence-mcp-bridge|gcloud|Pre-flight|Uncaught error|"level":/i;
 
 function logStep(msg) {
   process.stderr.write(`[smoke] ${msg}\n`);
@@ -126,10 +145,51 @@ function runNpm(args, opts = {}) {
   const result = spawnSync(npmCmd, args, {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
+    ...SPAWN_OPTS_WIN32,
     ...opts
   });
   if (result.error) throw result.error;
   return result;
+}
+
+/**
+ * Best-effort tmp-cwd cleanup that retries once on Windows EBUSY/ENOTEMPTY.
+ * When a spawned child holds file handles in the cwd at the moment we call
+ * rmSync, Windows refuses the unlink until the child fully releases its
+ * handles (kernel-level lock, not Node-level). POSIX has no equivalent
+ * race; the first attempt always succeeds. The retry path is Windows-only
+ * pragmatism — 500ms is enough for the child's handles to drain in the
+ * vast majority of cases, and the `force: true` flag swallows the residual
+ * "already gone" cases on the retry.
+ *
+ * Failure logging only — never throws. A leaked tmp dir is a hygiene
+ * issue (operator's tmpdir grows by ~0 bytes per invocation), not a
+ * correctness issue.
+ */
+function tryRmTmpCwd(cwd) {
+  try {
+    rmSync(cwd, { recursive: true, force: true });
+    return;
+  } catch (err) {
+    if (!isWin32) {
+      // POSIX shouldn't hit this. Log the surprising failure for visibility
+      // but don't retry — there's no race window to wait out.
+      logStep(`rmSync failed (non-Windows): ${err.message}`);
+      return;
+    }
+    // Windows: schedule one retry. Setting `unref()` so this timer doesn't
+    // keep the event loop alive after the smoke is otherwise done.
+    setTimeout(() => {
+      try {
+        rmSync(cwd, { recursive: true, force: true });
+      } catch (retryErr) {
+        logStep(
+          `rmSync retry also failed on ${cwd}: ${retryErr.message}. ` +
+            `Manual cleanup may be needed.`
+        );
+      }
+    }, 500).unref?.();
+  }
 }
 
 /**
@@ -188,20 +248,39 @@ function assertGlobalPrefixWritable() {
  * so the closure picks up state mutated AFTER handler registration without
  * re-registering on every state change.
  */
-function registerShutdownHandlers({ tarballRef, priorRef }) {
+function registerShutdownHandlers({ tarballRef, priorRef, mutatedRef }) {
   const onSignal = (signal) => {
-    process.stderr.write(
-      `\n[smoke] interrupted by ${signal}. Global npm state may be modified.\n` +
-        `[smoke] Manual recovery commands:\n` +
-        `  npm uninstall -g ${PKG_NAME}\n`
-    );
-    if (priorRef.value?.installed) {
+    // Two distinct cases here, and getting them wrong is harmful:
+    //   1. Ctrl-C BEFORE `installGlobalFromTarball()` succeeded → operator's
+    //      prior global install is untouched. Telling them to
+    //      `npm uninstall -g` would force them to redundantly nuke a
+    //      working install. Stay silent on uninstall in this case.
+    //   2. Ctrl-C AFTER install succeeded → smoke replaced the prior install
+    //      with the tarball candidate. Operator does need to uninstall the
+    //      candidate (+ restore prior version) to get back to clean state.
+    // The mutatedRef.value boolean (set in main() right after install)
+    // tells us which case we're in. The tarball cleanup is independent —
+    // pack can succeed even if install never runs, so the tarball might
+    // exist regardless of mutation.
+    process.stderr.write(`\n[smoke] interrupted by ${signal}.\n`);
+    if (mutatedRef?.value) {
       process.stderr.write(
-        `  npm install -g ${PKG_NAME}@${priorRef.value.version}\n`
+        `[smoke] Global npm state WAS modified. Manual recovery:\n` +
+          `  npm uninstall -g ${PKG_NAME}\n`
+      );
+      if (priorRef.value?.installed) {
+        process.stderr.write(
+          `  npm install -g ${PKG_NAME}@${priorRef.value.version}\n`
+        );
+      }
+    } else {
+      process.stderr.write(
+        `[smoke] Global npm state NOT modified (interrupted before install). ` +
+          `No uninstall/restore needed.\n`
       );
     }
     if (tarballRef.value && existsSync(tarballRef.value)) {
-      process.stderr.write(`  rm '${tarballRef.value}'\n`);
+      process.stderr.write(`[smoke] Orphan tarball cleanup:\n  rm '${tarballRef.value}'\n`);
     }
     // 130 is the conventional "interrupted by SIGINT" exit code. Some CI
     // runners (notably GitHub Actions) inspect this for run-status framing.
@@ -333,7 +412,8 @@ function invokeAndAssertMainRan() {
     const child = spawn(npxCmd, ['-y', PKG_NAME], {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: process.env
+      env: process.env,
+      ...SPAWN_OPTS_WIN32
     });
 
     let stderrBuf = '';
@@ -348,38 +428,43 @@ function invokeAndAssertMainRan() {
       } catch {
         // ignore — process may already have exited
       }
-      rmSync(cwd, { recursive: true, force: true });
+      tryRmTmpCwd(cwd);
       if (err) rejectP(err);
       else resolveP();
     };
 
     const timer = setTimeout(() => {
-      // Timed out with no stderr → no proof main() ran. Treat as the
-      // symlink-regression signature. If stderr DID accumulate but we
-      // missed it (data event coalescing race), the close-handler below
-      // would have fired first; reaching the timeout with non-empty
-      // stderr is unreachable in practice.
-      if (stderrBuf.length > 0) {
+      // Timed out. The question is: did we see bridge-shaped output? Generic
+      // npx/npm noise on stderr doesn't prove main() ran — we need the
+      // bridge's pre-flight signature specifically.
+      if (BRIDGE_STDERR_SIGNATURE.test(stderrBuf)) {
         finish(null);
         return;
       }
       finish(
         new Error(
-          `Timed out after ${SYMLINK_TIMEOUT_MS}ms with no stderr output. ` +
-            `This is the 1.0.5 silent-exit signature — main() never ran. ` +
-            `Either the symlink-resolution fix has regressed or the IIFE ` +
-            `wiring in src/index.js is broken.`
+          `Timed out after ${SYMLINK_TIMEOUT_MS}ms without bridge-shaped ` +
+            `stderr output. This is the 1.0.5 silent-exit signature — ` +
+            `main() never ran. Either the symlink-resolution fix has ` +
+            `regressed or the IIFE wiring in src/index.js is broken. ` +
+            `Accumulated stderr (may be empty or npx noise): ` +
+            JSON.stringify(stderrBuf.slice(0, 500))
         )
       );
     }, SYMLINK_TIMEOUT_MS);
 
     child.stderr.on('data', (chunk) => {
       stderrBuf += chunk.toString('utf8');
-      // First byte of stderr proves main() ran. Resolve immediately —
-      // don't wait for the bridge's downstream operations (gcloud token
-      // mint, gateway handshake) that we don't care about in this mode.
-      clearTimeout(timer);
-      finish(null);
+      // Filter on bridge signature: npx/npm may emit warnings to stderr
+      // before the bridge has spawned (fresh cache install banners, audit
+      // warnings, etc.). Resolving on the first npm warn would false-pass
+      // the symlink class. Wait for output that matches the bridge's own
+      // pre-flight surface. Same defensive regex as the IIFE wiring test
+      // in tests/index.test.js.
+      if (BRIDGE_STDERR_SIGNATURE.test(stderrBuf)) {
+        clearTimeout(timer);
+        finish(null);
+      }
     });
 
     child.stdout.on('data', (chunk) => {
@@ -394,19 +479,24 @@ function invokeAndAssertMainRan() {
     child.on('close', (code) => {
       if (settled) return;
       clearTimeout(timer);
-      // Process exited before any stderr fired. If stdout has content
-      // (improbable but possible if a future change moves the banner
-      // to stdout), treat that as proof main() ran too. Otherwise this
-      // IS the silent-exit signature.
-      if (stderrBuf.trim() || stdoutBuf.trim()) {
+      // Process exited before bridge-shaped stderr fired. Check stdout too
+      // (defensive: a future change might route the banner to stdout) and
+      // re-test stderr against the signature in case the final close came
+      // before the data event for the last chunk fired.
+      if (
+        BRIDGE_STDERR_SIGNATURE.test(stderrBuf) ||
+        BRIDGE_STDERR_SIGNATURE.test(stdoutBuf)
+      ) {
         finish(null);
         return;
       }
       finish(
         new Error(
-          `Bridge exited (code=${code}) with empty stdout AND empty stderr. ` +
-            `This is the 1.0.5 silent-exit signature — checkIsMainModule ` +
-            `returned false; main() never ran.`
+          `Bridge exited (code=${code}) without bridge-shaped output. ` +
+            `This is the 1.0.5 silent-exit signature — _checkIsMainModule ` +
+            `returned false; main() never ran. ` +
+            `Accumulated stderr: ${JSON.stringify(stderrBuf.slice(0, 500))} ` +
+            `Accumulated stdout: ${JSON.stringify(stdoutBuf.slice(0, 500))}`
         )
       );
     });
@@ -428,7 +518,8 @@ function invokeAndAssertHandshake() {
     const child = spawn(npxCmd, ['-y', PKG_NAME], {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: process.env
+      env: process.env,
+      ...SPAWN_OPTS_WIN32
     });
 
     let stdoutBuf = '';
@@ -443,7 +534,7 @@ function invokeAndAssertHandshake() {
       } catch {
         // ignore — process may already have exited
       }
-      rmSync(cwd, { recursive: true, force: true });
+      tryRmTmpCwd(cwd);
       if (err) rejectP(err);
       else resolveP(value);
     };
@@ -554,6 +645,16 @@ function invokeAndAssertHandshake() {
       }
     };
     child.stdin.write(JSON.stringify(initRequest) + '\n');
+    // EOF the stdin pipe immediately. The bridge will: (a) finish processing
+    // the queued initialize request, (b) write the response to stdout, (c)
+    // see EOF on stdin, (d) drain in-flight work and exit cleanly through
+    // its own shutdown path (src/index.js shutdown drain). Without the EOF,
+    // the bridge keeps stdin open waiting for more JSON-RPC frames and only
+    // exits when we SIGTERM it from finish() — which is reliable on POSIX
+    // but flaky on Windows where SIGTERM doesn't always reach the child,
+    // leading to a grandchild process leak. Sending EOF makes the exit
+    // path OS-portable.
+    child.stdin.end();
   });
 }
 
@@ -597,12 +698,6 @@ async function main() {
   // running pending awaits), so the handler is our only chance to tell
   // the operator how to recover. Verified empirically — see CHANGELOG /
   // commit message.
-  const tarballRef = { value: null };
-  const priorRef = { value: null };
-  registerShutdownHandlers({ tarballRef, priorRef });
-
-  priorRef.value = snapshotGlobalState();
-
   // Tracks whether we have actually mutated global npm state. The finally
   // arm only runs uninstall + restore when this is true. This closes the
   // failure mode where `packPackage()` throws (transient disk, file
@@ -614,12 +709,25 @@ async function main() {
   // install at all. Empirically verified that `npm install -g <tarball>`
   // overwrites an existing install atomically ("changed 1 package"), so
   // the explicit prior uninstall was never needed in the first place.
-  let mutated = false;
+  //
+  // Wrapped in a ref so the signal handler closure (registered below) can
+  // observe mutations made after registration. SIGINT BEFORE the install
+  // succeeded gets a "no recovery needed" message; SIGINT AFTER gets the
+  // full uninstall+restore recipe. Without the ref, the handler would
+  // always print the destructive recovery — misleading the operator into
+  // nuking a working prior install if they Ctrl-C'd before mutation.
+  const tarballRef = { value: null };
+  const priorRef = { value: null };
+  const mutatedRef = { value: false };
+  registerShutdownHandlers({ tarballRef, priorRef, mutatedRef });
+
+  priorRef.value = snapshotGlobalState();
+
   let exitCode = 0;
   try {
     tarballRef.value = packPackage();
     installGlobalFromTarball(tarballRef.value);
-    mutated = true;
+    mutatedRef.value = true;
     if (mode === 'symlink') {
       await invokeAndAssertMainRan();
       logStep('PASS — bridge main() executed (symlink class not regressed)');
@@ -632,7 +740,7 @@ async function main() {
     process.stderr.write(`[smoke] FAIL — ${err.message}\n`);
     exitCode = 1;
   } finally {
-    if (mutated) {
+    if (mutatedRef.value) {
       uninstallGlobal();
       restoreGlobalState(priorRef.value);
     } else {
