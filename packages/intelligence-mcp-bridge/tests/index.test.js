@@ -47,6 +47,10 @@ import {
   DEFAULT_DRAIN_TIMEOUT_MS
 } from '../src/drain-timeout.js';
 
+// Same JSON import the bridge uses for its User-Agent — assert version
+// parity rather than maintaining a hardcoded duplicate in the test.
+import pkg from '../package.json' with { type: 'json' };
+
 // ── JWT-shaped token builder for cross-check tests ──────────────────────────
 // Cross-check decodes the minted token's payload; tests need real JWT-shaped
 // inputs (header.payload.fakesig) so the decoder doesn't reject them.
@@ -1116,6 +1120,81 @@ describe('forwardRequest', () => {
     );
     assert.equal(result.error.code, -32000);
     assert.match(result.error.message, /503/);
+  });
+
+  // User-Agent reports the actual package version on every outbound request.
+  // Pre-1.0.6 this was hardcoded `intelligence-mcp-bridge/1.0`, which masked
+  // the real version on 100% of bridge traffic in Cloud Run access logs
+  // (verified against mcp-gateway-production logs 2026-05-26 — all bridge
+  // entries showed `1.0` regardless of which version was actually running).
+  // The test asserts (a) the header is present, (b) it reports the current
+  // package.json version, (c) the format follows `product/semver` per RFC
+  // 7231 § 5.5.3 — downstream gateway-side analytics parses this with a
+  // prefix regex `/^intelligence-mcp-bridge\/(\S+)/` and any drift here
+  // breaks that.
+  test('User-Agent header reports actual package version', async () => {
+    let capturedOptions;
+    const captureHttpRequest = (options, callback) => {
+      capturedOptions = options;
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.end = () => {
+        const res = new EventEmitter();
+        res.statusCode = 200;
+        res.setEncoding = () => {};
+        callback(res);
+        setImmediate(() => {
+          res.emit(
+            'data',
+            JSON.stringify({ jsonrpc: '2.0', result: { ok: true }, id: 1 })
+          );
+          res.emit('end');
+        });
+      };
+      req.destroy = () => {};
+      return req;
+    };
+
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/list', id: 1 },
+      {
+        tokenCache,
+        httpRequestFn: captureHttpRequest,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+
+    assert.ok(
+      capturedOptions?.headers,
+      'mock should have captured request options + headers'
+    );
+    const ua = capturedOptions.headers['User-Agent'];
+    assert.ok(ua, 'User-Agent header must be present');
+
+    // Exact match against the imported package.json version — catches both
+    // (a) accidental hardcoding regressions and (b) version drift between
+    // src/index.js and package.json.
+    assert.equal(
+      ua,
+      `intelligence-mcp-bridge/${pkg.version}`,
+      `User-Agent should be 'intelligence-mcp-bridge/${pkg.version}', got '${ua}'`
+    );
+
+    // Parse-stability check: the format MUST stay `product/semver` (prefix-
+    // stable, append-only for any future enrichment). If a future maintainer
+    // changes the format, this assertion fails before it ships to consumers
+    // whose analytics parsers depend on the prefix.
+    assert.match(
+      ua,
+      /^intelligence-mcp-bridge\/\d+\.\d+\.\d+/,
+      'User-Agent must follow product/semver prefix (RFC 7231 § 5.5.3)'
+    );
   });
 });
 

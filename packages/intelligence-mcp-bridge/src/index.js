@@ -80,11 +80,26 @@ import { Transform } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { realpathSync } from 'node:fs';
 import { resolve as pathResolve } from 'node:path';
+// Stable JSON imports landed in Node 22.x; we already require Node 24 (see
+// version-check.js / assertNode24). package.json is always shipped with the
+// package (npm includes it by default; the `files` array in package.json
+// can omit only its siblings, never itself).
+import pkg from '../package.json' with { type: 'json' };
 
 const execFileAsync = promisify(execFile);
 
 // Windows ships gcloud as gcloud.cmd; Node's execFile doesn't apply PATHEXT.
 const GCLOUD_BIN = process.platform === 'win32' ? 'gcloud.cmd' : 'gcloud';
+
+// User-Agent reports the actual package version on every outbound gateway
+// request. The string format is `product/semver` per RFC 7231 § 5.5.3 —
+// downstream consumers (Cloud Run access logs, gateway analytics) parse
+// this with a prefix-only regex (`/^intelligence-mcp-bridge\/(\S+)/`).
+// Keep the `product/semver` prefix stable across releases. Any future
+// enrichment (Node version, OS) goes after a space — append-only — so
+// existing parsers keep working. Pre-1.0.6 this was hardcoded `1.0`,
+// masking real version on 100% of bridge traffic in Cloud Run logs.
+const BRIDGE_USER_AGENT = `intelligence-mcp-bridge/${pkg.version}`;
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
@@ -927,7 +942,7 @@ export async function forwardRequest(
         'Content-Length': Buffer.byteLength(messageStr),
         Authorization: `Bearer ${token}`,
         Accept: 'application/json, text/event-stream',
-        'User-Agent': 'intelligence-mcp-bridge/1.0'
+        'User-Agent': BRIDGE_USER_AGENT
       }
     };
 
