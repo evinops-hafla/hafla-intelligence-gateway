@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [1.0.7] — 2026-05-27
+
+### Fixed
+
+- **Notifications no longer produce a spurious response frame on stdout.**
+  Per JSON-RPC 2.0 § 4.1, a notification is a request object without an
+  `id` member; servers MUST NOT return a response. The bridge was
+  unconditionally writing whatever `forwardRequest` returned to stdout,
+  so a `notifications/initialized` frame produced a spurious
+  `{"error":"Gateway returned 202","id":null}` error frame. Fixed by a
+  single-site gate in `handleMessage`: `pushFn` is now called only when
+  `'id' in message` (i.e. for requests, not notifications). When the
+  gateway returns an error frame for a notification, the bridge logs a
+  `warn` to stderr for operator visibility but emits nothing on stdout.
+  Detection uses `!('id' in message)` per spec — `"id": null` is a valid
+  request id, not a notification. Three new tests pin the contract (issue
+  [#8](https://github.com/evinops-hafla/hafla-intelligence-gateway/issues/8)).
+
 ## [1.0.6] — 2026-05-26
 
 ### Fixed
