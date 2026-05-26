@@ -1,6 +1,6 @@
 # `@hafla/intelligence-mcp-bridge`
 
-**Status:** Production (1.0.6 — see [CHANGELOG.md](./CHANGELOG.md)).
+**Status:** Production. Current published version: `1.0.5`. Next release: `1.0.6` (in flight — see [CHANGELOG.md](./CHANGELOG.md)). The install snippets below pin `@1.0.6` ahead of publish; until the registry catches up, use `@1.0.5` or omit the pin.
 
 A small stdio↔HTTPS shim that lets **Claude Code, Claude Desktop, Cursor, Gemini CLI, Antigravity CLI, and Antigravity 2.0** reach the **Hafla MCP Gateway** at `mcp.hafla.com`.
 
@@ -96,12 +96,12 @@ Pick your client's config file:
 
 [^agycli]: **Antigravity CLI has two valid config paths.** Pick one of:
 
-    - **CLI-only:** if you don't use Antigravity 2.0. Write to `~/.gemini/antigravity-cli/settings.json` and you're done.
+    - **CLI-only:** if you don't use Antigravity 2.0. Write the `mcpServers` block to `~/.gemini/antigravity-cli/settings.json` — that's the only config file `agy` reads in this mode. (You still complete Step 4 → Step 5 for the restart + `/mcp` verify; "CLI-only" refers to the path-decision, not the workflow.)
     - **Shared (with the symlink workaround in [Step 4 Form B Pro-tip](#form-b--absolute-paths-fallback)):** if you use both products and want one source of truth. **Only `agy` natively reads `~/.gemini/config/mcp_config.json`** — Antigravity 2.0 reads `~/.gemini/antigravity/mcp_config.json` and does NOT pick up the shared path automatically. Without the symlink, you'd be back to two separate files. **Don't pick "shared" without also applying the symlink** — the configs will drift the moment you edit either side.
 
     Gemini CLI and Antigravity CLI both also read project-scoped settings from `<project>/.gemini/settings.json` (cascades over the global file — useful for repo-specific overrides).
 
-[^verif]: **Verification matrix — flipped per `release-1.0.6-plan.md` § Stage 6.** Each `☐` becomes `✓` once an operator has installed 1.0.6 on the indicated OS, configured the indicated client per the snippet in [Step 4](#step-4--configure-your-mcp-client), and successfully invoked one MCP tool end-to-end. The matrix ships with all rows unflipped at 1.0.6 publish and gets walked row-by-row post-publish (Sidd covers macOS from his machine; Windows column gated by Windows-machine availability). **"Operator window" = the post-publish review period during which the assigned operator walks the matrix.** If a Windows row stays `☐` past 14 days from publish (or past whatever Ops sets as the explicit deadline in the Slack release announcement) without an operator having attempted it, the row gets edited to `☐ — pending Windows verifier as of YYYY-MM-DD` rather than silently left blank. Definition-of-done for the release; gaps documented explicitly, not implied.
+[^verif]: **Verification matrix — flipped per `release-1.0.6-plan.md` § Stage 6.** Each `☐` becomes `✓` once an operator has installed 1.0.6 on the indicated OS, configured the indicated client per the snippet in [Step 4](#step-4--configure-your-mcp-client), and successfully invoked one MCP tool end-to-end. The matrix ships with all rows unflipped at 1.0.6 publish and gets walked row-by-row post-publish (Sidd covers macOS from his machine; Windows column gated by Windows-machine availability). **"Operator window" = the post-publish review period during which the verification operator walks the matrix.** The operator is named in the Slack `#engineering` release announcement (for 1.0.6: Sidd covers macOS from his machine; Windows operator TBD). If a Windows row stays `☐` past 14 days from publish (or past whatever Ops sets as the explicit deadline in the `#engineering` release announcement) without an operator having attempted it, the row gets edited to `☐ — pending Windows verifier as of YYYY-MM-DD` rather than silently left blank. Definition-of-done for the release; gaps documented explicitly, not implied.
 
 **If the file exists**, back it up with a date-time suffix:
 
@@ -237,16 +237,35 @@ If Developer Mode is disabled and you don't want to elevate the PowerShell sessi
 New-Item -ItemType HardLink -Path $dst -Target $src | Out-Null
 ```
 
+> **Caveat — hard links don't span volumes.** NTFS hard links only work when source and destination live on the same drive (same volume serial). If your `%USERPROFILE%` is on `C:` and the `.gemini/` directory is on a different drive (custom user-profile relocation, D:-as-home setups, mounted network drive), the hard-link command fails with a non-obvious error. In that case: enable Developer Mode (Settings → Privacy & security → For developers) and use the symbolic-link command above instead — symbolic links DO span volumes.
+
 After linking, one edit to `~/.gemini/config/mcp_config.json` (or `%USERPROFILE%\.gemini\config\mcp_config.json`) is read by both Antigravity CLI (natively) and Antigravity 2.0 (via the link). Skip this entirely if you only run one product; it's drift prevention for the multi-product setup.
 
 **Legacy note — Windsurf path:** Some older Antigravity 2.0 installs also read from `~/.codeium/windsurf/mcp_config.json` (the legacy Windsurf platform that Antigravity 2.0 inherited). If your `~/.gemini/antigravity/mcp_config.json` link doesn't propagate as expected, check whether your 2.0 install is reading from the Windsurf path instead. Quick diagnostic — confirms which config files actually exist and have content:
 
 ```bash
-# macOS / Linux
-ls -la ~/.gemini/antigravity/mcp_config.json ~/.codeium/windsurf/mcp_config.json 2>/dev/null
+# macOS / Linux — explicit per-file check so missing files surface
+for f in ~/.gemini/antigravity/mcp_config.json ~/.codeium/windsurf/mcp_config.json; do
+  if [ -f "$f" ]; then
+    printf 'EXISTS  %s  (%d bytes)\n' "$f" "$(wc -c < "$f")"
+    grep -q hafla-evwa-idl-gateway "$f" && printf '        contains hafla entry\n' || printf '        no hafla entry\n'
+  else
+    printf 'MISSING %s\n' "$f"
+  fi
+done
+```
 
-# Windows (PowerShell)
-Get-ChildItem "$env:USERPROFILE\.gemini\antigravity\mcp_config.json","$env:USERPROFILE\.codeium\windsurf\mcp_config.json" -ErrorAction SilentlyContinue
+```powershell
+# Windows (PowerShell) — explicit per-file check
+foreach ($f in @("$env:USERPROFILE\.gemini\antigravity\mcp_config.json","$env:USERPROFILE\.codeium\windsurf\mcp_config.json")) {
+  if (Test-Path $f) {
+    $bytes = (Get-Item $f).Length
+    $hasHafla = Select-String -Path $f -Pattern 'hafla-evwa-idl-gateway' -Quiet
+    "EXISTS  $f  ($bytes bytes, hafla entry: $hasHafla)"
+  } else {
+    "MISSING $f"
+  }
+}
 ```
 
 If only the Windsurf path has the hafla entry (size > 0 and `grep hafla-evwa-idl-gateway` matches), 2.0 is reading from there — repeat the same symlink/hard-link pattern targeting `~/.codeium/windsurf/mcp_config.json` (or `%USERPROFILE%\.codeium\windsurf\mcp_config.json` on Windows).
@@ -262,9 +281,14 @@ Restart the client. **CLI clients (Gemini CLI, Antigravity CLI):** the MCP confi
 | Claude Code / Gemini CLI / Antigravity CLI | Type `/mcp` at the prompt. `hafla-evwa-idl-gateway` should appear with status **Connected** (or equivalent wording).                                                                                                                                                |
 | Cursor                                     | Open **Settings → MCP** (or the MCP panel in the sidebar). `hafla-evwa-idl-gateway` should appear with a green/connected indicator. If the menu has moved, the fallback is to confirm the entry in `~/.cursor/mcp.json` and check Cursor's developer console for MCP-server load logs. |
 | Claude Desktop                             | Open **Settings → Developer** (or the MCP servers section in Settings). `hafla-evwa-idl-gateway` should appear in the configured servers list. Status indicators vary across Claude Desktop versions; fallback is to inspect the configured-servers list itself.   |
-| Antigravity 2.0                            | From the Agent session view, click the **…** dropdown at the top of the side panel → **MCP Servers** → in the MCP Store, click **Manage MCP Servers** to see the configured-servers list (and **View raw config** to inspect the JSON). Alternative path: **User Settings → Customizations**. |
+| Antigravity 2.0                            | From the Agent session view, click the **…** dropdown at the top of the side panel → **MCP Servers** → in the MCP Store, click **Manage MCP Servers** to see the configured-servers list (and **View raw config** to inspect the JSON). Alternative path: **User Settings → Customizations**. *(Verified against Antigravity 2.0 UI as of 2026-05-26 — vendor may rearrange between releases; fallback is to inspect `~/.gemini/antigravity/mcp_config.json` directly.)* |
 
 If the server doesn't appear or shows as disconnected, the bridge didn't load — see [Troubleshooting](#troubleshooting). The connection check is cheap and gives a deterministic load/connect signal before you fire a real tool call.
+
+> **Common recovery paths from a disconnected `/mcp` listing:**
+> - **Antigravity CLI (`agy`)** specifically — see [Antigravity CLI fallback](#antigravity-cli-agy-fallback) in Step 4 (`agy` may not inherit nvm PATH; switch to Form B).
+> - **Claude Desktop / Antigravity 2.0** — desktop apps don't inherit shell PATH; use Form B with absolute paths (see [Form B](#form-b--absolute-paths-fallback)).
+> - **Any client** — re-run [Step 2 verify](#step-2--verify-install) to confirm the bin shim is on PATH; if Form B, re-derive Path A + Path B (the global node_modules root moves on nvm version changes).
 
 > ⚠️ **`/mcp` is a slash command, not a universal verification path.** It only works in Claude Code, Gemini CLI, and Antigravity CLI. If you type `/mcp` into the **Cursor chat box** or **Claude Desktop chat box**, it gets submitted as raw text to the model (the model will probably say something like "I don't recognise that command" — and the bridge stays unverified). Use the Settings panel paths in the table above for those clients.
 
