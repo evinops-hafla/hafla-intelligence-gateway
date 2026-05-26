@@ -268,7 +268,7 @@ Otherwise, install Homebrew. The installer prompts for `sudo` once.
 **Apple Silicon only:** the installer does NOT auto-add `brew` to your shell PATH; you have to do it explicitly (the installer prints these commands in its "Next steps" output too). Run:
 
 ```bash
-echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> "$HOME"/.zprofile
 eval "$(/opt/homebrew/bin/brew shellenv)"
 ```
 
@@ -295,10 +295,10 @@ brew install nvm
 Then add nvm to your shell profile. The block below uses `$(brew --prefix nvm)` so the correct path is resolved automatically on both Apple Silicon and Intel Macs:
 
 ```bash
-mkdir -p ~/.nvm
-echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.zshrc
-echo "[ -s \"$(brew --prefix nvm)/nvm.sh\" ] && . \"$(brew --prefix nvm)/nvm.sh\"" >> ~/.zshrc
-echo "[ -s \"$(brew --prefix nvm)/etc/bash_completion.d/nvm\" ] && . \"$(brew --prefix nvm)/etc/bash_completion.d/nvm\"" >> ~/.zshrc
+mkdir -p "$HOME"/.nvm
+echo 'export NVM_DIR="$HOME/.nvm"' >> "$HOME"/.zshrc
+echo "[ -s \"$(brew --prefix nvm)/nvm.sh\" ] && . \"$(brew --prefix nvm)/nvm.sh\"" >> "$HOME"/.zshrc
+echo "[ -s \"$(brew --prefix nvm)/etc/bash_completion.d/nvm\" ] && . \"$(brew --prefix nvm)/etc/bash_completion.d/nvm\"" >> "$HOME"/.zshrc
 source "$HOME"/.zshrc
 ```
 
