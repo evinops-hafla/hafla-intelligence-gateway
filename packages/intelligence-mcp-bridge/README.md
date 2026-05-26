@@ -92,7 +92,7 @@ Pick your client's config file:
 | Antigravity CLI + 2.0 (shared) [^agycli] | `~/.gemini/config/mcp_config.json`                                | `%USERPROFILE%\.gemini\config\mcp_config.json`           | Mac ☐ / Win ☐            |
 | Antigravity 2.0                          | `~/.gemini/antigravity/mcp_config.json`                           | `%USERPROFILE%\.gemini\antigravity\mcp_config.json`      | Mac ☐ / Win ☐            |
 
-[^agycli]: **Antigravity CLI has two valid config paths.** Pick **CLI-only** if you don't use Antigravity 2.0. Pick **shared** if you use both products and want one source of truth for `mcpServers`. Both work; both are read by `agy`. Note that Gemini CLI and Antigravity CLI both also read project-scoped settings from `<project>/.gemini/settings.json` (cascades over the global file — useful for repo-specific overrides).
+[^agycli]: **Antigravity CLI has two valid config paths.** Pick **CLI-only** if you don't use Antigravity 2.0. Pick **shared** if you use both products and want one source of truth for `mcpServers`. Both work; both are read by `agy`. Note that Gemini CLI and Antigravity CLI both also read project-scoped settings from `<project>/.gemini/settings.json` (cascades over the global file — useful for repo-specific overrides). **Important caveat:** only `agy` natively reads the shared path (`~/.gemini/config/mcp_config.json`). Antigravity 2.0 reads `~/.gemini/antigravity/mcp_config.json` and does NOT pick up the shared file automatically. To make Antigravity 2.0 also read the shared config, use the symlink Pro-tip in [Step 4 Form B](#form-b--absolute-paths-fallback) — one source of truth via a symlink.
 
 [^verif]: **Verification matrix — flipped per `release-1.0.6-plan.md` § Stage 6.** Each `☐` becomes `✓` once an operator has installed 1.0.6 on the indicated OS, configured the indicated client per the snippet in [Step 4](#step-4--configure-your-mcp-client), and successfully invoked one MCP tool end-to-end. The matrix ships with all rows unflipped at 1.0.6 publish and gets walked row-by-row post-publish (Sidd covers macOS from his machine; Windows column gated by Windows-machine availability). If a Windows row stays `☐` past the operator window, the gap is documented explicitly here — not silently left blank. Definition-of-done for the release.
 
@@ -118,7 +118,7 @@ Two forms supported. **Try Form A first** — it's strictly simpler and works fo
 
 #### Form A — bin shim (recommended)
 
-Works for any client that resolves bare commands via the user's shell PATH: **Gemini CLI, Claude Code (CLI), Cursor, Antigravity CLI**.
+Works for any client that resolves bare commands via the user's shell PATH: **Gemini CLI, Claude Code (CLI), Cursor**, and usually **Antigravity CLI** (`agy`) — see the fallback note below if `/mcp` shows disconnected for `agy`.
 
 ```json
 {
@@ -204,28 +204,33 @@ Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Wi
 }
 ```
 
-**💡 Pro-tip — symlink-sync for users running BOTH Antigravity CLI AND Antigravity 2.0** (also useful for Antigravity 2.0 users whose install reads from the legacy Windsurf path at `~/.codeium/windsurf/mcp_config.json`). To avoid maintaining two separate JSON files in sync, symlink the secondary path to the primary:
+**💡 Pro-tip — symlink-sync for users running BOTH Antigravity CLI AND Antigravity 2.0.** Antigravity CLI reads from `~/.gemini/antigravity-cli/settings.json` (CLI-only) or the shared `~/.gemini/config/mcp_config.json`; Antigravity 2.0 reads from `~/.gemini/antigravity/mcp_config.json`. To avoid maintaining the 2.0 config and the shared CLI config as two separate files that can drift, symlink the 2.0 path to the shared path so a single edit propagates to both products:
 
 ```bash
-# Sync Antigravity 2.0 (Windsurf-platform legacy path) with the shared Antigravity config — macOS / Linux
-cp ~/.codeium/windsurf/mcp_config.json ~/.codeium/windsurf/mcp_config.json.bak.$(date +%Y%m%d-%H%M%S) 2>/dev/null || true
-rm -f ~/.codeium/windsurf/mcp_config.json
-ln -s ~/.gemini/config/mcp_config.json ~/.codeium/windsurf/mcp_config.json
+# Sync Antigravity 2.0 with the shared Antigravity CLI config — macOS / Linux
+cp ~/.gemini/antigravity/mcp_config.json ~/.gemini/antigravity/mcp_config.json.bak.$(date +%Y%m%d-%H%M%S) 2>/dev/null || true
+rm -f ~/.gemini/antigravity/mcp_config.json
+ln -s ~/.gemini/config/mcp_config.json ~/.gemini/antigravity/mcp_config.json
 ```
 
-After symlinking, one edit to `~/.gemini/config/mcp_config.json` propagates to every product that reads it. Skip the trick entirely if you only run one product; it's drift prevention for the multi-product setup.
+After symlinking, one edit to `~/.gemini/config/mcp_config.json` is read by both Antigravity CLI (which natively reads the shared file) and Antigravity 2.0 (via the symlink). Skip the trick entirely if you only run one product; it's drift prevention for the multi-product setup.
+
+**Legacy note — Windsurf path:** Some older Antigravity 2.0 installs also read from `~/.codeium/windsurf/mcp_config.json` (the legacy Windsurf platform that Antigravity 2.0 inherited). If your `~/.gemini/antigravity/mcp_config.json` symlink doesn't propagate as expected, check whether your 2.0 install is reading from the Windsurf path instead — repeat the same symlink pattern targeting `~/.codeium/windsurf/mcp_config.json` if so.
 
 ### Step 5 — Reload your MCP client + end-to-end verify
 
 Restart the client. **CLI clients (Gemini CLI, Antigravity CLI):** the MCP config is read once at startup — a full `/quit` and relaunch is required; hot-reload does NOT pick up config changes. **Desktop apps:** close + reopen the window (Cmd-Q / Alt-F4 + relaunch).
 
-**Then verify the MCP server is connected BEFORE running a tool.** Inside the client run:
+**Then verify the MCP server is connected BEFORE running a tool.** How depends on your client:
 
-```text
-/mcp
-```
+| Client                                           | Connection-status check                                                                                                                                                                                                                                                |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code / Gemini CLI / Antigravity CLI       | Type `/mcp` at the prompt. `hafla-evwa-idl-gateway` should appear with status **Connected** (or equivalent wording).                                                                                                                                                  |
+| Cursor                                           | Open **Settings → MCP** (or the MCP panel in the sidebar). `hafla-evwa-idl-gateway` should appear with a green/connected indicator.                                                                                                                                   |
+| Claude Desktop                                   | Open **Settings → Developer** (or the MCP servers section in Settings). `hafla-evwa-idl-gateway` should appear in the configured servers list. Status indicators vary across Claude Desktop versions.                                                                |
+| Antigravity 2.0                                  | Open the **Settings → MCP Servers** panel in the desktop app. `hafla-evwa-idl-gateway` should appear with a connected indicator.                                                                                                                                      |
 
-`hafla-evwa-idl-gateway` should appear in the listed servers with status **Connected** (or equivalent — wording varies per client). If it doesn't appear or shows as disconnected, the bridge didn't load — see [Troubleshooting](#troubleshooting). The `/mcp` check is cheap and gives a deterministic load/connect signal before you fire a real tool call.
+If the server doesn't appear or shows as disconnected, the bridge didn't load — see [Troubleshooting](#troubleshooting). The connection check is cheap and gives a deterministic load/connect signal before you fire a real tool call.
 
 **Gemini CLI users — what to expect on first launch:** Gemini CLI may show two prompts the bridge cannot suppress:
 
