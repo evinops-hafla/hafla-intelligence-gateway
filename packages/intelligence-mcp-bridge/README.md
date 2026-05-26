@@ -1,5 +1,7 @@
 # `@hafla/intelligence-mcp-bridge`
 
+**Status:** Production (1.0.6 — see [CHANGELOG.md](./CHANGELOG.md)).
+
 A small stdio↔HTTPS shim that lets **Claude Code, Claude Desktop, Cursor, Gemini CLI, Antigravity CLI, and Antigravity 2.0** reach the **Hafla MCP Gateway** at `mcp.hafla.com`.
 
 The bridge mints a fresh 60-minute Google ID token via your own `gcloud` session, caches it, refreshes it ~55 minutes before expiry, and forwards every JSON-RPC request to the gateway with a `Bearer` header. No shared secret, no per-user token to issue or rotate — authorisation is your Google Workspace identity.
@@ -92,9 +94,14 @@ Pick your client's config file:
 | Antigravity CLI + 2.0 (shared) [^agycli] | `~/.gemini/config/mcp_config.json`                                | `%USERPROFILE%\.gemini\config\mcp_config.json`           | Mac ☐ / Win ☐            |
 | Antigravity 2.0                          | `~/.gemini/antigravity/mcp_config.json`                           | `%USERPROFILE%\.gemini\antigravity\mcp_config.json`      | Mac ☐ / Win ☐            |
 
-[^agycli]: **Antigravity CLI has two valid config paths.** Pick **CLI-only** if you don't use Antigravity 2.0. Pick **shared** if you use both products and want one source of truth for `mcpServers`. Both work; both are read by `agy`. Note that Gemini CLI and Antigravity CLI both also read project-scoped settings from `<project>/.gemini/settings.json` (cascades over the global file — useful for repo-specific overrides). **Important caveat:** only `agy` natively reads the shared path (`~/.gemini/config/mcp_config.json`). Antigravity 2.0 reads `~/.gemini/antigravity/mcp_config.json` and does NOT pick up the shared file automatically. To make Antigravity 2.0 also read the shared config, use the symlink Pro-tip in [Step 4 Form B](#form-b--absolute-paths-fallback) — one source of truth via a symlink.
+[^agycli]: **Antigravity CLI has two valid config paths.** Pick one of:
 
-[^verif]: **Verification matrix — flipped per `release-1.0.6-plan.md` § Stage 6.** Each `☐` becomes `✓` once an operator has installed 1.0.6 on the indicated OS, configured the indicated client per the snippet in [Step 4](#step-4--configure-your-mcp-client), and successfully invoked one MCP tool end-to-end. The matrix ships with all rows unflipped at 1.0.6 publish and gets walked row-by-row post-publish (Sidd covers macOS from his machine; Windows column gated by Windows-machine availability). If a Windows row stays `☐` past the operator window, the gap is documented explicitly here — not silently left blank. Definition-of-done for the release.
+    - **CLI-only:** if you don't use Antigravity 2.0. Write to `~/.gemini/antigravity-cli/settings.json` and you're done.
+    - **Shared (with the symlink workaround in [Step 4 Form B Pro-tip](#form-b--absolute-paths-fallback)):** if you use both products and want one source of truth. **Only `agy` natively reads `~/.gemini/config/mcp_config.json`** — Antigravity 2.0 reads `~/.gemini/antigravity/mcp_config.json` and does NOT pick up the shared path automatically. Without the symlink, you'd be back to two separate files. **Don't pick "shared" without also applying the symlink** — the configs will drift the moment you edit either side.
+
+    Gemini CLI and Antigravity CLI both also read project-scoped settings from `<project>/.gemini/settings.json` (cascades over the global file — useful for repo-specific overrides).
+
+[^verif]: **Verification matrix — flipped per `release-1.0.6-plan.md` § Stage 6.** Each `☐` becomes `✓` once an operator has installed 1.0.6 on the indicated OS, configured the indicated client per the snippet in [Step 4](#step-4--configure-your-mcp-client), and successfully invoked one MCP tool end-to-end. The matrix ships with all rows unflipped at 1.0.6 publish and gets walked row-by-row post-publish (Sidd covers macOS from his machine; Windows column gated by Windows-machine availability). **"Operator window" = the post-publish review period during which the assigned operator walks the matrix.** If a Windows row stays `☐` past 14 days from publish (or past whatever Ops sets as the explicit deadline in the Slack release announcement) without an operator having attempted it, the row gets edited to `☐ — pending Windows verifier as of YYYY-MM-DD` rather than silently left blank. Definition-of-done for the release; gaps documented explicitly, not implied.
 
 **If the file exists**, back it up with a date-time suffix:
 
@@ -118,7 +125,7 @@ Two forms supported. **Try Form A first** — it's strictly simpler and works fo
 
 #### Form A — bin shim (recommended)
 
-Works for any client that resolves bare commands via the user's shell PATH: **Gemini CLI, Claude Code (CLI), Cursor**, and usually **Antigravity CLI** (`agy`) — see the fallback note below if `/mcp` shows disconnected for `agy`.
+Works for any client that resolves bare commands via the user's shell PATH: **Gemini CLI, Claude Code (CLI), Cursor**, and usually **Antigravity CLI** (`agy`) — see the [Antigravity CLI fallback paragraph below](#antigravity-cli-agy-fallback) if `/mcp` shows `agy` disconnected.
 
 ```json
 {
@@ -133,7 +140,7 @@ Works for any client that resolves bare commands via the user's shell PATH: **Ge
 
 No embedded path. PATH lookup resolves `intelligence-mcp-bridge.cmd` on Windows and `intelligence-mcp-bridge` on macOS automatically. No JSON-escape concerns. `"trust": true` suppresses per-tool-call confirmation prompts in Gemini CLI / Antigravity CLI (load-bearing UX); clients that don't recognise the field ignore it (no harm). **The MCP config text stays stable across bridge upgrades and Node upgrades — you do NOT have to edit this JSON.** But if you change Node versions via nvm (including patch upgrades like `nvm install 24.16.0 && nvm use 24.16.0`), you must **reinstall the bridge under the new Node** (see [Step 1](#step-1--install-the-bridge)) — nvm isolates global packages per Node version, so the old install becomes invisible until you reinstall.
 
-**Antigravity CLI (`agy`) fallback:** `agy` is a native binary distributed via Google's curl/PowerShell installer (not Node-managed) and **may not always inherit the nvm-managed shell PATH** when spawning subprocesses — particularly when launched from contexts that don't load `~/.zshrc` / `~/.zprofile` (some terminal multiplexers, GUI launchers). If `/mcp` inside `agy` shows `hafla-evwa-idl-gateway` as disconnected after a Form A config, switch to [Form B](#form-b--absolute-paths-fallback) with absolute Path A (`node`) + Path B (`src/index.js`).
+<a id="antigravity-cli-agy-fallback"></a>**Antigravity CLI (`agy`) fallback:** `agy` is a native binary distributed via Google's curl/PowerShell installer (not Node-managed) and **may not always inherit the nvm-managed shell PATH** when spawning subprocesses — particularly when launched from contexts that don't load `~/.zshrc` / `~/.zprofile` (some terminal multiplexers, GUI launchers). If `/mcp` inside `agy` shows `hafla-evwa-idl-gateway` as disconnected after a Form A config, switch to [Form B](#form-b--absolute-paths-fallback) with absolute Path A (`node`) + Path B (`src/index.js`).
 
 **Windows fallback:** if your MCP client logs "MCP server disconnected" with the bare `"command": "intelligence-mcp-bridge"`, the client's subprocess spawn may not apply Windows `PATHEXT` resolution. Add the `.cmd` suffix explicitly:
 
@@ -232,20 +239,30 @@ New-Item -ItemType HardLink -Path $dst -Target $src | Out-Null
 
 After linking, one edit to `~/.gemini/config/mcp_config.json` (or `%USERPROFILE%\.gemini\config\mcp_config.json`) is read by both Antigravity CLI (natively) and Antigravity 2.0 (via the link). Skip this entirely if you only run one product; it's drift prevention for the multi-product setup.
 
-**Legacy note — Windsurf path:** Some older Antigravity 2.0 installs also read from `~/.codeium/windsurf/mcp_config.json` (the legacy Windsurf platform that Antigravity 2.0 inherited). If your `~/.gemini/antigravity/mcp_config.json` link doesn't propagate as expected, check whether your 2.0 install is reading from the Windsurf path instead — repeat the same link pattern targeting that path if so.
+**Legacy note — Windsurf path:** Some older Antigravity 2.0 installs also read from `~/.codeium/windsurf/mcp_config.json` (the legacy Windsurf platform that Antigravity 2.0 inherited). If your `~/.gemini/antigravity/mcp_config.json` link doesn't propagate as expected, check whether your 2.0 install is reading from the Windsurf path instead. Quick diagnostic — confirms which config files actually exist and have content:
+
+```bash
+# macOS / Linux
+ls -la ~/.gemini/antigravity/mcp_config.json ~/.codeium/windsurf/mcp_config.json 2>/dev/null
+
+# Windows (PowerShell)
+Get-ChildItem "$env:USERPROFILE\.gemini\antigravity\mcp_config.json","$env:USERPROFILE\.codeium\windsurf\mcp_config.json" -ErrorAction SilentlyContinue
+```
+
+If only the Windsurf path has the hafla entry (size > 0 and `grep hafla-evwa-idl-gateway` matches), 2.0 is reading from there — repeat the same symlink/hard-link pattern targeting `~/.codeium/windsurf/mcp_config.json` (or `%USERPROFILE%\.codeium\windsurf\mcp_config.json` on Windows).
 
 ### Step 5 — Reload your MCP client + end-to-end verify
 
 Restart the client. **CLI clients (Gemini CLI, Antigravity CLI):** the MCP config is read once at startup — a full `/quit` and relaunch is required; hot-reload does NOT pick up config changes. **Desktop apps:** close + reopen the window (Cmd-Q / Alt-F4 + relaunch).
 
-**Then verify the MCP server is connected BEFORE running a tool.** How depends on your client:
+**Then verify the MCP server is connected BEFORE running a tool.** How depends on your client. **Menu paths in GUI clients drift between vendor releases** — if a path below doesn't match your version, the fallback is always to edit the JSON config file directly (per [Step 3 table](#step-3--back-up-your-mcp-client-config-if-it-exists)) and check the client's log/console for an MCP-server-loaded entry.
 
-| Client                                           | Connection-status check                                                                                                                                                                                                                                                |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Claude Code / Gemini CLI / Antigravity CLI       | Type `/mcp` at the prompt. `hafla-evwa-idl-gateway` should appear with status **Connected** (or equivalent wording).                                                                                                                                                  |
-| Cursor                                           | Open **Settings → MCP** (or the MCP panel in the sidebar). `hafla-evwa-idl-gateway` should appear with a green/connected indicator.                                                                                                                                   |
-| Claude Desktop                                   | Open **Settings → Developer** (or the MCP servers section in Settings). `hafla-evwa-idl-gateway` should appear in the configured servers list. Status indicators vary across Claude Desktop versions.                                                                |
-| Antigravity 2.0                                  | Open the **Settings → MCP Servers** panel in the desktop app. `hafla-evwa-idl-gateway` should appear with a connected indicator.                                                                                                                                      |
+| Client                                     | Connection-status check                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code / Gemini CLI / Antigravity CLI | Type `/mcp` at the prompt. `hafla-evwa-idl-gateway` should appear with status **Connected** (or equivalent wording).                                                                                                                                                |
+| Cursor                                     | Open **Settings → MCP** (or the MCP panel in the sidebar). `hafla-evwa-idl-gateway` should appear with a green/connected indicator. If the menu has moved, the fallback is to confirm the entry in `~/.cursor/mcp.json` and check Cursor's developer console for MCP-server load logs. |
+| Claude Desktop                             | Open **Settings → Developer** (or the MCP servers section in Settings). `hafla-evwa-idl-gateway` should appear in the configured servers list. Status indicators vary across Claude Desktop versions; fallback is to inspect the configured-servers list itself.   |
+| Antigravity 2.0                            | From the Agent session view, click the **…** dropdown at the top of the side panel → **MCP Servers** → in the MCP Store, click **Manage MCP Servers** to see the configured-servers list (and **View raw config** to inspect the JSON). Alternative path: **User Settings → Customizations**. |
 
 If the server doesn't appear or shows as disconnected, the bridge didn't load — see [Troubleshooting](#troubleshooting). The connection check is cheap and gives a deterministic load/connect signal before you fire a real tool call.
 
@@ -301,7 +318,7 @@ Diagnostic banners are written to stderr. The "literal stderr" column gives the 
 | Silent disconnect                | (no bridge banner — client log shows "MCP server disconnected") | bin shim not on PATH (Form A) or wrong path (Form B) | Re-run Step 2 verify. If Form A bin shim doesn't resolve, switch to Form B. If Form B path is wrong, re-derive on the machine. |
 | Windows: PowerShell script error | `running scripts is disabled on this system`                    | PowerShell ExecutionPolicy blocks `.ps1` shims       | Invoke the `.cmd` wrapper directly: `intelligence-mcp-bridge.cmd` (works regardless of `ExecutionPolicy`).                     |
 | Antigravity 2.0 / Claude Desktop: bridge does not load even after Form A | (no bridge banner; client log shows "MCP server disconnected" or empty tool list) | Desktop app spawned via launchd (macOS) or service host (Windows) — does NOT inherit shell PATH, so bare `intelligence-mcp-bridge` can't be resolved | Switch to [Form B](#form-b--absolute-paths-fallback) with absolute Path A (`node`) + Path B (`src/index.js`). |
-| Antigravity CLI: `agy` searches the filesystem instead of using gateway tools | (no error — agent silently falls back to file/bash tools to answer queries) | Bridge not loaded: config file missing, empty, or invalid JSON; OR `agy` was not fully restarted after the config edit (hot-reload doesn't apply) | Verify the config exists and parses: `cat ~/.gemini/antigravity-cli/settings.json \| python3 -m json.tool` (or the shared path `~/.gemini/config/mcp_config.json`). Fully `/quit` and relaunch `agy`. Run `/mcp` inside `agy` to confirm `hafla-evwa-idl-gateway` shows as Connected. |
+| Antigravity CLI: `agy` searches the filesystem instead of using gateway tools | (no error — agent silently falls back to file/bash tools to answer queries) | Bridge not loaded: config file missing, empty, or invalid JSON; OR `agy` was not fully restarted after the config edit (hot-reload doesn't apply) | Verify the config exists and parses (Node is already required for the bridge so this is universal): `node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); console.log('OK')" ~/.gemini/antigravity-cli/settings.json` (substitute the shared path `~/.gemini/config/mcp_config.json` if you use that one). Fully `/quit` and relaunch `agy`. Run `/mcp` inside `agy` to confirm `hafla-evwa-idl-gateway` shows as Connected. |
 
 ---
 
