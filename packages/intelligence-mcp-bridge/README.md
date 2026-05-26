@@ -81,18 +81,20 @@ The MCP client config file holds your other MCP servers. Before editing it, back
 
 Pick your client's config file:
 
-| Client                                  | macOS / Linux                                                     | Windows                                                  |
-| --------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------- |
-| Gemini CLI                              | `~/.gemini/settings.json` (+ `<project>/.gemini/settings.json`)   | `%USERPROFILE%\.gemini\settings.json` (+ project-scoped) |
-| Claude Code (project-scoped)            | `<project>/.mcp.json`                                             | `<project>\.mcp.json`                                    |
-| Claude Code (user-scoped)               | `~/.claude.json`                                                  | `%USERPROFILE%\.claude.json`                             |
-| Claude Desktop                          | `~/Library/Application Support/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json`            |
-| Cursor                                  | `~/.cursor/mcp.json`                                              | `%USERPROFILE%\.cursor\mcp.json`                         |
-| Antigravity CLI (CLI-only) [^agycli]    | `~/.gemini/antigravity-cli/settings.json`                         | `%USERPROFILE%\.gemini\antigravity-cli\settings.json`    |
-| Antigravity CLI + 2.0 (shared) [^agycli] | `~/.gemini/config/mcp_config.json`                                | `%USERPROFILE%\.gemini\config\mcp_config.json`           |
-| Antigravity 2.0                         | `~/.gemini/antigravity/mcp_config.json`                           | `%USERPROFILE%\.gemini\antigravity\mcp_config.json`      |
+| Client                                   | macOS / Linux                                                     | Windows                                                  | 1.0.6 verified? [^verif] |
+| ---------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------- | ------------------------ |
+| Gemini CLI                               | `~/.gemini/settings.json` (+ `<project>/.gemini/settings.json`)   | `%USERPROFILE%\.gemini\settings.json` (+ project-scoped) | Mac ☐ / Win ☐            |
+| Claude Code (project-scoped)             | `<project>/.mcp.json`                                             | `<project>\.mcp.json`                                    | Mac ☐ / Win ☐            |
+| Claude Code (user-scoped)                | `~/.claude.json`                                                  | `%USERPROFILE%\.claude.json`                             | Mac ☐ / Win ☐            |
+| Claude Desktop                           | `~/Library/Application Support/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json`            | Mac ☐ / Win ☐            |
+| Cursor                                   | `~/.cursor/mcp.json`                                              | `%USERPROFILE%\.cursor\mcp.json`                         | Mac ☐ / Win ☐            |
+| Antigravity CLI (CLI-only) [^agycli]     | `~/.gemini/antigravity-cli/settings.json`                         | `%USERPROFILE%\.gemini\antigravity-cli\settings.json`    | Mac ☐ / Win ☐            |
+| Antigravity CLI + 2.0 (shared) [^agycli] | `~/.gemini/config/mcp_config.json`                                | `%USERPROFILE%\.gemini\config\mcp_config.json`           | Mac ☐ / Win ☐            |
+| Antigravity 2.0                          | `~/.gemini/antigravity/mcp_config.json`                           | `%USERPROFILE%\.gemini\antigravity\mcp_config.json`      | Mac ☐ / Win ☐            |
 
 [^agycli]: **Antigravity CLI has two valid config paths.** Pick **CLI-only** if you don't use Antigravity 2.0. Pick **shared** if you use both products and want one source of truth for `mcpServers`. Both work; both are read by `agy`. Note that Gemini CLI and Antigravity CLI both also read project-scoped settings from `<project>/.gemini/settings.json` (cascades over the global file — useful for repo-specific overrides).
+
+[^verif]: **Verification matrix — flipped per `release-1.0.6-plan.md` § Stage 6.** Each `☐` becomes `✓` once an operator has installed 1.0.6 on the indicated OS, configured the indicated client per the snippet in [Step 4](#step-4--configure-your-mcp-client), and successfully invoked one MCP tool end-to-end. The matrix ships with all rows unflipped at 1.0.6 publish and gets walked row-by-row post-publish (Sidd covers macOS from his machine; Windows column gated by Windows-machine availability). If a Windows row stays `☐` past the operator window, the gap is documented explicitly here — not silently left blank. Definition-of-done for the release.
 
 **If the file exists**, back it up with a date-time suffix:
 
@@ -131,6 +133,8 @@ Works for any client that resolves bare commands via the user's shell PATH: **Ge
 
 No embedded path. PATH lookup resolves `intelligence-mcp-bridge.cmd` on Windows and `intelligence-mcp-bridge` on macOS automatically. No JSON-escape concerns. `"trust": true` suppresses per-tool-call confirmation prompts in Gemini CLI / Antigravity CLI (load-bearing UX); clients that don't recognise the field ignore it (no harm). **The MCP config text stays stable across bridge upgrades and Node upgrades — you do NOT have to edit this JSON.** But if you change Node versions via nvm (including patch upgrades like `nvm install 24.16.0 && nvm use 24.16.0`), you must **reinstall the bridge under the new Node** (see [Step 1](#step-1--install-the-bridge)) — nvm isolates global packages per Node version, so the old install becomes invisible until you reinstall.
 
+**Antigravity CLI (`agy`) fallback:** `agy` is a native binary distributed via Google's curl/PowerShell installer (not Node-managed) and **may not always inherit the nvm-managed shell PATH** when spawning subprocesses — particularly when launched from contexts that don't load `~/.zshrc` / `~/.zprofile` (some terminal multiplexers, GUI launchers). If `/mcp` inside `agy` shows `hafla-evwa-idl-gateway` as disconnected after a Form A config, switch to [Form B](#form-b--absolute-paths-fallback) with absolute Path A (`node`) + Path B (`src/index.js`).
+
 **Windows fallback:** if your MCP client logs "MCP server disconnected" with the bare `"command": "intelligence-mcp-bridge"`, the client's subprocess spawn may not apply Windows `PATHEXT` resolution. Add the `.cmd` suffix explicitly:
 
 ```json
@@ -154,6 +158,7 @@ Use ONLY when Form A doesn't work. This is typically because the client spawns s
 
 - **Claude Desktop** (launchd on macOS / service spawn on Windows — does NOT inherit shell PATH)
 - **Antigravity 2.0** (desktop app — may also not inherit shell PATH on macOS, same launchd class as Claude Desktop; verify by first trying Form A, fall back to Form B if Form A logs "MCP server disconnected")
+- **Antigravity CLI (`agy`) — sometimes**, when spawned from contexts that don't load `~/.zshrc` / `~/.zprofile` (some terminal multiplexers, GUI launchers). If Form A works for your `agy` invocation, stay there; switch to Form B only if Form A produces a disconnected `/mcp` listing.
 
 **Derive your paths** (run on your machine; do NOT copy from an example):
 
@@ -199,9 +204,28 @@ Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Wi
 }
 ```
 
+**💡 Pro-tip — symlink-sync for users running BOTH Antigravity CLI AND Antigravity 2.0** (also useful for Antigravity 2.0 users whose install reads from the legacy Windsurf path at `~/.codeium/windsurf/mcp_config.json`). To avoid maintaining two separate JSON files in sync, symlink the secondary path to the primary:
+
+```bash
+# Sync Antigravity 2.0 (Windsurf-platform legacy path) with the shared Antigravity config — macOS / Linux
+cp ~/.codeium/windsurf/mcp_config.json ~/.codeium/windsurf/mcp_config.json.bak.$(date +%Y%m%d-%H%M%S) 2>/dev/null || true
+rm -f ~/.codeium/windsurf/mcp_config.json
+ln -s ~/.gemini/config/mcp_config.json ~/.codeium/windsurf/mcp_config.json
+```
+
+After symlinking, one edit to `~/.gemini/config/mcp_config.json` propagates to every product that reads it. Skip the trick entirely if you only run one product; it's drift prevention for the multi-product setup.
+
 ### Step 5 — Reload your MCP client + end-to-end verify
 
-Restart the client (close + reopen for desktop apps; `exit` + relaunch for CLI apps).
+Restart the client. **CLI clients (Gemini CLI, Antigravity CLI):** the MCP config is read once at startup — a full `/quit` and relaunch is required; hot-reload does NOT pick up config changes. **Desktop apps:** close + reopen the window (Cmd-Q / Alt-F4 + relaunch).
+
+**Then verify the MCP server is connected BEFORE running a tool.** Inside the client run:
+
+```text
+/mcp
+```
+
+`hafla-evwa-idl-gateway` should appear in the listed servers with status **Connected** (or equivalent — wording varies per client). If it doesn't appear or shows as disconnected, the bridge didn't load — see [Troubleshooting](#troubleshooting). The `/mcp` check is cheap and gives a deterministic load/connect signal before you fire a real tool call.
 
 **Gemini CLI users — what to expect on first launch:** Gemini CLI may show two prompts the bridge cannot suppress:
 
@@ -240,6 +264,8 @@ All five are read-only at the database layer — the bridge cannot write.
 
 Diagnostic banners are written to stderr. The "literal stderr" column gives the exact text to grep against.
 
+**🟢 401 / 403 from the gateway is a GOOD signal, not a setup failure.** It means the bridge loaded, the gcloud-minted token reached `mcp.hafla.com`, and the gateway is just gating your identity. Everything client-side worked; the fix is an Ops-side ticket (add you to the Workspace group / set `isEmployeeActive=true`). If you reach a 401/403, you can stop debugging your setup — the install is correct.
+
 | Symptom                          | Literal stderr (grep target)                                    | Cause                                                | Fix                                                                                                                            |
 | -------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | Wrong Node version               | `requires Node 24 LTS (you are on v...)`                        | Node ≠ 24.x                                          | `nvm use 24.15.0`. If on Form B, also re-derive Path A (Node binary path may have moved).                                      |
@@ -251,6 +277,7 @@ Diagnostic banners are written to stderr. The "literal stderr" column gives the 
 | Silent disconnect                | (no bridge banner — client log shows "MCP server disconnected") | bin shim not on PATH (Form A) or wrong path (Form B) | Re-run Step 2 verify. If Form A bin shim doesn't resolve, switch to Form B. If Form B path is wrong, re-derive on the machine. |
 | Windows: PowerShell script error | `running scripts is disabled on this system`                    | PowerShell ExecutionPolicy blocks `.ps1` shims       | Invoke the `.cmd` wrapper directly: `intelligence-mcp-bridge.cmd` (works regardless of `ExecutionPolicy`).                     |
 | Antigravity 2.0 / Claude Desktop: bridge does not load even after Form A | (no bridge banner; client log shows "MCP server disconnected" or empty tool list) | Desktop app spawned via launchd (macOS) or service host (Windows) — does NOT inherit shell PATH, so bare `intelligence-mcp-bridge` can't be resolved | Switch to [Form B](#form-b--absolute-paths-fallback) with absolute Path A (`node`) + Path B (`src/index.js`). |
+| Antigravity CLI: `agy` searches the filesystem instead of using gateway tools | (no error — agent silently falls back to file/bash tools to answer queries) | Bridge not loaded: config file missing, empty, or invalid JSON; OR `agy` was not fully restarted after the config edit (hot-reload doesn't apply) | Verify the config exists and parses: `cat ~/.gemini/antigravity-cli/settings.json \| python3 -m json.tool` (or the shared path `~/.gemini/config/mcp_config.json`). Fully `/quit` and relaunch `agy`. Run `/mcp` inside `agy` to confirm `hafla-evwa-idl-gateway` shows as Connected. |
 
 ---
 
@@ -303,6 +330,8 @@ If you get "MCP server disconnected" or an empty tool list, see [Troubleshooting
 **Form A users:** no config edit needed across **bridge** upgrades — the bin shim resolves to the new version automatically. If you also changed Node versions via nvm (any change, including patch upgrades like `nvm install 24.16.0 && nvm use 24.16.0`), reinstall the bridge first (`npm install -g @hafla/intelligence-mcp-bridge@<new-version>`) under the new Node; nvm isolates global packages per Node version.
 
 **Form B users:** re-derive **both** Path A (`node -p "process.execPath"`) and Path B (`$(npm root -g)/...` or `$(npm root -g)\...`). When Node version changes under nvm, both the binary path AND the global node_modules root move. Reinstall the bridge under the new Node first; then update both paths in your MCP config.
+
+**Antigravity CLI users:** `agy` itself is a native binary installed outside the Node ecosystem (`~/.local/bin/agy` on macOS, `%LOCALAPPDATA%\Antigravity\agy.exe` on Windows). nvm version switches do NOT affect `agy` — only the bridge it spawns moves with Node. If `agy` works after a Node version change but the bridge doesn't, the issue is in the bridge install (reinstall under new Node), not in `agy`.
 
 **Do not switch to `@latest`** — pinning is the supply-chain hygiene boundary. Ops announces every version bump in Slack so the team can update on its own cadence.
 
