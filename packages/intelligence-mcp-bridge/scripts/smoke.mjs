@@ -93,9 +93,23 @@ const PKG_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const E2E_TIMEOUT_MS = 30_000;
 // symlink mode: we're only waiting for ANY stderr byte proving main() ran.
 // On a happy path the bridge writes the pre-flight banner within ~50ms
-// (verified empirically on macOS Node 24.15.0). 5s is generous overhead
-// for slower CI runners + the npx fresh-cache materialization step.
-const SYMLINK_TIMEOUT_MS = 5_000;
+// (verified empirically on macOS Node 24.15.0).
+//
+// Originally set to 5s on the assumption that npx invocation overhead is
+// sub-second on all platforms. Empirically false on Ubuntu CI runners
+// (run 26435336986, 2026-05-26): `npx -y <pkg>` from a clean cache does
+// a registry-latest check before falling through to the just-installed
+// global, and that check can exceed 5s on fresh CI VMs with cold npm
+// caches. macOS and Windows runners are faster (or cache differently).
+//
+// The genuine BS-8 silent-exit signature (child exits cleanly with no
+// output) is caught by the `child.on('close')` handler at any timing,
+// not by the timer — so a longer timer cost is paid only when something
+// pathological is happening (child running but emitting nothing for the
+// full window). 30s matches E2E_TIMEOUT_MS, simplifies the config, and
+// removes the false-positive on Ubuntu CI without weakening the
+// regression-detection signal.
+const SYMLINK_TIMEOUT_MS = 30_000;
 
 const MODES = ['symlink', 'e2e'];
 const DEFAULT_MODE = 'symlink';
