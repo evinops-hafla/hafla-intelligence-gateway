@@ -73,6 +73,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
     (per multiple Google AI Developers Forum threads) — uninstall the
     IDE first if you only need 2.0.
 
+## [1.0.5] — 2026-05-22
+
 ### Fixed
 
 - Windows: bridge no longer fails with `spawn EINVAL` when minting Google
