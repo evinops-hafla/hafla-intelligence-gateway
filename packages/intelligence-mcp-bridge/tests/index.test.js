@@ -1898,14 +1898,23 @@ describe('_checkIsMainModule', () => {
 
 // ── IIFE wiring (concern #5, post-review 2026-05-25) ─────────────────────────
 //
-// All 9 unit tests above exercise _checkIsMainModule via injected `argv1` /
-// `moduleUrl` / `realpathFn` / `logger`. None of them touch the actual IIFE
-// at the bottom of src/index.js that wires those parameters to
-// `process.argv[1]` and `import.meta.url`. If a future refactor typo'd the
-// wire (e.g. swapped argv[1] for argv[0], renamed import.meta.url to
-// import.meta.href, or commented out the IIFE entirely), every unit test
-// above would still pass while production silently exits — the exact class
-// the 1.0.5 bug shipped under.
+// All 11 unit tests above exercise _checkIsMainModule via injected `argv1` /
+// `moduleUrl` / `logger`. `realpathFn` is NOT mock-injected by any test —
+// the default `realpathSync` is what runs in every case. Its fallback BRANCH
+// is exercised via real I/O on missing-file paths (three of the tests pass
+// argv1 values that don't exist on disk, so the default `realpathSync`
+// throws and the catch branch runs). If you need to deterministically test
+// realpath behaviour that real I/O can't simulate (e.g. EACCES, slow-fs,
+// call-count assertions), inject a custom `realpathFn` — the seam exists in
+// the production signature but is currently unused by any test.
+//
+// None of these unit tests touch the actual IIFE at the bottom of
+// src/index.js that wires those parameters to `process.argv[1]` and
+// `import.meta.url`. If a future refactor typo'd the wire (e.g. swapped
+// argv[1] for argv[0], renamed import.meta.url to import.meta.href, or
+// commented out the IIFE entirely), every unit test above would still pass
+// while production silently exits — the exact class the 1.0.5 bug shipped
+// under.
 //
 // This integration test spawns the bridge entrypoint directly and asserts
 // that main() actually runs. The signal we look for: any stderr output
