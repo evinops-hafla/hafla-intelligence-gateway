@@ -231,7 +231,11 @@ Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` / `False`, install gc
 }
 ```
 
+**Get `<directory containing Path A>`** symmetrically with Path C — `dirname $(node -p "process.execPath")` on macOS, `(node -p "process.execPath") | Split-Path` on Windows (PowerShell). It's just Path A with the trailing filename stripped.
+
 **Why `env.PATH`.** Desktop apps spawn the bridge with a minimal inherited environment. The `env.PATH` block injects a PATH the bridge can rely on independently of the host app's launch context. Path C (gcloud's bin directory) is the load-bearing entry — without it, pre-flight fails. Including Path A's directory is defensive for any future bridge code that shells out (token refresh already does, via gcloud). The trailing standard system paths (`/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`) cover other utilities the bridge or its dependencies may invoke.
+
+**Order matters.** List Path C FIRST so `gcloud` resolves to the directory you just verified — not to a possibly-stale `/usr/local/bin/gcloud` symlink further down the list. If your Path C happens to equal one of the trailing standard entries (Intel Macs where Homebrew installs to `/usr/local/bin`), list it once at the front and drop the duplicate from the tail — duplicates are functionally harmless but ugly.
 
 **Windows note:** the env.PATH separator on Windows is `;` not `:`, and entries use Windows-style paths. Example:
 
