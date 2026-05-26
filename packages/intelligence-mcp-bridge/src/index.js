@@ -1356,10 +1356,24 @@ export function _checkIsMainModule({
   // Skip silently before touching realpath so the IIFE doesn't log at import
   // time when this module is loaded by tests or by `node -e "import(...)"`.
   if (!argv1) return false;
+
+  // Parse moduleUrl ONCE up front. Splitting URL-parse failures from
+  // realpath failures (a) avoids the misleading "realpath fallback" warn on
+  // a non-file:// moduleUrl, and (b) avoids calling fileURLToPath twice in
+  // the realpath-fallback arm. If moduleUrl isn't a valid file:// URL we
+  // have nothing to compare via path normalisation — fall through to the
+  // 1.0.5 literal compare for back-compat.
+  let modulePath;
+  try {
+    modulePath = fileURLToPath(moduleUrl);
+  } catch {
+    return moduleUrl === `file://${argv1}`;
+  }
+
   try {
     const mainPath = realpathFn(argv1);
-    const modulePath = realpathFn(fileURLToPath(moduleUrl));
-    return mainPath === modulePath;
+    const resolvedModulePath = realpathFn(modulePath);
+    return mainPath === resolvedModulePath;
   } catch (err) {
     // argv1 WAS present (real-looking file path) but realpath failed — broken
     // symlink, permission denied, race condition. Log for visibility, then
@@ -1376,13 +1390,7 @@ export function _checkIsMainModule({
       err: err.message,
       argv1
     });
-    try {
-      return pathResolve(argv1) === pathResolve(fileURLToPath(moduleUrl));
-    } catch {
-      // Last-ditch fallback if even path normalisation fails (e.g., moduleUrl
-      // isn't a valid file:// URL). Match 1.0.5 behaviour for back-compat.
-      return moduleUrl === `file://${argv1}`;
-    }
+    return pathResolve(argv1) === pathResolve(modulePath);
   }
 }
 
