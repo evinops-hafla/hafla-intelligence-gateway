@@ -173,8 +173,9 @@ Expected: a version string (e.g. `1.0.2`). No `EBADENGINE` warning is possible �
 
 Install via the vendor's installer:
 
-- **Cursor / Claude Desktop:** vendor's GUI installer from the respective vendor page.
-- **Antigravity 2.0:** vendor's installer from `antigravity.google`. ⚠️ **If you have the older Antigravity IDE installed:** uninstall it before installing Antigravity 2.0. See [§ Coexistence notes](#antigravity-cli--antigravity-20--coexistence-notes) above.
+- **Cursor:** download from [cursor.com](https://cursor.com/download) (Windows installer).
+- **Claude Desktop:** download from [claude.ai/download](https://claude.ai/download) (Windows installer).
+- **Antigravity 2.0:** download from [antigravity.google](https://antigravity.google/product/antigravity-2) (Windows installer). ⚠️ **If you have the older Antigravity IDE installed:** uninstall it before installing Antigravity 2.0. See [§ Coexistence notes](#antigravity-cli--antigravity-20--coexistence-notes) above.
 
 These are not Node-managed and Node version does not affect their install. Verify by launching the app from the Start menu.
 
@@ -374,8 +375,9 @@ Expected: a version string (e.g. `1.0.2`). No `EBADENGINE` warning is possible �
 
 Install via the vendor's installer:
 
-- **Cursor / Claude Desktop:** vendor's GUI installer from the respective vendor page.
-- **Antigravity 2.0:** vendor's installer from `antigravity.google` (or macOS App Store if available). ⚠️ **If you have the older Antigravity IDE installed:** uninstall it before installing Antigravity 2.0. See [§ Coexistence notes](#antigravity-cli--antigravity-20--coexistence-notes) above.
+- **Cursor:** download from [cursor.com](https://cursor.com/download) (macOS installer).
+- **Claude Desktop:** download from [claude.ai/download](https://claude.ai/download) (macOS installer).
+- **Antigravity 2.0:** download from [antigravity.google](https://antigravity.google/product/antigravity-2) (macOS installer; check the App Store if you prefer that channel). ⚠️ **If you have the older Antigravity IDE installed:** uninstall it before installing Antigravity 2.0. See [§ Coexistence notes](#antigravity-cli--antigravity-20--coexistence-notes) above.
 
 These are not Node-managed and Node version does not affect their install. Verify by launching the app from your Applications folder.
 

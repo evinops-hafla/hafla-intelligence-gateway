@@ -14,7 +14,7 @@ Prerequisites are in [PREREQUISITES.md](./PREREQUISITES.md). If those are met:
 npm install -g @hafla/intelligence-mcp-bridge@1.0.6
 ```
 
-Add this to your MCP client config (Gemini CLI / Claude Code / Cursor / Antigravity CLI):
+Add this to your MCP client config (Gemini CLI / Claude Code / Cursor / Antigravity CLI). **Antigravity 2.0 and Claude Desktop need [Form B](#form-b--absolute-paths-fallback) instead** — they're desktop apps that don't inherit shell PATH:
 
 ```json
 {
@@ -35,7 +35,7 @@ Restart your MCP client. Done.
 
 ## Prerequisites verify
 
-Before the install playbook below, confirm these seven checks pass. If any fail, complete the setup in [PREREQUISITES.md](./PREREQUISITES.md).
+Before the install playbook below, confirm these checks pass. If any fail, complete the setup in [PREREQUISITES.md](./PREREQUISITES.md).
 
 | Check                                | Command                                  | Expected output                                                                                                                                                                       |
 | ------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -210,6 +210,8 @@ Restart the client (close + reopen for desktop apps; `exit` + relaunch for CLI a
 
 Both prompts are expected Gemini CLI behaviors, not bridge errors.
 
+**Antigravity CLI / Antigravity 2.0 users:** these products share the underlying Gemini agent harness, so similar first-launch prompts (Folder Trust, separate Google sign-in) may apply — the same guidance above holds. The bridge's behaviour is identical across all clients; what varies is the host product's own onboarding UX.
+
 Then ask the client:
 
 > Run `safe_sql_sandbox` with `SELECT COUNT(*) FROM "haflaCore"."OpsUsers"`.
@@ -248,6 +250,7 @@ Diagnostic banners are written to stderr. The "literal stderr" column gives the 
 | Token mint failure               | `Failed to mint Google ID token`                                | Credentials expired or SDK stale                     | `gcloud auth login` to re-authenticate; `gcloud components update` to refresh the SDK.                                         |
 | Silent disconnect                | (no bridge banner — client log shows "MCP server disconnected") | bin shim not on PATH (Form A) or wrong path (Form B) | Re-run Step 2 verify. If Form A bin shim doesn't resolve, switch to Form B. If Form B path is wrong, re-derive on the machine. |
 | Windows: PowerShell script error | `running scripts is disabled on this system`                    | PowerShell ExecutionPolicy blocks `.ps1` shims       | Invoke the `.cmd` wrapper directly: `intelligence-mcp-bridge.cmd` (works regardless of `ExecutionPolicy`).                     |
+| Antigravity 2.0 / Claude Desktop: bridge does not load even after Form A | (no bridge banner; client log shows "MCP server disconnected" or empty tool list) | Desktop app spawned via launchd (macOS) or service host (Windows) — does NOT inherit shell PATH, so bare `intelligence-mcp-bridge` can't be resolved | Switch to [Form B](#form-b--absolute-paths-fallback) with absolute Path A (`node`) + Path B (`src/index.js`). |
 
 ---
 
