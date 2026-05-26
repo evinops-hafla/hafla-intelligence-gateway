@@ -1,6 +1,6 @@
 # `@hafla/intelligence-mcp-bridge`
 
-A small stdio↔HTTPS shim that lets Claude Code, Claude Desktop, Cursor, and Gemini CLI reach the **Hafla MCP Gateway** at `mcp.hafla.com`.
+A small stdio↔HTTPS shim that lets **Claude Code, Claude Desktop, Cursor, Gemini CLI, Antigravity CLI, and Antigravity 2.0** reach the **Hafla MCP Gateway** at `mcp.hafla.com`.
 
 The bridge mints a fresh 60-minute Google ID token via your own `gcloud` session, caches it, refreshes it ~55 minutes before expiry, and forwards every JSON-RPC request to the gateway with a `Bearer` header. No shared secret, no per-user token to issue or rotate — authorisation is your Google Workspace identity.
 
@@ -11,20 +11,23 @@ The bridge mints a fresh 60-minute Google ID token via your own `gcloud` session
 Prerequisites are in [PREREQUISITES.md](./PREREQUISITES.md). If those are met:
 
 ```bash
-npm install -g @hafla/intelligence-mcp-bridge@1.0.5
+npm install -g @hafla/intelligence-mcp-bridge@1.0.6
 ```
 
-Add this to your MCP client config (Gemini CLI / Claude Code / Cursor):
+Add this to your MCP client config (Gemini CLI / Claude Code / Cursor / Antigravity CLI):
 
 ```json
 {
   "mcpServers": {
     "hafla-evwa-idl-gateway": {
-      "command": "intelligence-mcp-bridge"
+      "command": "intelligence-mcp-bridge",
+      "trust": true
     }
   }
 }
 ```
+
+`"trust": true` suppresses the per-tool-call confirmation prompt that Gemini CLI / Antigravity CLI raise on every invocation (5 tools × many calls per session — unusable without it). Claude Code / Claude Desktop / Cursor ignore the unknown field; no harm to add.
 
 Restart your MCP client. Done.
 
@@ -34,15 +37,16 @@ Restart your MCP client. Done.
 
 Before the install playbook below, confirm these seven checks pass. If any fail, complete the setup in [PREREQUISITES.md](./PREREQUISITES.md).
 
-| Check                         | Command                                  | Expected output                                  |
-| ----------------------------- | ---------------------------------------- | ------------------------------------------------ |
-| Node 24 LTS active            | `node -v`                                | `v24.15.0` or newer `v24.x.y`                    |
-| npm recent                    | `npm -v`                                 | `11.x` or newer                                  |
-| Version manager (Windows)     | `nvm version`                            | A version string (e.g. `1.1.12`)                 |
-| Version manager (macOS)       | `command -v nvm`                         | `nvm` (a shell function)                         |
-| MCP client on Node 24         | `gemini --version` or `claude --version` | Version string, no `EBADENGINE` warning          |
-| gcloud SDK installed          | `gcloud --version`                       | Prints SDK version                               |
-| `@hafla.com` active in gcloud | `gcloud auth list`                       | An `ACTIVE` row matching your `@hafla.com` email |
+| Check                                | Command                                  | Expected output                                                                                                                                                                       |
+| ------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node 24 LTS active                   | `node -v`                                | `v24.15.0` or newer `v24.x.y`                                                                                                                                                         |
+| npm recent                           | `npm -v`                                 | `11.x` or newer                                                                                                                                                                       |
+| Version manager (Windows)            | `nvm version`                            | A version string (e.g. `1.1.12`)                                                                                                                                                      |
+| Version manager (macOS)              | `command -v nvm`                         | `nvm` (a shell function)                                                                                                                                                              |
+| Node-managed MCP client on Node 24   | `gemini --version` or `claude --version` | Version string, no `EBADENGINE` warning. Skip if you only use non-Node-managed clients (Cursor / Claude Desktop / Antigravity CLI / Antigravity 2.0).                                 |
+| Antigravity CLI (if using)           | `agy --version`                          | Version string. `agy` is not Node-managed (installed via Google curl/PowerShell script); `EBADENGINE` is not possible.                                                                |
+| gcloud SDK installed                 | `gcloud --version`                       | Prints SDK version                                                                                                                                                                    |
+| `@hafla.com` active in gcloud        | `gcloud auth list`                       | An `ACTIVE` row matching your `@hafla.com` email                                                                                                                                      |
 
 All pass → proceed below.
 
@@ -53,10 +57,10 @@ All pass → proceed below.
 ### Step 1 — Install the bridge
 
 ```bash
-npm install -g @hafla/intelligence-mcp-bridge@1.0.5
+npm install -g @hafla/intelligence-mcp-bridge@1.0.6
 ```
 
-The version is **exact-pinned** (`@1.0.5`, not `@latest`). Pinning is the supply-chain hygiene boundary; Ops announces version bumps in Slack so the team upgrades on a known cadence. See § "Upgrading" below.
+The version is **exact-pinned** (`@1.0.6`, not `@latest`). Pinning is the supply-chain hygiene boundary; Ops announces version bumps in Slack so the team upgrades on a known cadence. See § "Upgrading" below.
 
 ### Step 2 — Verify install
 
@@ -77,13 +81,18 @@ The MCP client config file holds your other MCP servers. Before editing it, back
 
 Pick your client's config file:
 
-| Client                       | macOS / Linux                                                     | Windows                                       |
-| ---------------------------- | ----------------------------------------------------------------- | --------------------------------------------- |
-| Gemini CLI                   | `~/.gemini/settings.json`                                         | `%USERPROFILE%\.gemini\settings.json`         |
-| Claude Code (project-scoped) | `<project>/.mcp.json`                                             | `<project>\.mcp.json`                         |
-| Claude Code (user-scoped)    | `~/.claude.json`                                                  | `%USERPROFILE%\.claude.json`                  |
-| Claude Desktop               | `~/Library/Application Support/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json` |
-| Cursor                       | `~/.cursor/mcp.json`                                              | `%USERPROFILE%\.cursor\mcp.json`              |
+| Client                                  | macOS / Linux                                                     | Windows                                                  |
+| --------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------- |
+| Gemini CLI                              | `~/.gemini/settings.json` (+ `<project>/.gemini/settings.json`)   | `%USERPROFILE%\.gemini\settings.json` (+ project-scoped) |
+| Claude Code (project-scoped)            | `<project>/.mcp.json`                                             | `<project>\.mcp.json`                                    |
+| Claude Code (user-scoped)               | `~/.claude.json`                                                  | `%USERPROFILE%\.claude.json`                             |
+| Claude Desktop                          | `~/Library/Application Support/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json`            |
+| Cursor                                  | `~/.cursor/mcp.json`                                              | `%USERPROFILE%\.cursor\mcp.json`                         |
+| Antigravity CLI (CLI-only) [^agycli]    | `~/.gemini/antigravity-cli/settings.json`                         | `%USERPROFILE%\.gemini\antigravity-cli\settings.json`    |
+| Antigravity CLI + 2.0 (shared) [^agycli] | `~/.gemini/config/mcp_config.json`                                | `%USERPROFILE%\.gemini\config\mcp_config.json`           |
+| Antigravity 2.0                         | `~/.gemini/antigravity/mcp_config.json`                           | `%USERPROFILE%\.gemini\antigravity\mcp_config.json`      |
+
+[^agycli]: **Antigravity CLI has two valid config paths.** Pick **CLI-only** if you don't use Antigravity 2.0. Pick **shared** if you use both products and want one source of truth for `mcpServers`. Both work; both are read by `agy`. Note that Gemini CLI and Antigravity CLI both also read project-scoped settings from `<project>/.gemini/settings.json` (cascades over the global file — useful for repo-specific overrides).
 
 **If the file exists**, back it up with a date-time suffix:
 
@@ -107,19 +116,20 @@ Two forms supported. **Try Form A first** — it's strictly simpler and works fo
 
 #### Form A — bin shim (recommended)
 
-Works for any client that resolves bare commands via the user's shell PATH: **Gemini CLI, Claude Code (CLI), Cursor**.
+Works for any client that resolves bare commands via the user's shell PATH: **Gemini CLI, Claude Code (CLI), Cursor, Antigravity CLI**.
 
 ```json
 {
   "mcpServers": {
     "hafla-evwa-idl-gateway": {
-      "command": "intelligence-mcp-bridge"
+      "command": "intelligence-mcp-bridge",
+      "trust": true
     }
   }
 }
 ```
 
-No embedded path. PATH lookup resolves `intelligence-mcp-bridge.cmd` on Windows and `intelligence-mcp-bridge` on macOS automatically. No JSON-escape concerns. **The MCP config text stays stable across bridge upgrades and Node upgrades — you do NOT have to edit this JSON.** But if you change Node versions via nvm (including patch upgrades like `nvm install 24.16.0 && nvm use 24.16.0`), you must **reinstall the bridge under the new Node** (see [Step 1](#step-1--install-the-bridge)) — nvm isolates global packages per Node version, so the old install becomes invisible until you reinstall.
+No embedded path. PATH lookup resolves `intelligence-mcp-bridge.cmd` on Windows and `intelligence-mcp-bridge` on macOS automatically. No JSON-escape concerns. `"trust": true` suppresses per-tool-call confirmation prompts in Gemini CLI / Antigravity CLI (load-bearing UX); clients that don't recognise the field ignore it (no harm). **The MCP config text stays stable across bridge upgrades and Node upgrades — you do NOT have to edit this JSON.** But if you change Node versions via nvm (including patch upgrades like `nvm install 24.16.0 && nvm use 24.16.0`), you must **reinstall the bridge under the new Node** (see [Step 1](#step-1--install-the-bridge)) — nvm isolates global packages per Node version, so the old install becomes invisible until you reinstall.
 
 **Windows fallback:** if your MCP client logs "MCP server disconnected" with the bare `"command": "intelligence-mcp-bridge"`, the client's subprocess spawn may not apply Windows `PATHEXT` resolution. Add the `.cmd` suffix explicitly:
 
@@ -127,7 +137,8 @@ No embedded path. PATH lookup resolves `intelligence-mcp-bridge.cmd` on Windows 
 {
   "mcpServers": {
     "hafla-evwa-idl-gateway": {
-      "command": "intelligence-mcp-bridge.cmd"
+      "command": "intelligence-mcp-bridge.cmd",
+      "trust": true
     }
   }
 }
@@ -142,6 +153,7 @@ If you're editing an existing config that already has `mcpServers`, add the `haf
 Use ONLY when Form A doesn't work. This is typically because the client spawns subprocesses without inheriting your user shell PATH:
 
 - **Claude Desktop** (launchd on macOS / service spawn on Windows — does NOT inherit shell PATH)
+- **Antigravity 2.0** (desktop app — may also not inherit shell PATH on macOS, same launchd class as Claude Desktop; verify by first trying Form A, fall back to Form B if Form A logs "MCP server disconnected")
 
 **Derive your paths** (run on your machine; do NOT copy from an example):
 
@@ -180,7 +192,8 @@ Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Wi
   "mcpServers": {
     "hafla-evwa-idl-gateway": {
       "command": "<Path A>",
-      "args": ["<Path B>"]
+      "args": ["<Path B>"],
+      "trust": true
     }
   }
 }
@@ -240,14 +253,49 @@ Diagnostic banners are written to stderr. The "literal stderr" column gives the 
 
 ## Upgrading
 
-The version specifier is **exact-pinned**. To upgrade:
+The version specifier is **exact-pinned**. Every release announcement (Slack `#engineering`) cites a version number (e.g. `1.0.7`) and a link to the CHANGELOG entry — read it before upgrading.
+
+### Step 1 — Read the CHANGELOG
+
+Open [CHANGELOG.md](./CHANGELOG.md) and read the entry for the new version. Look for:
+
+- **Breaking changes** — anything in a `### Breaking` or `### Removed` section. May require a config edit, not just a version bump.
+- **Security fixes** — anything in `### Security`. Non-optional even if the rest of the release is.
+- **New features** — anything in `### Added`. Some require opting in via env var or config flag.
+
+### Step 2 — Backup your MCP client config
+
+Before touching anything, snapshot the files you'll edit. Pick your client's config file from the [Step 3 table](#step-3--back-up-your-mcp-client-config-if-it-exists) and:
+
+| OS                   | Command (substitute your client's path)                                                                                                 |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS                | `cp "$HOME/.gemini/settings.json" "$HOME/.gemini/settings.json.bak.$(date +%Y%m%d-%H%M%S)"`                                             |
+| Windows (PowerShell) | `Copy-Item "$env:USERPROFILE\.gemini\settings.json" "$env:USERPROFILE\.gemini\settings.json.bak.$(Get-Date -Format 'yyyyMMdd-HHmmss')"` |
+
+### Step 3 — Reinstall the bridge
 
 ```bash
 npm uninstall -g @hafla/intelligence-mcp-bridge
 npm install -g @hafla/intelligence-mcp-bridge@<new-version>
 ```
 
-Then restart your MCP client.
+### Step 4 — Restart your MCP client
+
+The bridge is a child process of the MCP client; the client only re-spawns it on full restart.
+
+- **Claude Code:** quit and relaunch from your terminal
+- **Claude Desktop:** quit (Cmd-Q on macOS, Alt-F4 on Windows) and reopen
+- **Gemini CLI / Antigravity CLI:** exit your current session and start a new one
+- **Antigravity 2.0:** quit and reopen the agent-builder app
+- **Cursor:** Cmd-Q / Alt-F4 and reopen
+
+### Step 5 — Verify the new version is running
+
+In your MCP client, invoke one tool from the gateway — `safe_sql_sandbox` with `SELECT 1` works. If the tool responds normally, the new version is running.
+
+If you get "MCP server disconnected" or an empty tool list, see [Troubleshooting](#troubleshooting).
+
+### Form-specific notes
 
 **Form A users:** no config edit needed across **bridge** upgrades — the bin shim resolves to the new version automatically. If you also changed Node versions via nvm (any change, including patch upgrades like `nvm install 24.16.0 && nvm use 24.16.0`), reinstall the bridge first (`npm install -g @hafla/intelligence-mcp-bridge@<new-version>`) under the new Node; nvm isolates global packages per Node version.
 

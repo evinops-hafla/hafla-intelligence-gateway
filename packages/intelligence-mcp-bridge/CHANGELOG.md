@@ -6,7 +6,72 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-## [1.0.5] — 2026-05-22
+## [1.0.6] — 2026-05-26
+
+### Fixed
+
+- **`isMainModule` ESM check no longer silently exits when invoked via
+  symlinked paths.** The published 1.0.5 used a naive literal compare
+  (`import.meta.url === \`file://${process.argv[1]}\``) that fails whenever
+  either side has a symlink in its resolution chain — global npm bins
+  (always symlinks), npx fresh-cache `.bin/` (also symlinks), macOS `/tmp`
+  auto-symlinks, NFS, Docker bind mounts, ASDF, Volta. Symptom: process
+  exited with code 0, no stdout, no stderr, no MCP handshake — MCP clients
+  saw "server disconnected" with no useful error. Fixed by resolving both
+  sides via `realpathSync` + `fileURLToPath` before comparing, with an
+  explicit `if (!process.argv[1]) return false;` guard at the top of the
+  IIFE so REPL / `node -e` / library-import contexts (where `argv[1]` is
+  `undefined`) don't trip the catch branch and pollute stderr at module
+  load. **Every consumer who followed the README install instructions for
+  1.0.5 from a neutral cwd was affected; the bug was invisible to dev
+  environments only because monorepo cwds carry a local `node_modules/`
+  install that shadows the global symlink path.** 1.0.5 is deprecated.
+
+### Added
+
+- **Diagnostic log when realpath fallback fires.** When `realpathSync`
+  throws on a `process.argv[1]` that IS present (broken symlink,
+  permission denied, race condition), the bridge now emits a
+  `log.warn('isMainModule realpath fallback', { err, argv1 })` to stderr
+  before degrading to the literal compare. Defense-in-depth for future
+  symlink edge cases — silent fallback is what made 1.0.5 hard to debug.
+- **Antigravity CLI and Antigravity 2.0 onboarding** — README
+  "Configure your MCP client" snippets carry `"trust": true` (required
+  to suppress per-tool-call prompts in Gemini CLI / Antigravity CLI);
+  Step 3 config-path table extended with three new rows covering
+  Antigravity CLI (CLI-only) + Antigravity CLI / 2.0 (shared) +
+  Antigravity 2.0; Form B fallback notes Antigravity 2.0 as a desktop
+  app that may need it (same launchd-PATH class as Claude Desktop).
+- **Canonical team-rollout procedure** in README § Upgrading — 5-step
+  walkthrough (read CHANGELOG → backup → reinstall → restart client →
+  verify) usable unchanged for every future release.
+- **`scripts/smoke.mjs`** — F-1 install/invoke smoke test runnable locally.
+  Pack → install -g → invoke `npx -y @hafla/intelligence-mcp-bridge` from
+  `os.tmpdir()` → assert JSON-RPC initialize handshake completes.
+  Cross-platform (Node stdlib only). Catches the symlink-class regression
+  that let 1.0.5 ship.
+- **Unit tests for `checkIsMainModule`** — 9 new tests covering matching
+  paths, symlinked argv1, symlinked moduleUrl, mismatched paths,
+  missing-file fallback, argv1-undefined / argv1-empty (import-time
+  silence guard), and a shape-assertion test that catches `log.warn` arg-
+  order regressions before they ship.
+
+### Changed
+
+- **PREREQUISITES.md** — extended for Antigravity onboarding:
+  - § Desired target state: added Antigravity CLI verify row (`agy --version`).
+  - § Install order: clarified that Antigravity CLI + Antigravity 2.0 are
+    NOT Node-managed and have NO install-order dependency on Steps 1–2
+    (unlike Gemini CLI / Claude Code which must install AFTER Node 24).
+  - Per-OS Step 3/4: split into Option A (Node-managed) / Option B
+    (Antigravity CLI via Google curl/PowerShell installer) / Option C
+    (desktop apps including Antigravity 2.0).
+  - NEW § Coexistence notes: Antigravity CLI + 2.0 coexist cleanly with
+    shared settings / separate data dirs / optional shared MCP config at
+    `~/.gemini/config/mcp_config.json`. **⚠️ Warning:** Antigravity 2.0 +
+    Antigravity IDE installer conflict affects BOTH macOS AND Windows
+    (per multiple Google AI Developers Forum threads) — uninstall the
+    IDE first if you only need 2.0.
 
 ### Fixed
 
