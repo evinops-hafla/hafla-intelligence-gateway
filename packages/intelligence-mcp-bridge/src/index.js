@@ -77,6 +77,9 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
+import { fileURLToPath } from 'node:url';
+import { realpathSync } from 'node:fs';
+import { resolve as pathResolve } from 'node:path';
 
 const execFileAsync = promisify(execFile);
 
@@ -1325,7 +1328,76 @@ async function main() {
 
 // ── Execution guard — skip when imported as a module by tests ───────────────
 
-const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+/**
+ * Decide whether this module is being executed as the main entrypoint.
+ *
+ * The naive `import.meta.url === \`file://${argv[1]}\`` check fails whenever
+ * either side has a symlink in its path: global npm bins (always symlinks),
+ * npx fresh-cache `.bin/` (also symlinks), macOS `/tmp` auto-symlinks, NFS,
+ * Docker bind mounts, ASDF, Volta. Symptom in 1.0.5: silent exit 0 with no
+ * MCP handshake (BS, 2026-05-25).
+ *
+ * Resolution: realpath both sides before comparing. With a typed-fallback so
+ * a missing-file edge case degrades to the literal compare rather than
+ * masking other errors.
+ *
+ * Exported for unit testing only — the underscore prefix signals this is
+ * NOT part of the public API of @hafla/intelligence-mcp-bridge. The
+ * signature may change in patch releases without backwards-compat
+ * guarantees. Third-party consumers MUST NOT import this directly.
+ */
+export function _checkIsMainModule({
+  argv1,
+  moduleUrl,
+  realpathFn = realpathSync,
+  logger = log
+} = {}) {
+  // REPL / `node -e` / module-imported-as-library: argv[1] is undefined.
+  // Skip silently before touching realpath so the IIFE doesn't log at import
+  // time when this module is loaded by tests or by `node -e "import(...)"`.
+  if (!argv1) return false;
+
+  // Parse moduleUrl ONCE up front. Splitting URL-parse failures from
+  // realpath failures (a) avoids the misleading "realpath fallback" warn on
+  // a non-file:// moduleUrl, and (b) avoids calling fileURLToPath twice in
+  // the realpath-fallback arm. If moduleUrl isn't a valid file:// URL we
+  // have nothing to compare via path normalisation — fall through to the
+  // 1.0.5 literal compare for back-compat.
+  let modulePath;
+  try {
+    modulePath = fileURLToPath(moduleUrl);
+  } catch {
+    return moduleUrl === `file://${argv1}`;
+  }
+
+  try {
+    const mainPath = realpathFn(argv1);
+    const resolvedModulePath = realpathFn(modulePath);
+    return mainPath === resolvedModulePath;
+  } catch (err) {
+    // argv1 WAS present (real-looking file path) but realpath failed — broken
+    // symlink, permission denied, race condition. Log for visibility, then
+    // degrade to a normalised path compare. NOTE: the 1.0.5 fallback was a
+    // literal string compare against `file://${argv1}`, which broke on
+    // Windows where argv[1] uses backslashes (`C:\path\to\script.js`) but
+    // moduleUrl uses URL-form forward slashes (`file:///C:/path/to/script.js`).
+    // path.resolve() normalises both to the OS-native filesystem form,
+    // closing that Windows-side mismatch in the rare-but-real fallback arm
+    // (broken symlink / EACCES on Windows). On POSIX this is functionally
+    // equivalent to the 1.0.5 fallback for ENOENT cases — both produce the
+    // same answer for the same inputs.
+    logger.warn('isMainModule realpath fallback', {
+      err: err.message,
+      argv1
+    });
+    return pathResolve(argv1) === pathResolve(modulePath);
+  }
+}
+
+const isMainModule = _checkIsMainModule({
+  argv1: process.argv[1],
+  moduleUrl: import.meta.url
+});
 if (isMainModule) {
   try {
     await main();
