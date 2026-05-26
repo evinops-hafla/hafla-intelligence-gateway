@@ -1133,6 +1133,21 @@ describe('forwardRequest', () => {
   // prefix regex `/^intelligence-mcp-bridge\/(\S+)/` and any drift here
   // breaks that.
   test('User-Agent header reports actual package version', async () => {
+    // Belt-and-suspenders: if `pkg.version` were ever `undefined` (e.g.,
+    // package.json corrupted in CI install), the exact-equals assertion
+    // below would compare `intelligence-mcp-bridge/undefined` against
+    // itself and pass silently. The regex assertion would catch it, but
+    // an explicit non-null check fails earlier with a clearer message.
+    assert.ok(
+      pkg.version,
+      'pkg.version must be defined in package.json (got: ' + pkg.version + ')'
+    );
+    assert.match(
+      pkg.version,
+      /^\d+\.\d+\.\d+/,
+      'pkg.version must be a valid semver (got: ' + pkg.version + ')'
+    );
+
     let capturedOptions;
     const captureHttpRequest = (options, callback) => {
       capturedOptions = options;

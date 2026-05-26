@@ -99,6 +99,11 @@ const GCLOUD_BIN = process.platform === 'win32' ? 'gcloud.cmd' : 'gcloud';
 // enrichment (Node version, OS) goes after a space — append-only — so
 // existing parsers keep working. Pre-1.0.6 this was hardcoded `1.0`,
 // masking real version on 100% of bridge traffic in Cloud Run logs.
+//
+// Format + source-to-package.json parity pinned by
+// `tests/index.test.js → describe('forwardRequest') →
+//   test('User-Agent header reports actual package version')`.
+// If you change either the format here OR the test there, change both.
 const BRIDGE_USER_AGENT = `intelligence-mcp-bridge/${pkg.version}`;
 
 // ── Configuration ────────────────────────────────────────────────────────────

@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- **`User-Agent` header reports actual package version (was hardcoded
+  `1.0`).** Every outbound gateway request now carries
+  `User-Agent: intelligence-mcp-bridge/<version>` (RFC 7231 § 5.5.3
+  `product/semver` format). Pre-1.0.6 the value was hardcoded to
+  `intelligence-mcp-bridge/1.0`, which masked the real version on 100%
+  of bridge traffic in Cloud Run access logs — verified against
+  `mcp-gateway-production` logs (every bridge entry showed `1.0`
+  regardless of which version was actually running). Post-1.0.6,
+  gateway-side analytics can aggregate `httpRequest.userAgent` in Cloud
+  Logging to drive a per-version distribution dashboard ("X% of
+  consumers still on 1.0.5") without any new instrumentation or
+  backend code change. Format is prefix-stable (append-only for any
+  future enrichment); a test pins source-to-`package.json` parity so
+  version drift between code and shipped package is caught in CI.
 - **`isMainModule` ESM check no longer silently exits when invoked via
   symlinked paths.** The published 1.0.5 used a naive literal compare
   (`import.meta.url === \`file://${process.argv[1]}\``) that fails whenever
@@ -29,19 +43,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Added
 
-- **`User-Agent` header now reports actual package version.** Every outbound
-  gateway request carries `User-Agent: intelligence-mcp-bridge/<version>`
-  (RFC 7231 § 5.5.3 `product/semver` format). Pre-1.0.6 this was hardcoded
-  to `intelligence-mcp-bridge/1.0`, which masked the real version on 100%
-  of bridge traffic in Cloud Run access logs — verified against
-  `mcp-gateway-production` logs (every bridge entry showed `1.0` regardless
-  of which version was actually running). Post-1.0.6, gateway-side
-  analytics can aggregate `httpRequest.userAgent` in Cloud Logging to
-  drive a per-version distribution dashboard ("X% of consumers still on
-  1.0.5") without any new instrumentation or backend code change. Format
-  is prefix-stable (append-only for any future enrichment), pinned by a
-  test against `package.json` so version drift between source and shipped
-  package is caught in CI.
 - **Diagnostic log when realpath fallback fires.** When `realpathSync`
   throws on a `process.argv[1]` that IS present (broken symlink,
   permission denied, race condition), the bridge now emits a
