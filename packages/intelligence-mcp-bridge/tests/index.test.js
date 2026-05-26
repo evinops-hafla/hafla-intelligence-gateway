@@ -645,6 +645,61 @@ describe('handleMessage — concurrent dispatch (HIGH #1 fix)', () => {
   });
 });
 
+// ── handleMessage — notification suppression (issue #8, JSON-RPC § 4.1) ───────
+
+describe('handleMessage — notification suppression (§ 4.1 compliance)', () => {
+  test('notification (no id) → gateway 2xx → pushFn NOT called', async () => {
+    const pushed = [];
+    await handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }),
+      {
+        tokenCache: null,
+        pushFn: (l) => pushed.push(l),
+        forwardRequestFn: async () => ({ jsonrpc: '2.0', result: {}, id: null })
+      }
+    );
+    assert.equal(pushed.length, 0, 'pushFn must not be called for a notification');
+  });
+
+  test('notification → gateway error → pushFn NOT called, log.warn fired', async () => {
+    const logFn = collectingLogger();
+    const pushed = [];
+    const errFrame = { code: -32000, message: 'Gateway returned 202' };
+    await handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }),
+      {
+        tokenCache: null,
+        pushFn: (l) => pushed.push(l),
+        logFn,
+        forwardRequestFn: async () => ({ jsonrpc: '2.0', error: errFrame, id: null })
+      }
+    );
+    assert.equal(pushed.length, 0, 'pushFn must not be called even when gateway returns an error frame');
+    assert.equal(logFn.warnCalls.length, 1);
+    assert.equal(
+      logFn.warnCalls[0].msg,
+      'Notification forward returned error frame; suppressed'
+    );
+    assert.equal(logFn.warnCalls[0].data.method, 'notifications/initialized');
+    assert.deepEqual(logFn.warnCalls[0].data.error, errFrame);
+  });
+
+  test('request (with id) → gateway 200 → pushFn called (regression guard)', async () => {
+    const pushed = [];
+    const responseFrame = { jsonrpc: '2.0', result: { tools: [] }, id: 99 };
+    await handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', id: 99 }),
+      {
+        tokenCache: null,
+        pushFn: (l) => pushed.push(l),
+        forwardRequestFn: async () => responseFrame
+      }
+    );
+    assert.equal(pushed.length, 1, 'pushFn must be called for a normal request with id');
+    assert.deepEqual(JSON.parse(pushed[0]), responseFrame);
+  });
+});
+
 describe('forwardRequest — multi-byte UTF-8 response body (dl-review 2026-05-17 MEDIUM #1)', () => {
   test('correctly reassembles multi-byte UTF-8 split across response chunks', async () => {
     // The MCP gateway returns tool results that routinely include
