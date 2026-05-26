@@ -206,7 +206,7 @@ function tryRmTmpCwd(cwd) {
  * error message explicitly tells the operator not to reach for sudo.
  */
 function assertGlobalPrefixWritable() {
-  const result = runNpm(['config', 'get', 'prefix']);
+  const result = runNpm(['config', 'get', 'prefix', '--no-workspaces']);
   const prefix = result.stdout.trim();
   if (!prefix) {
     throw new Error(
