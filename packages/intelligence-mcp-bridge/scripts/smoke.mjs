@@ -442,10 +442,19 @@ function invokeAndAssertMainRan() {
       } catch {
         // ignore — process may already have exited
       }
-      tryRmTmpCwd(cwd);
       if (err) rejectP(err);
       else resolveP();
     };
+
+    // Run tmp-cwd cleanup once the child has FULLY terminated — not
+    // immediately after the async `child.kill('SIGTERM')` returns. Calling
+    // rmSync while the child still holds dir/file handles produces Windows
+    // EBUSY/EACCES; the deterministic-wait via 'close'/'error' avoids the
+    // race entirely. (`tryRmTmpCwd` still carries its own retry-on-EBUSY
+    // belt for the residual case where Windows hasn't yet reaped open
+    // handles even after the close event.)
+    child.on('close', () => tryRmTmpCwd(cwd));
+    child.on('error', () => tryRmTmpCwd(cwd));
 
     const timer = setTimeout(() => {
       // Timed out. The question is: did we see bridge-shaped output? Generic
@@ -548,10 +557,14 @@ function invokeAndAssertHandshake() {
       } catch {
         // ignore — process may already have exited
       }
-      tryRmTmpCwd(cwd);
       if (err) rejectP(err);
       else resolveP(value);
     };
+
+    // See invokeAndAssertMainRan for rationale — defer cleanup until the
+    // child has fully terminated to avoid Windows EBUSY/EACCES race.
+    child.on('close', () => tryRmTmpCwd(cwd));
+    child.on('error', () => tryRmTmpCwd(cwd));
 
     const timer = setTimeout(() => {
       finish(
