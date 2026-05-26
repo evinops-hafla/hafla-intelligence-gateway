@@ -216,9 +216,9 @@ Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Wi
 **macOS / Linux** (bash / zsh):
 
 ```bash
-cp ~/.gemini/antigravity/mcp_config.json ~/.gemini/antigravity/mcp_config.json.bak.$(date +%Y%m%d-%H%M%S) 2>/dev/null || true
-rm -f ~/.gemini/antigravity/mcp_config.json
-ln -s ~/.gemini/config/mcp_config.json ~/.gemini/antigravity/mcp_config.json
+cp "$HOME"/.gemini/antigravity/mcp_config.json "$HOME"/.gemini/antigravity/mcp_config.json.bak.$(date +%Y%m%d-%H%M%S) 2>/dev/null || true
+rm -f "$HOME"/.gemini/antigravity/mcp_config.json
+ln -s "$HOME"/.gemini/config/mcp_config.json "$HOME"/.gemini/antigravity/mcp_config.json
 ```
 
 **Windows** (PowerShell, run as a regular user — symlink creation requires either Developer Mode enabled OR an elevated PowerShell):
@@ -245,12 +245,12 @@ After linking, one edit to `~/.gemini/config/mcp_config.json` (or `%USERPROFILE%
 
 ```bash
 # macOS / Linux — explicit per-file check so missing files surface
-for f in ~/.gemini/antigravity/mcp_config.json ~/.codeium/windsurf/mcp_config.json; do
+for f in "$HOME"/.gemini/antigravity/mcp_config.json "$HOME"/.codeium/windsurf/mcp_config.json; do
   if [ -f "$f" ]; then
-    printf 'EXISTS  %s  (%d bytes)\n' "$f" "$(wc -c < "$f")"
-    grep -q hafla-evwa-idl-gateway "$f" && printf '        contains hafla entry\n' || printf '        no hafla entry\n'
+    echo "EXISTS  $f  ($(wc -c < "$f") bytes)"
+    grep -q hafla-evwa-idl-gateway "$f" && echo "        contains hafla entry" || echo "        no hafla entry"
   else
-    printf 'MISSING %s\n' "$f"
+    echo "MISSING $f"
   fi
 done
 ```
@@ -261,9 +261,9 @@ foreach ($f in @("$env:USERPROFILE\.gemini\antigravity\mcp_config.json","$env:US
   if (Test-Path $f) {
     $bytes = (Get-Item $f).Length
     $hasHafla = Select-String -Path $f -Pattern 'hafla-evwa-idl-gateway' -Quiet
-    "EXISTS  $f  ($bytes bytes, hafla entry: $hasHafla)"
+    echo "EXISTS  $f  ($bytes bytes, hafla entry: $hasHafla)"
   } else {
-    "MISSING $f"
+    echo "MISSING $f"
   }
 }
 ```

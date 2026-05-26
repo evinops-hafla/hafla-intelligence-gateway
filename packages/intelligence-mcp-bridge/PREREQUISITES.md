@@ -299,7 +299,7 @@ mkdir -p ~/.nvm
 echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.zshrc
 echo "[ -s \"$(brew --prefix nvm)/nvm.sh\" ] && . \"$(brew --prefix nvm)/nvm.sh\"" >> ~/.zshrc
 echo "[ -s \"$(brew --prefix nvm)/etc/bash_completion.d/nvm\" ] && . \"$(brew --prefix nvm)/etc/bash_completion.d/nvm\"" >> ~/.zshrc
-source ~/.zshrc
+source "$HOME"/.zshrc
 ```
 
 (The `$(brew --prefix nvm)` is expanded by your shell at the time you run these `echo` commands, so the literal path gets baked into `~/.zshrc`. No runtime overhead on future shell starts.)
@@ -377,7 +377,7 @@ curl -fsSL https://antigravity.google/cli/install.sh | bash
 The installer automatically appends `export PATH="$HOME/.local/bin:$PATH"` to both `~/.zshrc` and `~/.zprofile`. The PATH change is NOT active in your current terminal session — reload it:
 
 ```bash
-source ~/.zshrc
+source "$HOME"/.zshrc
 ```
 
 Or open a new terminal tab. Then verify:

@@ -1601,7 +1601,7 @@ describe('forwardRequest — GATEWAY_PATH safety + query-string preservation', (
 
 import { realpathSync, mkdtempSync, writeFileSync, symlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 function makeTmpDir() {
@@ -1763,7 +1763,7 @@ describe('_checkIsMainModule', () => {
     // `/./` redundancy which path.resolve() collapses but literal
     // compare retains.
     const canonical = join(makeTmpDir(), 'never-existed.js');
-    const dir = canonical.slice(0, canonical.lastIndexOf('/'));
+    const dir = dirname(canonical);
     const argv1WithDotSegment = `${dir}/./never-existed.js`;
     const moduleUrl = pathToFileURL(canonical).href;
 
