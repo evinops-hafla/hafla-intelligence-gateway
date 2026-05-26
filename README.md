@@ -2,7 +2,7 @@
 
 Public client packages for the Hafla MCP Gateway at `mcp.hafla.com`.
 
-This repo is the public side of the Hafla intelligence stack: small, audit-friendly packages that let Claude Code, Claude Desktop, Cursor, Gemini CLI, Antigravity CLI, and Antigravity 2.0 reach the gateway. The gateway server itself (data lakes, identity resolution, etc.) lives in a private monorepo.
+This repo is the public side of the Hafla intelligence stack: small, audit-friendly packages that let Claude Code, Claude Desktop, Cursor, and Gemini CLI reach the gateway. The gateway server itself (data lakes, identity resolution, etc.) lives in a private monorepo.
 
 ---
 
@@ -21,7 +21,7 @@ Talk about "the MCP Gateway server" when you mean the Cloud Run service; "the In
 
 | Package                                                                  | Type                                      | Status                  |
 | ------------------------------------------------------------------------ | ----------------------------------------- | ----------------------- |
-| [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge`    | 1.0.6 — symlink-class regression fix + Antigravity CLI / 2.0 onboarding |
+| [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge`    | 1.0.4 — Node 24 LTS pin + post-release fixes |
 | `packages/plugin/`                                                       | Claude Code plugin / Gemini CLI extension | Planned                 |
 
 ### `@hafla/intelligence-mcp-bridge`

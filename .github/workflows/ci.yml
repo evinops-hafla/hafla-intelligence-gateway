@@ -29,18 +29,3 @@ jobs:
 
       - name: test all workspaces
         run: npm test --workspaces --if-present
-
-      # F-1 smoke (BS-8 symlink-class regression catch).
-      # `scripts/smoke.mjs --mode=symlink` runs: npm pack → npm install -g →
-      # spawn `npx -y @hafla/intelligence-mcp-bridge` from os.tmpdir() →
-      # assert the bridge produces ANY output (BS-8 signature is exit 0 +
-      # zero stdout + zero stderr; we catch that). Does NOT require gcloud
-      # auth or egress to mcp.hafla.com — the bridge's gcloud preflight
-      # will fail in CI and emit stderr, which counts as PASS (bridge is
-      # alive; symlink class not regressed). Full e2e smoke with token
-      # mint stays manual until a CI service account is provisioned with
-      # roles/run.invoker on mcp.hafla.com (see release-1.0.6-plan.md
-      # § 7.8 TODO).
-      - name: F-1 smoke — symlink-class regression catch
-        working-directory: packages/intelligence-mcp-bridge
-        run: node scripts/smoke.mjs --mode=symlink
