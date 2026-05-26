@@ -83,16 +83,16 @@ The MCP client config file holds your other MCP servers. Before editing it, back
 
 Pick your client's config file:
 
-| Client                                   | macOS / Linux                                                     | Windows                                                  | 1.0.6 verified? [^verif] |
-| ---------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------- | ------------------------ |
-| Gemini CLI                               | `~/.gemini/settings.json` (+ `<project>/.gemini/settings.json`)   | `%USERPROFILE%\.gemini\settings.json` (+ project-scoped) | Mac ☐ / Win ☐            |
-| Claude Code (project-scoped)             | `<project>/.mcp.json`                                             | `<project>\.mcp.json`                                    | Mac ☐ / Win ☐            |
-| Claude Code (user-scoped)                | `~/.claude.json`                                                  | `%USERPROFILE%\.claude.json`                             | Mac ☐ / Win ☐            |
-| Claude Desktop                           | `~/Library/Application Support/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json`            | Mac ☐ / Win ☐            |
-| Cursor                                   | `~/.cursor/mcp.json`                                              | `%USERPROFILE%\.cursor\mcp.json`                         | Mac ☐ / Win ☐            |
-| Antigravity CLI (CLI-only) [^agycli]     | `~/.gemini/antigravity-cli/settings.json`                         | `%USERPROFILE%\.gemini\antigravity-cli\settings.json`    | Mac ☐ / Win ☐            |
-| Antigravity CLI + 2.0 (shared) [^agycli] | `~/.gemini/config/mcp_config.json`                                | `%USERPROFILE%\.gemini\config\mcp_config.json`           | Mac ☐ / Win ☐            |
-| Antigravity 2.0                          | `~/.gemini/antigravity/mcp_config.json`                           | `%USERPROFILE%\.gemini\antigravity\mcp_config.json`      | Mac ☐ / Win ☐            |
+| Client                                   | macOS / Linux                                                     | Windows                                                  |
+| ---------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------- |
+| Gemini CLI                               | `~/.gemini/settings.json` (+ `<project>/.gemini/settings.json`)   | `%USERPROFILE%\.gemini\settings.json` (+ project-scoped) |
+| Claude Code (project-scoped)             | `<project>/.mcp.json`                                             | `<project>\.mcp.json`                                    |
+| Claude Code (user-scoped)                | `~/.claude.json`                                                  | `%USERPROFILE%\.claude.json`                             |
+| Claude Desktop                           | `~/Library/Application Support/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json`            |
+| Cursor                                   | `~/.cursor/mcp.json`                                              | `%USERPROFILE%\.cursor\mcp.json`                         |
+| Antigravity CLI (CLI-only) [^agycli]     | `~/.gemini/antigravity-cli/settings.json`                         | `%USERPROFILE%\.gemini\antigravity-cli\settings.json`    |
+| Antigravity CLI + 2.0 (shared) [^agycli] | `~/.gemini/config/mcp_config.json`                                | `%USERPROFILE%\.gemini\config\mcp_config.json`           |
+| Antigravity 2.0                          | `~/.gemini/antigravity/mcp_config.json`                           | `%USERPROFILE%\.gemini\antigravity\mcp_config.json`      |
 
 [^agycli]: **Antigravity CLI has two valid config paths.** Pick one of:
 
@@ -101,7 +101,6 @@ Pick your client's config file:
 
     Gemini CLI and Antigravity CLI both also read project-scoped settings from `<project>/.gemini/settings.json` (cascades over the global file — useful for repo-specific overrides).
 
-[^verif]: Each `☐` becomes `✓` once a maintainer has installed this version, configured the indicated client per [Step 4](#step-4--configure-your-mcp-client), and successfully invoked one MCP tool end-to-end. Unflipped rows = combinations not yet end-to-end tested by a maintainer — may still work for you; the bridge code itself doesn't differ across rows. Rows with `☐ — pending <client> verifier as of YYYY-MM-DD` mean we know the gap is open; rows without that annotation just haven't been walked yet.
 
 **If the file exists**, back it up with a date-time suffix:
 
@@ -199,7 +198,7 @@ Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Wi
 | OS                   | Command                                                                                                                |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | macOS                | `if test -x "$(dirname $(which gcloud))/gcloud"; then echo OK; else echo "NOT FOUND — install gcloud first"; fi`        |
-| Windows (PowerShell) | `Test-Path "$($((Get-Command gcloud).Source) \| Split-Path)\gcloud.cmd"`                                               |
+| Windows (PowerShell) | `Test-Path "$((Get-Command gcloud).Source \| Split-Path)\gcloud.cmd"`                                                  |
 
 Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` / `False`, install gcloud per [PREREQUISITES.md](./PREREQUISITES.md) — Form B can't paper over a missing `gcloud` binary.
 
