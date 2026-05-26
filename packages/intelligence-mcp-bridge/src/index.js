@@ -1143,21 +1143,32 @@ export async function handleMessage(
     return;
   }
 
+  const isNotification = !('id' in message);
+
   try {
     const response = await forwardRequestFn(message, {
       tokenCache,
       abortSignal
     });
-    pushFn(JSON.stringify(response) + '\n');
+    if (!isNotification) {
+      pushFn(JSON.stringify(response) + '\n');
+    } else if (response?.error) {
+      logFn.warn('Notification forward returned error frame; suppressed', {
+        method: message.method,
+        error: response.error
+      });
+    }
   } catch (err) {
     logFn.error('Unexpected forwardRequest error', { error: err.message });
-    pushFn(
-      JSON.stringify({
-        jsonrpc: '2.0',
-        error: { code: -32603, message: 'Internal error' },
-        id: message.id ?? null
-      }) + '\n'
-    );
+    if (!isNotification) {
+      pushFn(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: 'Internal error' },
+          id: message.id ?? null
+        }) + '\n'
+      );
+    }
   }
 }
 
