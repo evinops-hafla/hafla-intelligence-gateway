@@ -1357,21 +1357,34 @@ export function _checkIsMainModule({
   // time when this module is loaded by tests or by `node -e "import(...)"`.
   if (!argv1) return false;
   try {
+    // Order matters: realpathFn(argv1) runs FIRST so argv1-not-found cases
+    // land in the outer catch's log.warn + path.resolve fallback (preserves
+    // the "main process has a real-looking but unresolvable file" diagnostic
+    // surface — exercised by tests). fileURLToPath is then isolated in its
+    // own inner try-catch so URL-parse failures (e.g. a non-file:// URL or
+    // a Windows-malformed file URL with no drive letter) DON'T get
+    // mis-attributed as realpath failures in the log. That class drops to
+    // the silent literal compare for back-compat with 1.0.5.
     const mainPath = realpathFn(argv1);
-    const modulePath = realpathFn(fileURLToPath(moduleUrl));
-    return mainPath === modulePath;
+    let modulePath;
+    try {
+      modulePath = fileURLToPath(moduleUrl);
+    } catch {
+      return moduleUrl === `file://${argv1}`;
+    }
+    return mainPath === realpathFn(modulePath);
   } catch (err) {
-    // argv1 WAS present (real-looking file path) but realpath failed — broken
-    // symlink, permission denied, race condition. Log for visibility, then
-    // degrade to a normalised path compare. NOTE: the 1.0.5 fallback was a
-    // literal string compare against `file://${argv1}`, which broke on
-    // Windows where argv[1] uses backslashes (`C:\path\to\script.js`) but
-    // moduleUrl uses URL-form forward slashes (`file:///C:/path/to/script.js`).
-    // path.resolve() normalises both to the OS-native filesystem form,
-    // closing that Windows-side mismatch in the rare-but-real fallback arm
-    // (broken symlink / EACCES on Windows). On POSIX this is functionally
-    // equivalent to the 1.0.5 fallback for ENOENT cases — both produce the
-    // same answer for the same inputs.
+    // realpath-class failure (argv1 OR modulePath). Log message is accurate:
+    // URL-parse failures are handled in the inner catch above and never
+    // reach this point. Degrade to a normalised path compare — NOTE: the
+    // 1.0.5 fallback was a literal string compare against `file://${argv1}`,
+    // which broke on Windows where argv[1] uses backslashes
+    // (`C:\path\to\script.js`) but moduleUrl uses URL-form forward slashes
+    // (`file:///C:/path/to/script.js`). path.resolve() normalises both to
+    // the OS-native filesystem form, closing that Windows-side mismatch in
+    // the rare-but-real fallback arm (broken symlink / EACCES on Windows).
+    // On POSIX this is functionally equivalent to the 1.0.5 fallback for
+    // ENOENT cases — both produce the same answer for the same inputs.
     logger.warn('isMainModule realpath fallback', {
       err: err.message,
       argv1
