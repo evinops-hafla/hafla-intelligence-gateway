@@ -1,6 +1,6 @@
 # `@hafla/intelligence-mcp-bridge`
 
-**Status:** Production. Current published version: `1.0.5`. Next release: `1.0.6` (in flight — see [CHANGELOG.md](./CHANGELOG.md)). The install snippets below pin `@1.0.6` ahead of publish; until the registry catches up, use `@1.0.5` or omit the pin.
+**Status:** Production (1.0.6 — see [CHANGELOG.md](./CHANGELOG.md)).
 
 A small stdio↔HTTPS shim that lets **Claude Code, Claude Desktop, Cursor, Gemini CLI, Antigravity CLI, and Antigravity 2.0** reach the **Hafla MCP Gateway** at `mcp.hafla.com`.
 
