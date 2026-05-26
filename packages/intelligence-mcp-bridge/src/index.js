@@ -1376,6 +1376,12 @@ export function _checkIsMainModule({
   // Skip silently before touching realpath so the IIFE doesn't log at import
   // time when this module is loaded by tests or by `node -e "import(...)"`.
   if (!argv1) return false;
+
+  // Declared above the outer try-catch so the catch can reuse the parsed
+  // value (set inside the inner try) instead of calling fileURLToPath a
+  // second time. Tested by `argv1 resolvable but realpath(modulePath) throws`.
+  let modulePath;
+
   try {
     // Order matters: realpathFn(argv1) runs FIRST so argv1-not-found cases
     // land in the outer catch's log.warn + path.resolve fallback (preserves
@@ -1386,7 +1392,6 @@ export function _checkIsMainModule({
     // mis-attributed as realpath failures in the log. That class drops to
     // the silent literal compare for back-compat with 1.0.5.
     const mainPath = realpathFn(argv1);
-    let modulePath;
     try {
       modulePath = fileURLToPath(moduleUrl);
     } catch {
@@ -1410,7 +1415,14 @@ export function _checkIsMainModule({
       argv1
     });
     try {
-      return pathResolve(argv1) === pathResolve(fileURLToPath(moduleUrl));
+      // Reuse the cached modulePath if it was successfully parsed before the
+      // realpath throw; otherwise the throw must have come from realpathFn(argv1)
+      // (the very first call) and we need to parse moduleUrl now. The `??`
+      // (not `||`) is defensive — `fileURLToPath` never returns an empty
+      // string today, but `??` is the correct semantic for "use cached unless
+      // unset" and avoids surprises if that ever changes.
+      const resolvedModulePath = modulePath ?? fileURLToPath(moduleUrl);
+      return pathResolve(argv1) === pathResolve(resolvedModulePath);
     } catch {
       // Last-ditch fallback if even path normalisation fails (e.g., moduleUrl
       // isn't a valid file:// URL). Match 1.0.5 behaviour for back-compat.

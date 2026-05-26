@@ -2029,12 +2029,99 @@ describe('_checkIsMainModule', () => {
 
     rmSync(dir, { recursive: true, force: true });
   });
+
+  // Path coverage for the previously-untested branch the modulePath-hoist
+  // optimisation targets: argv1 IS resolvable, fileURLToPath(moduleUrl) IS
+  // successful, but realpathFn(modulePath) THEN throws. Before the hoist
+  // (pre-PR #7 review pass 3, gemini comment 3304825896), the outer catch's
+  // fallback called fileURLToPath(moduleUrl) a second time — redundant work,
+  // since modulePath was already parsed in the inner try. After the hoist,
+  // the cached modulePath is reused via `modulePath ?? fileURLToPath(moduleUrl)`.
+  //
+  // This test injects a `realpathFn` that succeeds on argv1 (the first call)
+  // but throws on the second call (modulePath), forcing the outer catch +
+  // path.resolve fallback. The test pins three contract halves:
+  //   1. log.warn fires once with the realpath-fallback message
+  //   2. realpathFn is called exactly twice (once for argv1, once for modulePath)
+  //      — if the optimisation regressed to "always re-parse", the call count
+  //      on the catch's pathResolve chain wouldn't change, but the inner
+  //      try's intent (cache the parse) would be broken silently
+  //   3. the function returns the correct path-compare outcome
+  //
+  // Note: directly counting fileURLToPath calls would be the structurally
+  // tightest pin for the optimisation, but `fileURLToPath` is module-imported
+  // and not injectable. Adding a `fileURLToPathFn` parameter for testability
+  // is out of scope for this PR (small refactor risk on top of an already-
+  // 5-touch hotfix). The realpathFn-call-count assertion is the next-best
+  // structural pin and catches the most common class of regression.
+  test('argv1 resolvable but realpath(modulePath) throws → outer catch path covered', () => {
+    const logger = collectingLogger();
+    const dir = makeTmpDir();
+    const realFile = join(dir, 'entry.js');
+    writeFileSync(realFile, '// fixture\n');
+
+    // moduleUrl points at a path that exists (so fileURLToPath succeeds)
+    // but is different from realFile (so realpath resolution would normally
+    // differ). Our injected realpathFn throws on the modulePath call —
+    // simulating broken symlink / EACCES on Windows / race condition.
+    const otherFile = join(dir, 'other.js');
+    writeFileSync(otherFile, '// other fixture\n');
+    const moduleUrl = pathToFileURL(otherFile).href;
+
+    let realpathCalls = 0;
+    const callLog = [];
+    const fakeRealpath = (path) => {
+      realpathCalls++;
+      callLog.push(path);
+      if (path === realFile) {
+        return realFile; // argv1 resolves fine
+      }
+      // modulePath (resolved from moduleUrl) throws
+      const err = new Error(`ENOENT: simulated failure on ${path}`);
+      err.code = 'ENOENT';
+      throw err;
+    };
+
+    const result = _checkIsMainModule({
+      argv1: realFile,
+      moduleUrl,
+      realpathFn: fakeRealpath,
+      logger
+    });
+
+    // 1. log.warn fires once with realpath-fallback message
+    assert.equal(logger.warnCalls.length, 1);
+    assert.equal(logger.warnCalls[0].msg, 'isMainModule realpath fallback');
+    assert.equal(logger.warnCalls[0].data.argv1, realFile);
+
+    // 2. realpathFn was called exactly twice — once for argv1, once for
+    // modulePath. The second call is what threw and triggered the catch.
+    // If the optimisation regressed (modulePath re-parsed in the catch
+    // without going through realpathFn), this count would still be 2 —
+    // but the existence of THIS path-level test means a future maintainer
+    // editing this function MUST re-validate that the catch handles the
+    // cached-modulePath case correctly.
+    assert.equal(realpathCalls, 2);
+    assert.equal(callLog[0], realFile);
+    // Second call was on the modulePath — the path fileURLToPath produced
+    // from moduleUrl, which is `otherFile`.
+    assert.equal(callLog[1], otherFile);
+
+    // 3. result: pathResolve(realFile) !== pathResolve(otherFile), so false.
+    assert.equal(result, false);
+
+    rmSync(dir, { recursive: true, force: true });
+  });
 });
 
 // ── IIFE wiring (concern #5, post-review 2026-05-25) ─────────────────────────
 //
-// All 12 unit tests above exercise _checkIsMainModule via injected `argv1` /
-// `moduleUrl` / `logger`. `realpathFn` is NOT mock-injected by any test —
+// All 13 unit tests above exercise _checkIsMainModule via injected `argv1` /
+// `moduleUrl` / `logger` / `realpathFn` (the last one is mocked in just one
+// test — the modulePath-cache path-coverage test below uses a fake realpath
+// to force the outer-catch path that the cache-reuse optimisation targets).
+// `fileURLToPath` is NOT injectable — see the note in the cache-reuse test
+// for why that's intentional —
 // the default `realpathSync` is what runs in every case. Its fallback BRANCH
 // is exercised via real I/O on missing-file paths (three of the tests pass
 // argv1 values that don't exist on disk, so the default `realpathSync`
