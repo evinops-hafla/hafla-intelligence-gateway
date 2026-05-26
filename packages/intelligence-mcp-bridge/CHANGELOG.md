@@ -50,15 +50,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   `os.tmpdir()` → assert JSON-RPC initialize handshake completes.
   Cross-platform (Node stdlib only). Catches the symlink-class regression
   that let 1.0.5 ship.
-- **Unit tests for `_checkIsMainModule`** — 11 new tests covering matching
+- **Unit tests for `_checkIsMainModule`** — 12 new tests covering matching
   paths, symlinked argv1, symlinked moduleUrl, mismatched paths,
   missing-file fallback, fallback path-normalisation (defends against
   Windows backslash + redundant segments), macOS `/tmp` auto-symlink
   scenario, argv1-undefined / argv1-empty (import-time silence guard),
-  and a shape-assertion test that catches `log.warn` arg-order
-  regressions before they ship. All exercise the seam via injected
-  `argv1` / `moduleUrl` / `logger`; `realpathFn`'s fallback branch is
-  hit via real I/O on missing-file argv1, not via mock injection.
+  a shape-assertion test that catches `log.warn` arg-order regressions,
+  and a Scenario D test pinning the silent-on-URL-parse-error contract
+  introduced by the PR #7 compromise design (valid argv1 + malformed
+  `moduleUrl` returns literal compare without firing the realpath
+  fallback log). All exercise the seam via injected `argv1` /
+  `moduleUrl` / `logger`; `realpathFn`'s fallback branch is hit via
+  real I/O on missing-file argv1, not via mock injection.
 
 ### Changed
 

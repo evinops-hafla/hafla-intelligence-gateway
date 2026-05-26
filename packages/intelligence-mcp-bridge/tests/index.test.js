@@ -1894,11 +1894,52 @@ describe('_checkIsMainModule', () => {
       rmSync(realDir, { recursive: true, force: true });
     }
   });
+
+  // Scenario D — valid argv1 + malformed moduleUrl. This is the path
+  // gemini's PR #7 compromise design (commit 62ae3a1) introduced silent
+  // handling for: URL-parse failures from fileURLToPath are caught in an
+  // inner try-catch and return the literal compare WITHOUT firing the
+  // outer 'isMainModule realpath fallback' log. Pre-PR-#7, this path
+  // would have logged the misleading warn message. The test pins both
+  // halves of the contract: (a) silent literal-compare result, (b)
+  // log.warn NOT called. In practice, real import.meta.url is always
+  // valid on the platform Node is running on, so this scenario is
+  // pathological — but documenting the contract via a test prevents a
+  // future refactor from regressing the silent-on-URL-parse-error
+  // behavior without notice.
+  test('valid argv1 + malformed moduleUrl → silent literal compare, no log.warn', () => {
+    const logger = collectingLogger();
+    const dir = makeTmpDir();
+    const realFile = join(dir, 'entry.js');
+    writeFileSync(realFile, '// fixture\n');
+
+    // 'http://example.com/x' is a syntactically valid URL but NOT a
+    // file:// URL — fileURLToPath rejects it with ERR_INVALID_URL_SCHEME.
+    // (Choosing http: rather than a garbage string is intentional: the
+    // outer realpath try MUST run first and succeed on argv1, so we need
+    // argv1 to be a real, resolvable path. The compromise design's
+    // ordering is what makes "valid argv1, invalid moduleUrl" reach the
+    // inner URL-parse catch instead of either of the outer catches.)
+    const result = _checkIsMainModule({
+      argv1: realFile,
+      moduleUrl: 'http://example.com/x',
+      logger
+    });
+
+    // (a) silent literal compare: moduleUrl !== `file://${realFile}` → false
+    assert.equal(result, false);
+    // (b) crucially, log.warn was NOT called — the misleading 'realpath
+    // fallback' message stays out of stderr when the actual failure
+    // class is URL parse, not realpath.
+    assert.equal(logger.warnCalls.length, 0);
+
+    rmSync(dir, { recursive: true, force: true });
+  });
 });
 
 // ── IIFE wiring (concern #5, post-review 2026-05-25) ─────────────────────────
 //
-// All 11 unit tests above exercise _checkIsMainModule via injected `argv1` /
+// All 12 unit tests above exercise _checkIsMainModule via injected `argv1` /
 // `moduleUrl` / `logger`. `realpathFn` is NOT mock-injected by any test —
 // the default `realpathSync` is what runs in every case. Its fallback BRANCH
 // is exercised via real I/O on missing-file paths (three of the tests pass
