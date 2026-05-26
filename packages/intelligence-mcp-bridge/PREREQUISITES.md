@@ -85,7 +85,9 @@ One-time. The nvm-windows installer is the only step on Windows that explicitly 
 3. **Close and reopen PowerShell** so `PATH` picks up the new `nvm` command. Alternatively - Refresh `PATH` in the current PowerShell session so the new `nvm` command is recognized immediately (no terminal restart needed). The form below appends the freshly-read registry PATH onto your current session PATH, so any session-only additions (venv activations, tool temp exports) are preserved:
 
    ```powershell
-   $env:PATH = [Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [Environment]::GetEnvironmentVariable("PATH","User") + ";" + $env:PATH
+   $env:PATH = [Environment]::ExpandEnvironmentVariables(
+  [Environment]::GetEnvironmentVariable("PATH","Machine") + ";" +
+  [Environment]::GetEnvironmentVariable("PATH","User") + ";" + $env:PATH)
    ```
 
 Verify:
@@ -190,7 +192,9 @@ winget install Google.CloudSDK
 **Close and reopen PowerShell** so `PATH` picks up the new `gcloud` command. Alternatively - Refresh `PATH` in the current PowerShell session so `gcloud` is recognized immediately (no terminal restart needed). The form below appends the freshly-read registry PATH onto your current session PATH, so any session-only additions (venv activations, tool temp exports) are preserved:
 
 ```powershell
-$env:PATH = [Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [Environment]::GetEnvironmentVariable("PATH","User") + ";" + $env:PATH
+$env:PATH = [Environment]::ExpandEnvironmentVariables(
+  [Environment]::GetEnvironmentVariable("PATH","Machine") + ";" +
+  [Environment]::GetEnvironmentVariable("PATH","User") + ";" + $env:PATH)
 ```
 
 Verify:
@@ -212,6 +216,19 @@ A browser window opens — sign in with your `@hafla.com` account. If you have o
 ```powershell
 gcloud config set account YOU@hafla.com
 ```
+
+> **Multi-profile users (developers with separate GCP projects / client accounts):** the simple `gcloud config set account` mutates the **default** configuration in-place. If you have local scripts or other tooling expecting the default config to point at a different account, switching it here will break those workflows on your next session. Use a named configuration instead:
+>
+> ```powershell
+> gcloud config configurations create hafla
+> gcloud config configurations activate hafla
+> gcloud config set account YOU@hafla.com
+> gcloud auth login
+> # Activate this profile per-session whenever you work on Hafla:
+> #   gcloud config configurations activate hafla
+> ```
+>
+> Skip this whole sub-tip if Hafla is your only GCP account — the simple `set account` form above is correct for that case.
 
 Verify:
 
@@ -406,6 +423,19 @@ A browser window opens — sign in with your `@hafla.com` account. If you have o
 ```bash
 gcloud config set account YOU@hafla.com
 ```
+
+> **Multi-profile users (developers with separate GCP projects / client accounts):** the simple `gcloud config set account` mutates the **default** configuration in-place. If you have local scripts or other tooling expecting the default config to point at a different account, switching it here will break those workflows on your next session. Use a named configuration instead:
+>
+> ```bash
+> gcloud config configurations create hafla
+> gcloud config configurations activate hafla
+> gcloud config set account YOU@hafla.com
+> gcloud auth login
+> # Activate this profile per-session whenever you work on Hafla:
+> #   gcloud config configurations activate hafla
+> ```
+>
+> Skip this whole sub-tip if Hafla is your only GCP account — the simple `set account` form above is correct for that case.
 
 Verify:
 

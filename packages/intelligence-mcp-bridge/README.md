@@ -204,18 +204,35 @@ Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Wi
 }
 ```
 
-**💡 Pro-tip — symlink-sync for users running BOTH Antigravity CLI AND Antigravity 2.0.** Antigravity CLI reads from `~/.gemini/antigravity-cli/settings.json` (CLI-only) or the shared `~/.gemini/config/mcp_config.json`; Antigravity 2.0 reads from `~/.gemini/antigravity/mcp_config.json`. To avoid maintaining the 2.0 config and the shared CLI config as two separate files that can drift, symlink the 2.0 path to the shared path so a single edit propagates to both products:
+**💡 Pro-tip — symlink-sync for users running BOTH Antigravity CLI AND Antigravity 2.0.** Antigravity CLI reads from `~/.gemini/antigravity-cli/settings.json` (CLI-only) or the shared `~/.gemini/config/mcp_config.json`; Antigravity 2.0 reads from `~/.gemini/antigravity/mcp_config.json`. To avoid maintaining the 2.0 config and the shared CLI config as two separate files that can drift, symlink the 2.0 path to the shared path so a single edit propagates to both products.
+
+**macOS / Linux** (bash / zsh):
 
 ```bash
-# Sync Antigravity 2.0 with the shared Antigravity CLI config — macOS / Linux
 cp ~/.gemini/antigravity/mcp_config.json ~/.gemini/antigravity/mcp_config.json.bak.$(date +%Y%m%d-%H%M%S) 2>/dev/null || true
 rm -f ~/.gemini/antigravity/mcp_config.json
 ln -s ~/.gemini/config/mcp_config.json ~/.gemini/antigravity/mcp_config.json
 ```
 
-After symlinking, one edit to `~/.gemini/config/mcp_config.json` is read by both Antigravity CLI (which natively reads the shared file) and Antigravity 2.0 (via the symlink). Skip the trick entirely if you only run one product; it's drift prevention for the multi-product setup.
+**Windows** (PowerShell, run as a regular user — symlink creation requires either Developer Mode enabled OR an elevated PowerShell):
 
-**Legacy note — Windsurf path:** Some older Antigravity 2.0 installs also read from `~/.codeium/windsurf/mcp_config.json` (the legacy Windsurf platform that Antigravity 2.0 inherited). If your `~/.gemini/antigravity/mcp_config.json` symlink doesn't propagate as expected, check whether your 2.0 install is reading from the Windsurf path instead — repeat the same symlink pattern targeting `~/.codeium/windsurf/mcp_config.json` if so.
+```powershell
+$src = "$env:USERPROFILE\.gemini\config\mcp_config.json"
+$dst = "$env:USERPROFILE\.gemini\antigravity\mcp_config.json"
+if (Test-Path $dst) { Copy-Item $dst "$dst.bak.$(Get-Date -Format 'yyyyMMdd-HHmmss')" }
+Remove-Item $dst -ErrorAction SilentlyContinue
+New-Item -ItemType SymbolicLink -Path $dst -Target $src | Out-Null
+```
+
+If Developer Mode is disabled and you don't want to elevate the PowerShell session, use a **hard link** instead — same single-source-of-truth effect, no symlink privilege requirement:
+
+```powershell
+New-Item -ItemType HardLink -Path $dst -Target $src | Out-Null
+```
+
+After linking, one edit to `~/.gemini/config/mcp_config.json` (or `%USERPROFILE%\.gemini\config\mcp_config.json`) is read by both Antigravity CLI (natively) and Antigravity 2.0 (via the link). Skip this entirely if you only run one product; it's drift prevention for the multi-product setup.
+
+**Legacy note — Windsurf path:** Some older Antigravity 2.0 installs also read from `~/.codeium/windsurf/mcp_config.json` (the legacy Windsurf platform that Antigravity 2.0 inherited). If your `~/.gemini/antigravity/mcp_config.json` link doesn't propagate as expected, check whether your 2.0 install is reading from the Windsurf path instead — repeat the same link pattern targeting that path if so.
 
 ### Step 5 — Reload your MCP client + end-to-end verify
 
@@ -231,6 +248,8 @@ Restart the client. **CLI clients (Gemini CLI, Antigravity CLI):** the MCP confi
 | Antigravity 2.0                                  | Open the **Settings → MCP Servers** panel in the desktop app. `hafla-evwa-idl-gateway` should appear with a connected indicator.                                                                                                                                      |
 
 If the server doesn't appear or shows as disconnected, the bridge didn't load — see [Troubleshooting](#troubleshooting). The connection check is cheap and gives a deterministic load/connect signal before you fire a real tool call.
+
+> ⚠️ **`/mcp` is a slash command, not a universal verification path.** It only works in Claude Code, Gemini CLI, and Antigravity CLI. If you type `/mcp` into the **Cursor chat box** or **Claude Desktop chat box**, it gets submitted as raw text to the model (the model will probably say something like "I don't recognise that command" — and the bridge stays unverified). Use the Settings panel paths in the table above for those clients.
 
 **Gemini CLI users — what to expect on first launch:** Gemini CLI may show two prompts the bridge cannot suppress:
 
