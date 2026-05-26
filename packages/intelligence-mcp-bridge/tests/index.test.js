@@ -47,6 +47,10 @@ import {
   DEFAULT_DRAIN_TIMEOUT_MS
 } from '../src/drain-timeout.js';
 
+// Same JSON import the bridge uses for its User-Agent — assert version
+// parity rather than maintaining a hardcoded duplicate in the test.
+import pkg from '../package.json' with { type: 'json' };
+
 // ── JWT-shaped token builder for cross-check tests ──────────────────────────
 // Cross-check decodes the minted token's payload; tests need real JWT-shaped
 // inputs (header.payload.fakesig) so the decoder doesn't reject them.
@@ -1117,6 +1121,96 @@ describe('forwardRequest', () => {
     assert.equal(result.error.code, -32000);
     assert.match(result.error.message, /503/);
   });
+
+  // User-Agent reports the actual package version on every outbound request.
+  // Pre-1.0.6 this was hardcoded `intelligence-mcp-bridge/1.0`, which masked
+  // the real version on 100% of bridge traffic in Cloud Run access logs
+  // (verified against mcp-gateway-production logs 2026-05-26 — all bridge
+  // entries showed `1.0` regardless of which version was actually running).
+  // The test asserts (a) the header is present, (b) it reports the current
+  // package.json version, (c) the format follows `product/semver` per RFC
+  // 7231 § 5.5.3 — downstream gateway-side analytics parses this with a
+  // prefix regex `/^intelligence-mcp-bridge\/(\S+)/` and any drift here
+  // breaks that.
+  test('User-Agent header reports actual package version', async () => {
+    // Belt-and-suspenders: if `pkg.version` were ever `undefined` (e.g.,
+    // package.json corrupted in CI install), the exact-equals assertion
+    // below would compare `intelligence-mcp-bridge/undefined` against
+    // itself and pass silently. The regex assertion would catch it, but
+    // an explicit non-null check fails earlier with a clearer message.
+    assert.ok(
+      pkg.version,
+      'pkg.version must be defined in package.json (got: ' + pkg.version + ')'
+    );
+    assert.match(
+      pkg.version,
+      /^\d+\.\d+\.\d+/,
+      'pkg.version must be a valid semver (got: ' + pkg.version + ')'
+    );
+
+    let capturedOptions;
+    const captureHttpRequest = (options, callback) => {
+      capturedOptions = options;
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.end = () => {
+        const res = new EventEmitter();
+        res.statusCode = 200;
+        res.setEncoding = () => {};
+        callback(res);
+        setImmediate(() => {
+          res.emit(
+            'data',
+            JSON.stringify({ jsonrpc: '2.0', result: { ok: true }, id: 1 })
+          );
+          res.emit('end');
+        });
+      };
+      req.destroy = () => {};
+      return req;
+    };
+
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/list', id: 1 },
+      {
+        tokenCache,
+        httpRequestFn: captureHttpRequest,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+
+    assert.ok(
+      capturedOptions?.headers,
+      'mock should have captured request options + headers'
+    );
+    const ua = capturedOptions.headers['User-Agent'];
+    assert.ok(ua, 'User-Agent header must be present');
+
+    // Exact match against the imported package.json version — catches both
+    // (a) accidental hardcoding regressions and (b) version drift between
+    // src/index.js and package.json.
+    assert.equal(
+      ua,
+      `intelligence-mcp-bridge/${pkg.version}`,
+      `User-Agent should be 'intelligence-mcp-bridge/${pkg.version}', got '${ua}'`
+    );
+
+    // Parse-stability check: the format MUST stay `product/semver` (prefix-
+    // stable, append-only for any future enrichment). If a future maintainer
+    // changes the format, this assertion fails before it ships to consumers
+    // whose analytics parsers depend on the prefix.
+    assert.match(
+      ua,
+      /^intelligence-mcp-bridge\/\d+\.\d+\.\d+/,
+      'User-Agent must follow product/semver prefix (RFC 7231 § 5.5.3)'
+    );
+  });
 });
 
 // ── assertNode24 ─────────────────────────────────────────────────────────────
@@ -1894,12 +1988,140 @@ describe('_checkIsMainModule', () => {
       rmSync(realDir, { recursive: true, force: true });
     }
   });
+
+  // Scenario D — valid argv1 + malformed moduleUrl. This is the path
+  // gemini's PR #7 compromise design (commit 62ae3a1) introduced silent
+  // handling for: URL-parse failures from fileURLToPath are caught in an
+  // inner try-catch and return the literal compare WITHOUT firing the
+  // outer 'isMainModule realpath fallback' log. Pre-PR-#7, this path
+  // would have logged the misleading warn message. The test pins both
+  // halves of the contract: (a) silent literal-compare result, (b)
+  // log.warn NOT called. In practice, real import.meta.url is always
+  // valid on the platform Node is running on, so this scenario is
+  // pathological — but documenting the contract via a test prevents a
+  // future refactor from regressing the silent-on-URL-parse-error
+  // behavior without notice.
+  test('valid argv1 + malformed moduleUrl → silent literal compare, no log.warn', () => {
+    const logger = collectingLogger();
+    const dir = makeTmpDir();
+    const realFile = join(dir, 'entry.js');
+    writeFileSync(realFile, '// fixture\n');
+
+    // 'http://example.com/x' is a syntactically valid URL but NOT a
+    // file:// URL — fileURLToPath rejects it with ERR_INVALID_URL_SCHEME.
+    // (Choosing http: rather than a garbage string is intentional: the
+    // outer realpath try MUST run first and succeed on argv1, so we need
+    // argv1 to be a real, resolvable path. The compromise design's
+    // ordering is what makes "valid argv1, invalid moduleUrl" reach the
+    // inner URL-parse catch instead of either of the outer catches.)
+    const result = _checkIsMainModule({
+      argv1: realFile,
+      moduleUrl: 'http://example.com/x',
+      logger
+    });
+
+    // (a) silent literal compare: moduleUrl !== `file://${realFile}` → false
+    assert.equal(result, false);
+    // (b) crucially, log.warn was NOT called — the misleading 'realpath
+    // fallback' message stays out of stderr when the actual failure
+    // class is URL parse, not realpath.
+    assert.equal(logger.warnCalls.length, 0);
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  // Path coverage for the previously-untested branch the modulePath-hoist
+  // optimisation targets: argv1 IS resolvable, fileURLToPath(moduleUrl) IS
+  // successful, but realpathFn(modulePath) THEN throws. Before the hoist
+  // (pre-PR #7 review pass 3, gemini comment 3304825896), the outer catch's
+  // fallback called fileURLToPath(moduleUrl) a second time — redundant work,
+  // since modulePath was already parsed in the inner try. After the hoist,
+  // the cached modulePath is reused via `modulePath ?? fileURLToPath(moduleUrl)`.
+  //
+  // This test injects a `realpathFn` that succeeds on argv1 (the first call)
+  // but throws on the second call (modulePath), forcing the outer catch +
+  // path.resolve fallback. The test pins three contract halves:
+  //   1. log.warn fires once with the realpath-fallback message
+  //   2. realpathFn is called exactly twice (once for argv1, once for modulePath)
+  //      — if the optimisation regressed to "always re-parse", the call count
+  //      on the catch's pathResolve chain wouldn't change, but the inner
+  //      try's intent (cache the parse) would be broken silently
+  //   3. the function returns the correct path-compare outcome
+  //
+  // Note: directly counting fileURLToPath calls would be the structurally
+  // tightest pin for the optimisation, but `fileURLToPath` is module-imported
+  // and not injectable. Adding a `fileURLToPathFn` parameter for testability
+  // is out of scope for this PR (small refactor risk on top of an already-
+  // 5-touch hotfix). The realpathFn-call-count assertion is the next-best
+  // structural pin and catches the most common class of regression.
+  test('argv1 resolvable but realpath(modulePath) throws → outer catch path covered', () => {
+    const logger = collectingLogger();
+    const dir = makeTmpDir();
+    const realFile = join(dir, 'entry.js');
+    writeFileSync(realFile, '// fixture\n');
+
+    // moduleUrl points at a path that exists (so fileURLToPath succeeds)
+    // but is different from realFile (so realpath resolution would normally
+    // differ). Our injected realpathFn throws on the modulePath call —
+    // simulating broken symlink / EACCES on Windows / race condition.
+    const otherFile = join(dir, 'other.js');
+    writeFileSync(otherFile, '// other fixture\n');
+    const moduleUrl = pathToFileURL(otherFile).href;
+
+    let realpathCalls = 0;
+    const callLog = [];
+    const fakeRealpath = (path) => {
+      realpathCalls++;
+      callLog.push(path);
+      if (path === realFile) {
+        return realFile; // argv1 resolves fine
+      }
+      // modulePath (resolved from moduleUrl) throws
+      const err = new Error(`ENOENT: simulated failure on ${path}`);
+      err.code = 'ENOENT';
+      throw err;
+    };
+
+    const result = _checkIsMainModule({
+      argv1: realFile,
+      moduleUrl,
+      realpathFn: fakeRealpath,
+      logger
+    });
+
+    // 1. log.warn fires once with realpath-fallback message
+    assert.equal(logger.warnCalls.length, 1);
+    assert.equal(logger.warnCalls[0].msg, 'isMainModule realpath fallback');
+    assert.equal(logger.warnCalls[0].data.argv1, realFile);
+
+    // 2. realpathFn was called exactly twice — once for argv1, once for
+    // modulePath. The second call is what threw and triggered the catch.
+    // If the optimisation regressed (modulePath re-parsed in the catch
+    // without going through realpathFn), this count would still be 2 —
+    // but the existence of THIS path-level test means a future maintainer
+    // editing this function MUST re-validate that the catch handles the
+    // cached-modulePath case correctly.
+    assert.equal(realpathCalls, 2);
+    assert.equal(callLog[0], realFile);
+    // Second call was on the modulePath — the path fileURLToPath produced
+    // from moduleUrl, which is `otherFile`.
+    assert.equal(callLog[1], otherFile);
+
+    // 3. result: pathResolve(realFile) !== pathResolve(otherFile), so false.
+    assert.equal(result, false);
+
+    rmSync(dir, { recursive: true, force: true });
+  });
 });
 
 // ── IIFE wiring (concern #5, post-review 2026-05-25) ─────────────────────────
 //
-// All 11 unit tests above exercise _checkIsMainModule via injected `argv1` /
-// `moduleUrl` / `logger`. `realpathFn` is NOT mock-injected by any test —
+// All 13 unit tests above exercise _checkIsMainModule via injected `argv1` /
+// `moduleUrl` / `logger` / `realpathFn` (the last one is mocked in just one
+// test — the modulePath-cache path-coverage test below uses a fake realpath
+// to force the outer-catch path that the cache-reuse optimisation targets).
+// `fileURLToPath` is NOT injectable — see the note in the cache-reuse test
+// for why that's intentional —
 // the default `realpathSync` is what runs in every case. Its fallback BRANCH
 // is exercised via real I/O on missing-file paths (three of the tests pass
 // argv1 values that don't exist on disk, so the default `realpathSync`

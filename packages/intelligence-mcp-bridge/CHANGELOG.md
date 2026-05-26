@@ -10,6 +10,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- **`User-Agent` header reports actual package version (was hardcoded
+  `1.0`).** Every outbound gateway request now carries
+  `User-Agent: intelligence-mcp-bridge/<version>` (RFC 7231 § 5.5.3
+  `product/semver` format). Pre-1.0.6 the value was hardcoded to
+  `intelligence-mcp-bridge/1.0`, which masked the real version on 100%
+  of bridge traffic in Cloud Run access logs — verified against
+  `mcp-gateway-production` logs (every bridge entry showed `1.0`
+  regardless of which version was actually running). Post-1.0.6,
+  gateway-side analytics can aggregate `httpRequest.userAgent` in Cloud
+  Logging to drive a per-version distribution dashboard ("X% of
+  consumers still on 1.0.5") without any new instrumentation or
+  backend code change. Format is prefix-stable (append-only for any
+  future enrichment); a test pins source-to-`package.json` parity so
+  version drift between code and shipped package is caught in CI.
 - **`isMainModule` ESM check no longer silently exits when invoked via
   symlinked paths.** The published 1.0.5 used a naive literal compare
   (`import.meta.url === \`file://${process.argv[1]}\``) that fails whenever
@@ -50,18 +64,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   `os.tmpdir()` → assert JSON-RPC initialize handshake completes.
   Cross-platform (Node stdlib only). Catches the symlink-class regression
   that let 1.0.5 ship.
-- **Unit tests for `_checkIsMainModule`** — 11 new tests covering matching
+- **Unit tests for `_checkIsMainModule`** — 13 new tests covering matching
   paths, symlinked argv1, symlinked moduleUrl, mismatched paths,
   missing-file fallback, fallback path-normalisation (defends against
   Windows backslash + redundant segments), macOS `/tmp` auto-symlink
   scenario, argv1-undefined / argv1-empty (import-time silence guard),
-  and a shape-assertion test that catches `log.warn` arg-order
-  regressions before they ship. All exercise the seam via injected
-  `argv1` / `moduleUrl` / `logger`; `realpathFn`'s fallback branch is
-  hit via real I/O on missing-file argv1, not via mock injection.
+  a shape-assertion test that catches `log.warn` arg-order regressions,
+  a Scenario D test pinning the silent-on-URL-parse-error contract
+  introduced by the PR #7 compromise design (valid argv1 + malformed
+  `moduleUrl` returns literal compare without firing the realpath
+  fallback log), and a path-coverage test (argv1 OK + realpath(modulePath)
+  throws) for the cache-reuse optimisation that hoists `modulePath` out of
+  the outer try so the fallback skips a redundant `fileURLToPath` call.
+  Most tests exercise the seam via injected `argv1` / `moduleUrl` /
+  `logger`; the cache-reuse test additionally injects a mock `realpathFn`
+  to deterministically force the outer-catch path that's otherwise
+  reached only via real I/O failures.
 
 ### Changed
 
+- **`_checkIsMainModule` cache-reuse in fallback path** — `modulePath`
+  (the result of `fileURLToPath(moduleUrl)`) is now declared once above the
+  outer try and reused in the catch's path.resolve fallback via
+  `modulePath ?? fileURLToPath(moduleUrl)`. Pre-fix, the fallback called
+  `fileURLToPath(moduleUrl)` a second time even though it had already been
+  successfully parsed in the inner try block. Pure micro-optimisation on
+  the cold fallback path (broken symlink / EACCES / ENOENT on argv1 or
+  modulePath) — saves one redundant URL parse per fallback invocation;
+  behaviour and return values unchanged. Path-coverage test (argv1 OK +
+  realpath(modulePath) throws) pins the outer-catch branch via mock
+  realpathFn so a future un-hoist regression is caught structurally.
+- **`_checkIsMainModule` diagnostic-log scoping** — URL-parse failures
+  (a malformed `moduleUrl` — non-`file://` scheme, or a Windows-malformed
+  file URL without drive letter / UNC share) no longer trigger the
+  `isMainModule realpath fallback` diagnostic. That class is caught in
+  an inner try-catch around `fileURLToPath` and returns a silent literal
+  compare for back-compat; the outer catch's `log.warn` now fires only
+  on actual realpath failures (broken symlink, ENOENT, EACCES). Behavior
+  for all argv1-not-found / realpath-failing inputs is unchanged — the
+  diagnostic still fires when it should. Same internal helper from
+  PR #6's symlink-class fix; this is a follow-up refinement landed via
+  PR #7 after the original ffabb39 refactor regressed Windows tests
+  (reverted in a1d7ed6) and the compromise shape was adopted in 62ae3a1.
 - **PREREQUISITES.md** — extended for Antigravity onboarding:
   - § Desired target state: added Antigravity CLI verify row (`agy --version`).
   - § Install order: clarified that Antigravity CLI + Antigravity 2.0 are

@@ -80,11 +80,31 @@ import { Transform } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { realpathSync } from 'node:fs';
 import { resolve as pathResolve } from 'node:path';
+// Stable JSON imports landed in Node 22.x; we already require Node 24 (see
+// version-check.js / assertNode24). package.json is always shipped with the
+// package (npm includes it by default; the `files` array in package.json
+// can omit only its siblings, never itself).
+import pkg from '../package.json' with { type: 'json' };
 
 const execFileAsync = promisify(execFile);
 
 // Windows ships gcloud as gcloud.cmd; Node's execFile doesn't apply PATHEXT.
 const GCLOUD_BIN = process.platform === 'win32' ? 'gcloud.cmd' : 'gcloud';
+
+// User-Agent reports the actual package version on every outbound gateway
+// request. The string format is `product/semver` per RFC 7231 § 5.5.3 —
+// downstream consumers (Cloud Run access logs, gateway analytics) parse
+// this with a prefix-only regex (`/^intelligence-mcp-bridge\/(\S+)/`).
+// Keep the `product/semver` prefix stable across releases. Any future
+// enrichment (Node version, OS) goes after a space — append-only — so
+// existing parsers keep working. Pre-1.0.6 this was hardcoded `1.0`,
+// masking real version on 100% of bridge traffic in Cloud Run logs.
+//
+// Format + source-to-package.json parity pinned by
+// `tests/index.test.js → describe('forwardRequest') →
+//   test('User-Agent header reports actual package version')`.
+// If you change either the format here OR the test there, change both.
+const BRIDGE_USER_AGENT = `intelligence-mcp-bridge/${pkg.version}`;
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
@@ -927,7 +947,7 @@ export async function forwardRequest(
         'Content-Length': Buffer.byteLength(messageStr),
         Authorization: `Bearer ${token}`,
         Accept: 'application/json, text/event-stream',
-        'User-Agent': 'intelligence-mcp-bridge/1.0'
+        'User-Agent': BRIDGE_USER_AGENT
       }
     };
 
@@ -1357,40 +1377,57 @@ export function _checkIsMainModule({
   // time when this module is loaded by tests or by `node -e "import(...)"`.
   if (!argv1) return false;
 
-  // Parse moduleUrl ONCE up front. Splitting URL-parse failures from
-  // realpath failures (a) avoids the misleading "realpath fallback" warn on
-  // a non-file:// moduleUrl, and (b) avoids calling fileURLToPath twice in
-  // the realpath-fallback arm. If moduleUrl isn't a valid file:// URL we
-  // have nothing to compare via path normalisation — fall through to the
-  // 1.0.5 literal compare for back-compat.
+  // Declared above the outer try-catch so the catch can reuse the parsed
+  // value (set inside the inner try) instead of calling fileURLToPath a
+  // second time. Tested by `argv1 resolvable but realpath(modulePath) throws`.
   let modulePath;
-  try {
-    modulePath = fileURLToPath(moduleUrl);
-  } catch {
-    return moduleUrl === `file://${argv1}`;
-  }
 
   try {
+    // Order matters: realpathFn(argv1) runs FIRST so argv1-not-found cases
+    // land in the outer catch's log.warn + path.resolve fallback (preserves
+    // the "main process has a real-looking but unresolvable file" diagnostic
+    // surface — exercised by tests). fileURLToPath is then isolated in its
+    // own inner try-catch so URL-parse failures (e.g. a non-file:// URL or
+    // a Windows-malformed file URL with no drive letter) DON'T get
+    // mis-attributed as realpath failures in the log. That class drops to
+    // the silent literal compare for back-compat with 1.0.5.
     const mainPath = realpathFn(argv1);
-    const resolvedModulePath = realpathFn(modulePath);
-    return mainPath === resolvedModulePath;
+    try {
+      modulePath = fileURLToPath(moduleUrl);
+    } catch {
+      return moduleUrl === `file://${argv1}`;
+    }
+    return mainPath === realpathFn(modulePath);
   } catch (err) {
-    // argv1 WAS present (real-looking file path) but realpath failed — broken
-    // symlink, permission denied, race condition. Log for visibility, then
-    // degrade to a normalised path compare. NOTE: the 1.0.5 fallback was a
-    // literal string compare against `file://${argv1}`, which broke on
-    // Windows where argv[1] uses backslashes (`C:\path\to\script.js`) but
-    // moduleUrl uses URL-form forward slashes (`file:///C:/path/to/script.js`).
-    // path.resolve() normalises both to the OS-native filesystem form,
-    // closing that Windows-side mismatch in the rare-but-real fallback arm
-    // (broken symlink / EACCES on Windows). On POSIX this is functionally
-    // equivalent to the 1.0.5 fallback for ENOENT cases — both produce the
-    // same answer for the same inputs.
+    // realpath-class failure (argv1 OR modulePath). Log message is accurate:
+    // URL-parse failures are handled in the inner catch above and never
+    // reach this point. Degrade to a normalised path compare — NOTE: the
+    // 1.0.5 fallback was a literal string compare against `file://${argv1}`,
+    // which broke on Windows where argv[1] uses backslashes
+    // (`C:\path\to\script.js`) but moduleUrl uses URL-form forward slashes
+    // (`file:///C:/path/to/script.js`). path.resolve() normalises both to
+    // the OS-native filesystem form, closing that Windows-side mismatch in
+    // the rare-but-real fallback arm (broken symlink / EACCES on Windows).
+    // On POSIX this is functionally equivalent to the 1.0.5 fallback for
+    // ENOENT cases — both produce the same answer for the same inputs.
     logger.warn('isMainModule realpath fallback', {
       err: err.message,
       argv1
     });
-    return pathResolve(argv1) === pathResolve(modulePath);
+    try {
+      // Reuse the cached modulePath if it was successfully parsed before the
+      // realpath throw; otherwise the throw must have come from realpathFn(argv1)
+      // (the very first call) and we need to parse moduleUrl now. The `??`
+      // (not `||`) is defensive — `fileURLToPath` never returns an empty
+      // string today, but `??` is the correct semantic for "use cached unless
+      // unset" and avoids surprises if that ever changes.
+      const resolvedModulePath = modulePath ?? fileURLToPath(moduleUrl);
+      return pathResolve(argv1) === pathResolve(resolvedModulePath);
+    } catch {
+      // Last-ditch fallback if even path normalisation fails (e.g., moduleUrl
+      // isn't a valid file:// URL). Match 1.0.5 behaviour for back-compat.
+      return moduleUrl === `file://${argv1}`;
+    }
   }
 }
 
