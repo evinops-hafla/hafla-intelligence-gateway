@@ -1143,6 +1143,20 @@ export async function handleMessage(
     return;
   }
 
+  if (message === null || typeof message !== 'object' || Array.isArray(message)) {
+    logFn.error('handleMessage: non-object parsed value', {
+      type: Array.isArray(message) ? 'array' : typeof message
+    });
+    pushFn(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: { code: -32600, message: 'Invalid Request' },
+        id: null
+      }) + '\n'
+    );
+    return;
+  }
+
   const isNotification = !('id' in message);
 
   try {
@@ -1156,6 +1170,10 @@ export async function handleMessage(
       logFn.warn('Notification forward returned error frame; suppressed', {
         method: message.method,
         error: response.error
+      });
+    } else if (response == null) {
+      logFn.warn('Notification forward returned unexpected null/undefined response', {
+        method: message.method
       });
     }
   } catch (err) {

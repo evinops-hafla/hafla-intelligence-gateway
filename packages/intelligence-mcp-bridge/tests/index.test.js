@@ -643,6 +643,47 @@ describe('handleMessage — concurrent dispatch (HIGH #1 fix)', () => {
     assert.equal(pushed.length, 0);
     assert.equal(forwardCalled, false);
   });
+
+  test('null JSON value → -32600 Invalid Request, no forwardRequest call', async () => {
+    // JSON.parse('null') returns null — valid JSON but not a JSON-RPC object.
+    // Before the type guard, '\'id\' in null' would throw TypeError outside
+    // the try/catch, propagating as a rejected promise with no error frame sent.
+    const pushed = [];
+    let forwardCalled = false;
+    await handleMessage('null', {
+      tokenCache: null,
+      pushFn: (l) => pushed.push(l),
+      forwardRequestFn: async () => {
+        forwardCalled = true;
+      }
+    });
+    assert.equal(forwardCalled, false, 'forwardRequest must not be called for non-object JSON');
+    assert.equal(pushed.length, 1);
+    const resp = JSON.parse(pushed[0]);
+    assert.equal(resp.error.code, -32600);
+    assert.equal(resp.error.message, 'Invalid Request');
+    assert.equal(resp.id, null);
+  });
+
+  test('JSON array → -32600 Invalid Request, no forwardRequest call', async () => {
+    // JSON.parse('[...]') returns an Array. '\'id\' in []' is false (arrays have
+    // no own \'id\' property), so without a type guard the array would be
+    // misclassified as a notification and silently forwarded with no response.
+    const pushed = [];
+    let forwardCalled = false;
+    await handleMessage(JSON.stringify([{ jsonrpc: '2.0', method: 'tools/list', id: 1 }]), {
+      tokenCache: null,
+      pushFn: (l) => pushed.push(l),
+      forwardRequestFn: async () => {
+        forwardCalled = true;
+      }
+    });
+    assert.equal(forwardCalled, false, 'forwardRequest must not be called for a JSON array');
+    assert.equal(pushed.length, 1);
+    const resp = JSON.parse(pushed[0]);
+    assert.equal(resp.error.code, -32600);
+    assert.equal(resp.error.message, 'Invalid Request');
+  });
 });
 
 // ── handleMessage — notification suppression (issue #8, JSON-RPC § 4.1) ───────
@@ -697,6 +738,46 @@ describe('handleMessage — notification suppression (§ 4.1 compliance)', () =>
     );
     assert.equal(pushed.length, 1, 'pushFn must be called for a normal request with id');
     assert.deepEqual(JSON.parse(pushed[0]), responseFrame);
+  });
+
+  test('notification → forwardRequestFn throws → pushFn NOT called, log.error fired', async () => {
+    const logFn = collectingLogger();
+    const pushed = [];
+    await handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }),
+      {
+        tokenCache: null,
+        pushFn: (l) => pushed.push(l),
+        logFn,
+        forwardRequestFn: async () => {
+          throw new Error('network-failure');
+        }
+      }
+    );
+    assert.equal(pushed.length, 0, 'pushFn must not be called when notification handler throws');
+    assert.equal(logFn.errorCalls.length, 1);
+    assert.equal(logFn.errorCalls[0].msg, 'Unexpected forwardRequest error');
+  });
+
+  test('notification → forwardRequestFn returns undefined → pushFn NOT called, log.warn fired', async () => {
+    const logFn = collectingLogger();
+    const pushed = [];
+    await handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }),
+      {
+        tokenCache: null,
+        pushFn: (l) => pushed.push(l),
+        logFn,
+        forwardRequestFn: async () => undefined
+      }
+    );
+    assert.equal(pushed.length, 0, 'pushFn must not be called for a notification with undefined response');
+    assert.equal(logFn.warnCalls.length, 1);
+    assert.equal(
+      logFn.warnCalls[0].msg,
+      'Notification forward returned unexpected null/undefined response'
+    );
+    assert.equal(logFn.warnCalls[0].data.method, 'notifications/initialized');
   });
 });
 
@@ -1759,11 +1840,13 @@ function makeTmpDir() {
 
 function collectingLogger() {
   const warnCalls = [];
+  const errorCalls = [];
   return {
     warnCalls,
+    errorCalls,
     warn: (msg, data) => warnCalls.push({ msg, data }),
     info: () => {},
-    error: () => {},
+    error: (msg, data) => errorCalls.push({ msg, data }),
     debug: () => {}
   };
 }
