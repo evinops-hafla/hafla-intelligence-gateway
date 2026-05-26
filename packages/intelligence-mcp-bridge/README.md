@@ -169,12 +169,21 @@ Use ONLY when Form A doesn't work. This is typically because the client spawns s
 
 **Derive your paths** (run on your machine; do NOT copy from an example):
 
-| OS                   | Path A (node)                | Path B (bridge entrypoint)                                          |
-| -------------------- | ---------------------------- | ------------------------------------------------------------------- |
-| macOS                | `node -p "process.execPath"` | `echo "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js"` |
-| Windows (PowerShell) | `node -p "process.execPath"` | `echo "$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"` |
+| OS                   | Path A (node)                | Path B (bridge entrypoint)                                          | Path C (gcloud's bin directory)         |
+| -------------------- | ---------------------------- | ------------------------------------------------------------------- | --------------------------------------- |
+| macOS                | `node -p "process.execPath"` | `echo "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js"` | `dirname $(which gcloud)`               |
+| Windows (PowerShell) | `node -p "process.execPath"` | `echo "$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"` | `(Get-Command gcloud).Source \| Split-Path` |
 
 `node -p "process.execPath"` returns the absolute path to the Node binary that is _currently_ executing — single value, deterministic, identical syntax across both OSes. Avoids the `which node` / `where.exe node` multi-line ambiguity when multiple Node installs exist.
+
+**Path C — why this is needed.** The bridge spawns `gcloud` directly via `execFile` at startup (pre-flight) and roughly every 55 minutes (token refresh). For desktop apps launched via launchd (macOS) or service host (Windows), the inherited subprocess `PATH` is minimal (`/usr/bin:/bin:/usr/sbin:/sbin` on macOS) and does NOT contain `gcloud`'s install directory. Without injecting an `env.PATH` covering Path C, the bridge starts successfully but fails at pre-flight with `gcloud CLI not found` and the MCP client reports server disconnected. Form A doesn't have this problem because shell-PATH-inheriting clients already see `gcloud`.
+
+Typical Path C values (use the derivation command above to get the actual one on your machine):
+
+- **macOS (Apple Silicon Homebrew):** `/opt/homebrew/bin`
+- **macOS (Intel Homebrew):** `/usr/local/bin`
+- **macOS (direct Cloud SDK install via curl/tarball):** typically `$HOME/google-cloud-sdk/bin`
+- **Windows (winget install Google.CloudSDK):** typically `C:\Program Files (x86)\Google\Cloud SDK\google-cloud-sdk\bin`
 
 **Confirm Path B exists** before pasting into JSON (catches half-installed state — e.g., bridge installed under a different Node version than the one currently active):
 
@@ -184,6 +193,15 @@ Use ONLY when Form A doesn't work. This is typically because the client spawns s
 | Windows (PowerShell) | `Test-Path "$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"`                                           |
 
 Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Windows), the bridge is not installed under your active Node — go back to [Step 1](#step-1--install-the-bridge) and reinstall the bridge.
+
+**Confirm Path C resolves `gcloud`** (catches "gcloud isn't installed where I think it is" before the bridge fails at pre-flight):
+
+| OS                   | Command                                                                                                                |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| macOS                | `if test -x "$(dirname $(which gcloud))/gcloud"; then echo OK; else echo "NOT FOUND — install gcloud first"; fi`        |
+| Windows (PowerShell) | `Test-Path "$($((Get-Command gcloud).Source) \| Split-Path)\gcloud.cmd"`                                               |
+
+Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` / `False`, install gcloud per [PREREQUISITES.md](./PREREQUISITES.md) — Form B can't paper over a missing `gcloud` binary.
 
 **Windows-specific JSON-syntax rules:**
 
@@ -205,9 +223,22 @@ Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Wi
     "hafla-evwa-idl-gateway": {
       "command": "<Path A>",
       "args": ["<Path B>"],
+      "env": {
+        "PATH": "<Path C>:<directory containing Path A>:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      },
       "trust": true
     }
   }
+}
+```
+
+**Why `env.PATH`.** Desktop apps spawn the bridge with a minimal inherited environment. The `env.PATH` block injects a PATH the bridge can rely on independently of the host app's launch context. Path C (gcloud's bin directory) is the load-bearing entry — without it, pre-flight fails. Including Path A's directory is defensive for any future bridge code that shells out (token refresh already does, via gcloud). The trailing standard system paths (`/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`) cover other utilities the bridge or its dependencies may invoke.
+
+**Windows note:** the env.PATH separator on Windows is `;` not `:`, and entries use Windows-style paths. Example:
+
+```json
+"env": {
+  "PATH": "C:\\Program Files (x86)\\Google\\Cloud SDK\\google-cloud-sdk\\bin;C:\\Users\\YOU\\AppData\\Roaming\\nvm\\v24.15.0;C:\\Windows\\System32;C:\\Windows"
 }
 ```
 
@@ -334,7 +365,7 @@ Diagnostic banners are written to stderr. The "literal stderr" column gives the 
 | Symptom                          | Literal stderr (grep target)                                    | Cause                                                | Fix                                                                                                                            |
 | -------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | Wrong Node version               | `requires Node 24 LTS (you are on v...)`                        | Node ≠ 24.x                                          | `nvm use 24.15.0`. If on Form B, also re-derive Path A (Node binary path may have moved).                                      |
-| gcloud not found                 | `gcloud CLI not found`                                          | Not installed or PATH issue                          | Run the gcloud step from [PREREQUISITES.md](./PREREQUISITES.md) (Windows Step 4 / macOS Step 5).                               |
+| gcloud not found                 | `gcloud CLI not found`                                          | (1) gcloud not installed; OR (2) gcloud IS installed (works in your shell) but the MCP client spawned the bridge with a minimal PATH that doesn't include gcloud's bin directory — typical for desktop apps via launchd (macOS) / service host (Windows) | (1) If `gcloud --version` fails in your shell too: install per [PREREQUISITES.md](./PREREQUISITES.md) (Windows Step 4 / macOS Step 5). (2) If `gcloud --version` works in your shell but bridge says not found: you're on [Form B](#form-b--absolute-paths-fallback) and your config's `env.PATH` doesn't include Path C. Re-derive `Path C` via `dirname $(which gcloud)` (macOS) or `(Get-Command gcloud).Source \| Split-Path` (Windows) and add it to your `env.PATH`. |
 | Wrong gcloud account             | `Active gcloud account is X — must be an @hafla.com account`    | Personal account active                              | `gcloud config set account YOU@hafla.com`; verify with `gcloud auth list`.                                                     |
 | 401 audience mismatch            | `gateway returned 401 — token audience likely mismatched`       | Not in `team@hafla.com` Workspace group              | Ping Ops to be added. If you ARE in the group, run `gcloud auth login` to mint a fresh token.                                  |
 | 403 employee inactive            | `gateway returned 403 employee_inactive`                        | `haflaCore.OpsUsers` row not active                  | Ping Ops to set `isEmployeeActive=true` on your row.                                                                           |
