@@ -62,6 +62,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed
 
+- **`_checkIsMainModule` diagnostic-log scoping** — URL-parse failures
+  (a malformed `moduleUrl` — non-`file://` scheme, or a Windows-malformed
+  file URL without drive letter / UNC share) no longer trigger the
+  `isMainModule realpath fallback` diagnostic. That class is caught in
+  an inner try-catch around `fileURLToPath` and returns a silent literal
+  compare for back-compat; the outer catch's `log.warn` now fires only
+  on actual realpath failures (broken symlink, ENOENT, EACCES). Behavior
+  for all argv1-not-found / realpath-failing inputs is unchanged — the
+  diagnostic still fires when it should. Same internal helper from
+  PR #6's symlink-class fix; this is a follow-up refinement landed via
+  PR #7 after the original ffabb39 refactor regressed Windows tests
+  (reverted in a1d7ed6) and the compromise shape was adopted in 62ae3a1.
 - **PREREQUISITES.md** — extended for Antigravity onboarding:
   - § Desired target state: added Antigravity CLI verify row (`agy --version`).
   - § Install order: clarified that Antigravity CLI + Antigravity 2.0 are
