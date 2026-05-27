@@ -64,6 +64,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   `Gateway request failed` over the real cause. Unified under a single
   `settled` terminal-state flag.
 
+- **Three additional terminal-state edge cases closed (post-review hardening).**
+  (1) If `http.request()` / `https.request()` throws synchronously on invalid
+  options, the 290s timer was not cleared — it fired ~290s later and called
+  `.destroy()` on an unassigned `req` binding, crashing the bridge process with
+  an unhandled `ReferenceError`. Fixed: `let req` hoisted above the timer with
+  an `if (req)` guard in the timeout callback; the construction call is wrapped
+  in try/catch that sets `settled`, clears the timer, and resolves a
+  `-32603 Connection failed` frame (mirroring `req.on('error')`) rather than
+  re-throwing — preserving `forwardRequest`'s always-resolve contract.
+  (2) `res.on('end')` was missing the `if (settled) return;` entry guard that
+  `req.on('error')` already had. If `'end'` fired after `onResponseFailure`
+  had already resolved and set `settled` (e.g. after a stream `'aborted'`
+  event), the end-handler re-ran: spurious parse-error log on an incomplete
+  body, and `tokenCache.invalidate()` on an already-handled 401. Fixed: entry
+  guard added, completing the `settled`-guard pattern across all terminal-state
+  consumers.
+  (3) The `abortSignal.aborted` fast-path (shutdown drain raced
+  `forwardRequest` entry before the socket was created) set `settled`, called
+  `req.destroy()`, and resolved `-32000` — but did not `return`. Because
+  `resolve()` does not halt a Promise executor, execution fell through to
+  `req.write()` / `req.end()` on the just-destroyed socket on every pre-send
+  abort. The resulting `req` error was silently swallowed by `req.on('error')`
+  (because `settled` was already `true`), leaving the observable result
+  correct — but it was an invalid state transition on every affected call.
+  Fixed: `return` added after `resolve()` in the fast-path block.
+
 ## [1.0.6] — 2026-05-26
 
 ### Fixed
