@@ -768,6 +768,30 @@ describe('handleMessage — notification suppression (§ 4.1 compliance)', () =>
     assert.deepEqual(JSON.parse(pushed[0]), responseFrame);
   });
 
+  test('request with id: null → pushFn called (null is a valid id, NOT a notification)', async () => {
+    // §4.1 discriminator contract. `'id' in message` is true for `{ id: null }`,
+    // so isNotification is false and the response MUST be pushed. `null` is a
+    // legal JSON-RPC request id, not the absence of one. A future refactor to
+    // `message.id == null` would wrongly suppress this and still pass every
+    // other test in this suite — this is the pin that catches that regression.
+    const pushed = [];
+    const responseFrame = { jsonrpc: '2.0', result: {}, id: null };
+    await handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'tools/call', id: null }),
+      {
+        tokenCache: null,
+        pushFn: (l) => pushed.push(l),
+        forwardRequestFn: async () => responseFrame
+      }
+    );
+    assert.equal(
+      pushed.length,
+      1,
+      'id: null is a valid request id, not a notification — pushFn must be called'
+    );
+    assert.deepEqual(JSON.parse(pushed[0]), responseFrame);
+  });
+
   test('notification → forwardRequestFn throws → pushFn NOT called, log.error fired', async () => {
     const logFn = collectingLogger();
     const pushed = [];
