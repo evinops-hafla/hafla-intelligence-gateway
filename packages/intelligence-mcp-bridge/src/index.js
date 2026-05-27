@@ -926,7 +926,16 @@ export async function forwardRequest(
   }
 
   return new Promise((resolve) => {
+    // Gates timeoutId.refresh() in res.on('data') (below). Once the deadline
+    // has fired we destroy the socket and resolve, but a buffered chunk can
+    // still surface a late 'data' event — calling .refresh() on an
+    // already-fired timer re-arms it (Node restarts expired timers on
+    // refresh), producing a spurious second 'Request timeout' warn and keeping
+    // the event loop alive ~290s longer. The flag preserves the clearTimeout
+    // discipline (commit adaf64d) for the refresh() path.
+    let timedOut = false;
     const timeoutId = setTimeout(() => {
+      timedOut = true;
       req.destroy();
       log.warn('Request timeout', {
         method: message.method,
@@ -984,8 +993,12 @@ export async function forwardRequest(
         // only guards the transfer phase of a large body. The 290s base
         // timeout — not refresh() — is what actually rescued long tool calls;
         // refresh() future-proofs the bridge if the gateway ever streams
-        // incrementally or emits SSE keepalives.
-        timeoutId.refresh();
+        // incrementally or emits SSE keepalives. Skipped once the deadline has
+        // fired (`timedOut`) so a late buffered chunk can't re-arm an already-
+        // expired timer.
+        if (!timedOut) {
+          timeoutId.refresh();
+        }
       });
       res.on('end', () => {
         clearTimeout(timeoutId);
@@ -1134,9 +1147,12 @@ export async function forwardRequest(
  * Handle a single MCP message: parse, forward to gateway, emit response.
  *
  * Extracted from main() for testability + so the line-transform's `transform`
- * can be a thin wrapper. Returns a Promise that resolves when the response
- * (or parse-error) has been pushed; tests track concurrency by awaiting
- * multiple in parallel.
+ * can be a thin wrapper. Returns a Promise that resolves once the message has
+ * been fully handled: for a request, after its response (or parse-error) frame
+ * has been pushed; for a notification (no `id`, JSON-RPC § 4.1), after the
+ * forward completes with NO frame pushed (the response is suppressed — see the
+ * `isNotification` gate below). Tests track concurrency by awaiting multiple in
+ * parallel.
  *
  * Concurrency contract: caller MAY invoke this for multiple lines without
  * awaiting each one — that's the whole point of the fix for HIGH #1
