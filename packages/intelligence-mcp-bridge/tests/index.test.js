@@ -1312,6 +1312,53 @@ describe('forwardRequest — response stream failure (mid-response)', () => {
     assert.match(result.error.message, /Response stream failed/);
     assert.equal(result.id, 13);
   });
+
+  test("'end' after 'aborted' is skipped by the settled guard — no spurious 401 token invalidation", async () => {
+    // Regression pin for tracker [004]: onResponseFailure ('aborted') resolves
+    // -32603 and sets `settled`. If 'end' then fires, res.on('end') must
+    // early-return on `settled` rather than re-running the 401 branch (which
+    // would call tokenCache.invalidate()). tokenCache cache-state is the
+    // observable that distinguishes the guard from its absence.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    await tokenCache.getToken();
+    assert.equal(tokenCache._state().cached, true);
+    const mock = (_options, callback) => {
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.destroy = () => {};
+      req.end = () => {
+        const res = new EventEmitter();
+        res.statusCode = 401;
+        res.headers = { 'content-type': 'application/json' };
+        res.setEncoding = () => {};
+        callback(res);
+        setImmediate(() => {
+          res.emit('aborted'); // → onResponseFailure: resolves -32603, settled=true
+          res.emit('end'); // → must be skipped by the settled guard
+        });
+      };
+      return req;
+    };
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 14 },
+      {
+        tokenCache,
+        httpRequestFn: mock,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(result.error.code, -32603, 'aborted resolved first');
+    assert.equal(
+      tokenCache._state().cached,
+      true,
+      "res.on('end') must early-return on settled — the 401 invalidate path must not run"
+    );
+  });
 });
 
 describe('forwardRequest — request timeout (idle, raised to 290s default)', () => {
@@ -1447,6 +1494,41 @@ describe('forwardRequest — request timeout (idle, raised to 290s default)', ()
     assert.match(result.error.message, /Connection failed/);
     assert.match(result.error.message, /ECONNREFUSED/);
     assert.equal(result.id, 5);
+  });
+
+  test('synchronous effectiveFn throw → resolves -32603 (timer cleared, no delayed crash)', async () => {
+    // Regression pin for tracker [003]: if effectiveFn (https/http request)
+    // throws synchronously, forwardRequest must clear the timer and RESOLVE a
+    // -32603 frame — NOT reject (the original fix re-threw, violating the
+    // always-resolve contract and degrading the client error to a generic
+    // Internal error). The post-timeout wait confirms no dangling timer fires
+    // a late ReferenceError crash.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const throwingFn = () => {
+      const err = new Error('connect EINVAL');
+      err.code = 'EINVAL';
+      throw err;
+    };
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 15 },
+      {
+        tokenCache,
+        httpRequestFn: throwingFn,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 40
+      }
+    );
+    assert.equal(result.error.code, -32603);
+    assert.match(result.error.message, /Connection failed/);
+    assert.match(result.error.message, /EINVAL/);
+    assert.equal(result.id, 15);
+    // A dangling/un-cleared timer would fire a late crash during this wait;
+    // the catch's clearTimeout (plus the `if (req)` guard) prevents it.
+    await new Promise((r) => setTimeout(r, 90));
   });
 });
 

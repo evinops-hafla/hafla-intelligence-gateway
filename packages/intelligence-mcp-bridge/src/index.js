@@ -980,8 +980,7 @@ export async function forwardRequest(
 
     const effectiveFn =
       httpRequestFn ?? (url.protocol === 'http:' ? httpRequest : httpsRequest);
-    try {
-      req = effectiveFn(options, (res) => {
+    const onResponse = (res) => {
       // Engage Node's internal StringDecoder so partial multi-byte UTF-8
       // sequences across TCP chunk boundaries are buffered safely. Without
       // this, a 4-byte emoji or 2-3 byte Arabic codepoint split across two
@@ -1128,10 +1127,31 @@ export async function forwardRequest(
         }
         resolve(payload);
       });
-    });
+    };
+
+    try {
+      req = effectiveFn(options, onResponse);
     } catch (err) {
+      // effectiveFn (https/http `request`) can throw synchronously on invalid
+      // options/headers. Clear the timer (otherwise it fires ~290s later) and
+      // RESOLVE a clean error frame — forwardRequest always resolves a
+      // JSON-RPC frame, never rejects. Mirror req.on('error')'s -32603 shape.
+      settled = true;
       clearTimeout(timeoutId);
-      throw err;
+      log.error('Gateway request construction failed', {
+        error: err.message,
+        code: err.code,
+        id: message.id
+      });
+      resolve({
+        jsonrpc: '2.0',
+        error: {
+          code: -32603,
+          message: `Connection failed: ${err.code || err.message}`
+        },
+        id: message.id ?? null
+      });
+      return;
     }
 
     req.on('error', (err) => {
