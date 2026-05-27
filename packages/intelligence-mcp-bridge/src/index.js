@@ -926,16 +926,24 @@ export async function forwardRequest(
   }
 
   return new Promise((resolve) => {
-    // Gates timeoutId.refresh() in res.on('data') (below). Once the deadline
-    // has fired we destroy the socket and resolve, but a buffered chunk can
-    // still surface a late 'data' event — calling .refresh() on an
-    // already-fired timer re-arms it (Node restarts expired timers on
-    // refresh), producing a spurious second 'Request timeout' warn and keeping
-    // the event loop alive ~290s longer. The flag preserves the clearTimeout
-    // discipline (commit adaf64d) for the refresh() path.
-    let timedOut = false;
+    // `settled` marks the request as having reached a terminal state we
+    // initiated (timeout / normal end / abort). It guards two follow-on hazards
+    // that surface AFTER we've destroyed the socket and resolved:
+    //   1. res.on('data'): a buffered late chunk calling timeoutId.refresh()
+    //      would re-arm an EXPIRED-but-not-cleared timer (Node restarts expired
+    //      timers on refresh) → a spurious second 'Request timeout' ~290s later.
+    //      Verified on Node 24: refresh() does NOT resurrect a clearTimeout'd
+    //      timer, so strictly only the timeout path (which expires without
+    //      clearing) needs this; end/abort clear the timer and are belt-and-
+    //      suspenders here.
+    //   2. req.on('error'): our own req.destroy() emits 'error' (ECONNRESET for
+    //      the no-arg timeout destroy; the passed Error for abort) AFTER we've
+    //      logged + resolved. Without the guard the handler logs a misleading
+    //      'Gateway request failed' over the real cause and attempts a no-op
+    //      resolve. Preserves the clearTimeout discipline (commit adaf64d).
+    let settled = false;
     const timeoutId = setTimeout(() => {
-      timedOut = true;
+      settled = true;
       req.destroy();
       log.warn('Request timeout', {
         method: message.method,
@@ -993,15 +1001,16 @@ export async function forwardRequest(
         // only guards the transfer phase of a large body. The 290s base
         // timeout — not refresh() — is what actually rescued long tool calls;
         // refresh() future-proofs the bridge if the gateway ever streams
-        // incrementally or emits SSE keepalives. Skipped once the deadline has
-        // fired (`timedOut`) so a late buffered chunk can't re-arm an already-
-        // expired timer.
-        if (!timedOut) {
+        // incrementally or emits SSE keepalives. Skipped once the request is
+        // settled (`settled`) so a late buffered chunk can't re-arm the
+        // expired timeout timer.
+        if (!settled) {
           timeoutId.refresh();
         }
       });
       res.on('end', () => {
         clearTimeout(timeoutId);
+        settled = true;
 
         // 401 — likely audience mismatch (Cloud Run rejected the token).
         if (res.statusCode === 401) {
@@ -1094,6 +1103,12 @@ export async function forwardRequest(
     });
 
     req.on('error', (err) => {
+      // Our own timeout/abort destroy() emits 'error' after we've already
+      // logged + resolved — skip so we don't log a misleading 'Gateway request
+      // failed' over the real cause (timeout/abort) or fire a redundant no-op
+      // resolve. A genuine pre-response connection error leaves `settled` false
+      // and is handled normally below.
+      if (settled) return;
       clearTimeout(timeoutId);
       log.error('Gateway request failed', {
         error: err.message,
@@ -1123,6 +1138,7 @@ export async function forwardRequest(
         abortSignal.addEventListener(
           'abort',
           () => {
+            settled = true;
             clearTimeout(timeoutId);
             req.destroy(new Error('aborted on shutdown drain'));
             resolve({

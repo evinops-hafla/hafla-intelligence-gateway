@@ -1305,6 +1305,51 @@ describe('forwardRequest — request timeout (idle, raised to 290s default)', ()
     assert.deepEqual(result.result, { ok: 1 });
     assert.equal(result.id, 8);
   });
+
+  // A genuine pre-response connection error (no timeout, no abort) leaves
+  // `settled` false, so req.on('error')'s guard must NOT suppress it — the
+  // handler still logs and resolves the -32603 frame. Pins that the
+  // settled-guard added for the timeout/abort spurious-error case does not
+  // swallow real connection failures.
+  function connectionErrorMock({ code, message }) {
+    return (_options, _callback) => {
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.destroy = () => {};
+      req.end = () => {
+        setImmediate(() => {
+          const err = new Error(message);
+          err.code = code;
+          req.emit('error', err);
+        });
+      };
+      return req;
+    };
+  }
+
+  test('genuine connection error (settled=false) → -32603 frame', async () => {
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 5 },
+      {
+        tokenCache,
+        httpRequestFn: connectionErrorMock({
+          code: 'ECONNREFUSED',
+          message: 'connect ECONNREFUSED'
+        }),
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(result.error.code, -32603);
+    assert.match(result.error.message, /Connection failed/);
+    assert.match(result.error.message, /ECONNREFUSED/);
+    assert.equal(result.id, 5);
+  });
 });
 
 describe('forwardRequest', () => {
