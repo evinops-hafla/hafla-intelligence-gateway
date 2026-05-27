@@ -729,8 +729,9 @@ describe('handleMessage — notification suppression (§ 4.1 compliance)', () =>
   // as success (issue #8 root fix), a notification ack yields a CLEAN frame
   // (result:null, no error) — so handleMessage must produce ZERO stdout AND
   // ZERO warnings. The pre-fix path produced two warnings per notification
-  // (`Gateway non-2xx` + `Notification forward returned error frame`); this
-  // pins that the noise is gone, not merely suppressed downstream.
+  // (`Gateway non-200` + `Notification forward returned error frame`); this
+  // pins that the noise is gone, not merely suppressed downstream. (The first
+  // warning was renamed to `Gateway non-2xx` in the same commit as this fix.)
   test('notification → gateway 202 clean success → no push, no warn', async () => {
     const logFn = collectingLogger();
     const pushed = [];
@@ -1263,7 +1264,7 @@ describe('forwardRequest', () => {
     assert.equal(minted, 0);
   });
 
-  test('non-200 non-401 returns gateway error code', async () => {
+  test('non-2xx non-401 returns gateway error code', async () => {
     const tokenCache = createTokenCache({
       execGcloudFn: async () => 'fake-jwt',
       now: () => 0
