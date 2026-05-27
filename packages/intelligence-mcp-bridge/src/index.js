@@ -1034,8 +1034,8 @@ export async function forwardRequest(
       res.on('error', onResponseFailure);
       res.on('aborted', () => onResponseFailure(new Error('response aborted mid-stream')));
       res.on('end', () => {
-        clearTimeout(timeoutId);
         settled = true;
+        clearTimeout(timeoutId);
 
         // 401 — likely audience mismatch (Cloud Run rejected the token).
         if (res.statusCode === 401) {
