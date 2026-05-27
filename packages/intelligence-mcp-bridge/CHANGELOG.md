@@ -4,7 +4,65 @@ All notable changes to `@hafla/intelligence-mcp-bridge` will be documented in th
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.7] — 2026-05-27
+
+### Fixed
+
+- **Notifications no longer produce a spurious response frame on stdout.**
+  Per JSON-RPC 2.0 § 4.1, a notification is a request object without an
+  `id` member; servers MUST NOT return a response. The bridge was
+  unconditionally writing whatever `forwardRequest` returned to stdout,
+  so a `notifications/initialized` frame produced a spurious
+  `{"error":"Gateway returned 202","id":null}` error frame. Fixed by a
+  single-site gate in `handleMessage`: `pushFn` is now called only when
+  `'id' in message` (i.e. for requests, not notifications). When the
+  gateway returns an error frame for a notification, the bridge logs a
+  `warn` to stderr for operator visibility but emits nothing on stdout.
+  Detection uses `!('id' in message)` per spec — `"id": null` is a valid
+  request id, not a notification. Three new tests pin the contract (issue
+  [#8](https://github.com/evinops-hafla/hafla-intelligence-gateway/issues/8)).
+
+- **HTTP 202/204 acknowledgements are now treated as success (issue #8 root
+  cause).** Per MCP Streamable HTTP, the gateway answers a notification with
+  `202 Accepted` (no body). `forwardRequest` previously gated on
+  `statusCode !== 200`, so it classed every 202 as an error and returned a
+  `Gateway returned 202` frame — the very frame the suppression gate above
+  then had to discard, while still logging two `warn` lines per notification.
+  `forwardRequest` now accepts `[200, 202, 204]` and resolves 202/204 with a
+  well-formed empty success frame (`{ "jsonrpc": "2.0", "result": null, "id":
+  … }`), eliminating both the false-positive error frame and the stderr
+  noise. Three new tests pin the 202/204 success path.
+
+- **Request timeout raised 30s → 290s, and now resets on response activity.**
+  The bridge aborted any request exceeding a hard 30s deadline measured from
+  request start. But the gateway's Cloud Run request timeout is 300s, and the
+  gateway (MCP SDK Streamable HTTP, stateless, no keepalive) returns the whole
+  SSE response in a single burst only when the tool handler resolves — nothing
+  reaches the bridge mid-compute. So a heavy AlloyDB / Neo4j query or long
+  retrieval taking 30–300s was killed client-side with `-32000 Request
+  timeout`, even though the gateway would have answered. Default
+  `REQUEST_TIMEOUT_MS` is now `290000` (just under the 300s Cloud Run cap, so
+  the bridge emits a clean JSON-RPC timeout instead of letting Cloud Run 504 —
+  whose HTML body the bridge would fail to parse). `res.on('data')` now calls
+  `timeoutId.refresh()`, making the limit an idle/inactivity timeout
+  (defense-in-depth for any future incremental streaming). Note:
+  `timeoutId.refresh()` alone — the originally-proposed fix — would not have
+  helped, because the gateway sends no bytes until completion; the raised base
+  value is the load-bearing change. Override via the `REQUEST_TIMEOUT_MS` env
+  var.
+
+- **Request termination hardened — mid-response failures fail fast instead of
+  hanging or crashing.** `forwardRequest` had no handler for a failure on the
+  *response* stream: if the gateway drops the connection mid-body, Node emits
+  `'aborted'` on the response (not `'error'` on the request), so the call hung
+  until the 290s timeout; a rarer response-stream `'error'` was unhandled and
+  would crash the whole bridge process. Both are now caught and resolve a clean
+  `-32603` frame immediately. Two related timeout/abort edge cases were also
+  closed: a late buffered chunk can no longer re-arm the expired timeout timer
+  (which would fire a spurious second timeout ~290s later), and the bridge's
+  own socket-destroy (on timeout or abort) no longer logs a misleading
+  `Gateway request failed` over the real cause. Unified under a single
+  `settled` terminal-state flag.
 
 ## [1.0.6] — 2026-05-26
 

@@ -1,6 +1,6 @@
 # `@hafla/intelligence-mcp-bridge`
 
-**Status:** Production (1.0.6 — see [CHANGELOG.md](./CHANGELOG.md)).
+**Status:** Production (1.0.7 — see [CHANGELOG.md](./CHANGELOG.md)).
 
 A small stdio↔HTTPS shim that lets **Claude Code, Claude Desktop, Cursor, Gemini CLI, Antigravity CLI, and Antigravity 2.0** reach the **Hafla MCP Gateway** at `mcp.hafla.com`.
 
@@ -13,7 +13,7 @@ The bridge mints a fresh 60-minute Google ID token via your own `gcloud` session
 Prerequisites are in [PREREQUISITES.md](./PREREQUISITES.md). If those are met:
 
 ```bash
-npm install -g @hafla/intelligence-mcp-bridge@1.0.6
+npm install -g @hafla/intelligence-mcp-bridge@1.0.7
 ```
 
 Add this to your MCP client config (Gemini CLI / Claude Code / Cursor / Antigravity CLI). **Antigravity 2.0 and Claude Desktop need [Form B](#form-b--absolute-paths-fallback) instead** — they're desktop apps that don't inherit shell PATH:
@@ -59,10 +59,10 @@ All pass → proceed below.
 ### Step 1 — Install the bridge
 
 ```bash
-npm install -g @hafla/intelligence-mcp-bridge@1.0.6
+npm install -g @hafla/intelligence-mcp-bridge@1.0.7
 ```
 
-The version is **exact-pinned** (`@1.0.6`, not `@latest`). Pinning is the supply-chain hygiene boundary; Ops announces version bumps in Slack so the team upgrades on a known cadence. See § "Upgrading" below.
+The version is **exact-pinned** (`@1.0.7`, not `@latest`). Pinning is the supply-chain hygiene boundary; Ops announces version bumps in Slack so the team upgrades on a known cadence. See § "Upgrading" below.
 
 ### Step 2 — Verify install
 
@@ -83,16 +83,16 @@ The MCP client config file holds your other MCP servers. Before editing it, back
 
 Pick your client's config file:
 
-| Client                                   | macOS / Linux                                                     | Windows                                                  | 1.0.6 verified? [^verif] |
-| ---------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------- | ------------------------ |
-| Gemini CLI                               | `~/.gemini/settings.json` (+ `<project>/.gemini/settings.json`)   | `%USERPROFILE%\.gemini\settings.json` (+ project-scoped) | Mac ☐ / Win ☐            |
-| Claude Code (project-scoped)             | `<project>/.mcp.json`                                             | `<project>\.mcp.json`                                    | Mac ☐ / Win ☐            |
-| Claude Code (user-scoped)                | `~/.claude.json`                                                  | `%USERPROFILE%\.claude.json`                             | Mac ☐ / Win ☐            |
-| Claude Desktop                           | `~/Library/Application Support/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json`            | Mac ☐ / Win ☐            |
-| Cursor                                   | `~/.cursor/mcp.json`                                              | `%USERPROFILE%\.cursor\mcp.json`                         | Mac ☐ / Win ☐            |
-| Antigravity CLI (CLI-only) [^agycli]     | `~/.gemini/antigravity-cli/settings.json`                         | `%USERPROFILE%\.gemini\antigravity-cli\settings.json`    | Mac ☐ / Win ☐            |
-| Antigravity CLI + 2.0 (shared) [^agycli] | `~/.gemini/config/mcp_config.json`                                | `%USERPROFILE%\.gemini\config\mcp_config.json`           | Mac ☐ / Win ☐            |
-| Antigravity 2.0                          | `~/.gemini/antigravity/mcp_config.json`                           | `%USERPROFILE%\.gemini\antigravity\mcp_config.json`      | Mac ☐ / Win ☐            |
+| Client                                   | macOS / Linux                                                     | Windows                                                  |
+| ---------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------- |
+| Gemini CLI                               | `~/.gemini/settings.json` (+ `<project>/.gemini/settings.json`)   | `%USERPROFILE%\.gemini\settings.json` (+ project-scoped) |
+| Claude Code (project-scoped)             | `<project>/.mcp.json`                                             | `<project>\.mcp.json`                                    |
+| Claude Code (user-scoped)                | `~/.claude.json`                                                  | `%USERPROFILE%\.claude.json`                             |
+| Claude Desktop                           | `~/Library/Application Support/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json`            |
+| Cursor                                   | `~/.cursor/mcp.json`                                              | `%USERPROFILE%\.cursor\mcp.json`                         |
+| Antigravity CLI (CLI-only) [^agycli]     | `~/.gemini/antigravity-cli/settings.json`                         | `%USERPROFILE%\.gemini\antigravity-cli\settings.json`    |
+| Antigravity CLI + 2.0 (shared) [^agycli] | `~/.gemini/config/mcp_config.json`                                | `%USERPROFILE%\.gemini\config\mcp_config.json`           |
+| Antigravity 2.0                          | `~/.gemini/antigravity/mcp_config.json`                           | `%USERPROFILE%\.gemini\antigravity\mcp_config.json`      |
 
 [^agycli]: **Antigravity CLI has two valid config paths.** Pick one of:
 
@@ -101,7 +101,6 @@ Pick your client's config file:
 
     Gemini CLI and Antigravity CLI both also read project-scoped settings from `<project>/.gemini/settings.json` (cascades over the global file — useful for repo-specific overrides).
 
-[^verif]: Each `☐` becomes `✓` once a maintainer has installed this version, configured the indicated client per [Step 4](#step-4--configure-your-mcp-client), and successfully invoked one MCP tool end-to-end. Unflipped rows = combinations not yet end-to-end tested by a maintainer — may still work for you; the bridge code itself doesn't differ across rows. Rows with `☐ — pending <client> verifier as of YYYY-MM-DD` mean we know the gap is open; rows without that annotation just haven't been walked yet.
 
 **If the file exists**, back it up with a date-time suffix:
 
@@ -169,12 +168,21 @@ Use ONLY when Form A doesn't work. This is typically because the client spawns s
 
 **Derive your paths** (run on your machine; do NOT copy from an example):
 
-| OS                   | Path A (node)                | Path B (bridge entrypoint)                                          |
-| -------------------- | ---------------------------- | ------------------------------------------------------------------- |
-| macOS                | `node -p "process.execPath"` | `echo "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js"` |
-| Windows (PowerShell) | `node -p "process.execPath"` | `echo "$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"` |
+| OS                   | Path A (node)                | Path B (bridge entrypoint)                                          | Path C (gcloud's bin directory)         |
+| -------------------- | ---------------------------- | ------------------------------------------------------------------- | --------------------------------------- |
+| macOS                | `node -p "process.execPath"` | `echo "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js"` | `dirname $(which gcloud)`               |
+| Windows (PowerShell) | `node -p "process.execPath"` | `echo "$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"` | `(Get-Command gcloud).Source \| Split-Path` |
 
 `node -p "process.execPath"` returns the absolute path to the Node binary that is _currently_ executing — single value, deterministic, identical syntax across both OSes. Avoids the `which node` / `where.exe node` multi-line ambiguity when multiple Node installs exist.
+
+**Path C — why this is needed.** The bridge spawns `gcloud` directly via `execFile` at startup (pre-flight) and roughly every 55 minutes (token refresh). For desktop apps launched via launchd (macOS) or service host (Windows), the inherited subprocess `PATH` is minimal (`/usr/bin:/bin:/usr/sbin:/sbin` on macOS) and does NOT contain `gcloud`'s install directory. Without injecting an `env.PATH` covering Path C, the bridge starts successfully but fails at pre-flight with `gcloud CLI not found` and the MCP client reports server disconnected. Form A doesn't have this problem because shell-PATH-inheriting clients already see `gcloud`.
+
+Typical Path C values (use the derivation command above to get the actual one on your machine):
+
+- **macOS (Apple Silicon Homebrew):** `/opt/homebrew/bin`
+- **macOS (Intel Homebrew):** `/usr/local/bin`
+- **macOS (direct Cloud SDK install via curl/tarball):** typically `$HOME/google-cloud-sdk/bin`
+- **Windows (winget install Google.CloudSDK):** typically `C:\Program Files (x86)\Google\Cloud SDK\google-cloud-sdk\bin`
 
 **Confirm Path B exists** before pasting into JSON (catches half-installed state — e.g., bridge installed under a different Node version than the one currently active):
 
@@ -184,6 +192,15 @@ Use ONLY when Form A doesn't work. This is typically because the client spawns s
 | Windows (PowerShell) | `Test-Path "$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"`                                           |
 
 Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Windows), the bridge is not installed under your active Node — go back to [Step 1](#step-1--install-the-bridge) and reinstall the bridge.
+
+**Confirm Path C resolves `gcloud`** (catches "gcloud isn't installed where I think it is" before the bridge fails at pre-flight):
+
+| OS                   | Command                                                                                                                |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| macOS                | `if test -x "$(dirname $(which gcloud))/gcloud"; then echo OK; else echo "NOT FOUND — install gcloud first"; fi`        |
+| Windows (PowerShell) | `Test-Path "$((Get-Command gcloud).Source \| Split-Path)\gcloud.cmd"`                                                  |
+
+Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` / `False`, install gcloud per [PREREQUISITES.md](./PREREQUISITES.md) — Form B can't paper over a missing `gcloud` binary.
 
 **Windows-specific JSON-syntax rules:**
 
@@ -205,9 +222,26 @@ Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Wi
     "hafla-evwa-idl-gateway": {
       "command": "<Path A>",
       "args": ["<Path B>"],
+      "env": {
+        "PATH": "<Path C>:<directory containing Path A>:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      },
       "trust": true
     }
   }
+}
+```
+
+**Get `<directory containing Path A>`** symmetrically with Path C — `dirname $(node -p "process.execPath")` on macOS, `(node -p "process.execPath") | Split-Path` on Windows (PowerShell). It's just Path A with the trailing filename stripped.
+
+**Why `env.PATH`.** Desktop apps spawn the bridge with a minimal inherited environment. The `env.PATH` block injects a PATH the bridge can rely on independently of the host app's launch context. Path C (gcloud's bin directory) is the load-bearing entry — without it, pre-flight fails. Including Path A's directory is defensive for any future bridge code that shells out (token refresh already does, via gcloud). The trailing standard system paths (`/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`) cover other utilities the bridge or its dependencies may invoke.
+
+**Order matters.** List Path C FIRST so `gcloud` resolves to the directory you just verified — not to a possibly-stale `/usr/local/bin/gcloud` symlink further down the list. If your Path C happens to equal one of the trailing standard entries (Intel Macs where Homebrew installs to `/usr/local/bin`), list it once at the front and drop the duplicate from the tail — duplicates are functionally harmless but ugly.
+
+**Windows note:** the env.PATH separator on Windows is `;` not `:`, and entries use Windows-style paths. Example:
+
+```json
+"env": {
+  "PATH": "C:\\Program Files (x86)\\Google\\Cloud SDK\\google-cloud-sdk\\bin;C:\\Users\\YOU\\AppData\\Roaming\\nvm\\v24.15.0;C:\\Windows\\System32;C:\\Windows"
 }
 ```
 
@@ -334,7 +368,7 @@ Diagnostic banners are written to stderr. The "literal stderr" column gives the 
 | Symptom                          | Literal stderr (grep target)                                    | Cause                                                | Fix                                                                                                                            |
 | -------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | Wrong Node version               | `requires Node 24 LTS (you are on v...)`                        | Node ≠ 24.x                                          | `nvm use 24.15.0`. If on Form B, also re-derive Path A (Node binary path may have moved).                                      |
-| gcloud not found                 | `gcloud CLI not found`                                          | Not installed or PATH issue                          | Run the gcloud step from [PREREQUISITES.md](./PREREQUISITES.md) (Windows Step 4 / macOS Step 5).                               |
+| gcloud not found                 | `gcloud CLI not found`                                          | (1) gcloud not installed; OR (2) gcloud IS installed (works in your shell) but the MCP client spawned the bridge with a minimal PATH that doesn't include gcloud's bin directory — typical for desktop apps via launchd (macOS) / service host (Windows) | (1) If `gcloud --version` fails in your shell too: install per [PREREQUISITES.md](./PREREQUISITES.md) (Windows Step 4 / macOS Step 5). (2) If `gcloud --version` works in your shell but bridge says not found: you're on [Form B](#form-b--absolute-paths-fallback) and your config's `env.PATH` doesn't include Path C. Re-derive `Path C` via `dirname $(which gcloud)` (macOS) or `(Get-Command gcloud).Source \| Split-Path` (Windows) and add it to your `env.PATH`. |
 | Wrong gcloud account             | `Active gcloud account is X — must be an @hafla.com account`    | Personal account active                              | `gcloud config set account YOU@hafla.com`; verify with `gcloud auth list`.                                                     |
 | 401 audience mismatch            | `gateway returned 401 — token audience likely mismatched`       | Not in `team@hafla.com` Workspace group              | Ping Ops to be added. If you ARE in the group, run `gcloud auth login` to mint a fresh token.                                  |
 | 403 employee inactive            | `gateway returned 403 employee_inactive`                        | `haflaCore.OpsUsers` row not active                  | Ping Ops to set `isEmployeeActive=true` on your row.                                                                           |

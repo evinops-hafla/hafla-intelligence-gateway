@@ -15,6 +15,7 @@ Thumbs.db
 # Editor scratch
 tmp/
 .data/
+pr.md
 
 # Tool caches
 .eslintcache

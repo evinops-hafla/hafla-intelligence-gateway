@@ -643,6 +643,194 @@ describe('handleMessage — concurrent dispatch (HIGH #1 fix)', () => {
     assert.equal(pushed.length, 0);
     assert.equal(forwardCalled, false);
   });
+
+  test('null JSON value → -32600 Invalid Request, no forwardRequest call', async () => {
+    // JSON.parse('null') returns null — valid JSON but not a JSON-RPC object.
+    // Before the type guard, '\'id\' in null' would throw TypeError outside
+    // the try/catch, propagating as a rejected promise with no error frame sent.
+    const pushed = [];
+    let forwardCalled = false;
+    await handleMessage('null', {
+      tokenCache: null,
+      pushFn: (l) => pushed.push(l),
+      forwardRequestFn: async () => {
+        forwardCalled = true;
+      }
+    });
+    assert.equal(forwardCalled, false, 'forwardRequest must not be called for non-object JSON');
+    assert.equal(pushed.length, 1);
+    const resp = JSON.parse(pushed[0]);
+    assert.equal(resp.error.code, -32600);
+    assert.equal(resp.error.message, 'Invalid Request');
+    assert.equal(resp.id, null);
+  });
+
+  test('JSON array → -32600 Invalid Request, no forwardRequest call', async () => {
+    // JSON.parse('[...]') returns an Array. '\'id\' in []' is false (arrays have
+    // no own \'id\' property), so without a type guard the array would be
+    // misclassified as a notification and silently forwarded with no response.
+    const pushed = [];
+    let forwardCalled = false;
+    await handleMessage(JSON.stringify([{ jsonrpc: '2.0', method: 'tools/list', id: 1 }]), {
+      tokenCache: null,
+      pushFn: (l) => pushed.push(l),
+      forwardRequestFn: async () => {
+        forwardCalled = true;
+      }
+    });
+    assert.equal(forwardCalled, false, 'forwardRequest must not be called for a JSON array');
+    assert.equal(pushed.length, 1);
+    const resp = JSON.parse(pushed[0]);
+    assert.equal(resp.error.code, -32600);
+    assert.equal(resp.error.message, 'Invalid Request');
+  });
+});
+
+// ── handleMessage — notification suppression (issue #8, JSON-RPC § 4.1) ───────
+
+describe('handleMessage — notification suppression (§ 4.1 compliance)', () => {
+  test('notification (no id) → gateway 2xx → pushFn NOT called', async () => {
+    const pushed = [];
+    await handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }),
+      {
+        tokenCache: null,
+        pushFn: (l) => pushed.push(l),
+        forwardRequestFn: async () => ({ jsonrpc: '2.0', result: {}, id: null })
+      }
+    );
+    assert.equal(pushed.length, 0, 'pushFn must not be called for a notification');
+  });
+
+  test('notification → gateway error → pushFn NOT called, log.warn fired', async () => {
+    const logFn = collectingLogger();
+    const pushed = [];
+    const errFrame = { code: -32000, message: 'Gateway returned 202' };
+    await handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }),
+      {
+        tokenCache: null,
+        pushFn: (l) => pushed.push(l),
+        logFn,
+        forwardRequestFn: async () => ({ jsonrpc: '2.0', error: errFrame, id: null })
+      }
+    );
+    assert.equal(pushed.length, 0, 'pushFn must not be called even when gateway returns an error frame');
+    assert.equal(logFn.warnCalls.length, 1);
+    assert.equal(
+      logFn.warnCalls[0].msg,
+      'Notification forward returned error frame; suppressed'
+    );
+    assert.equal(logFn.warnCalls[0].data.method, 'notifications/initialized');
+    assert.deepEqual(logFn.warnCalls[0].data.error, errFrame);
+  });
+
+  // The root-cause partner to the test above. Once forwardRequest treats 202
+  // as success (issue #8 root fix), a notification ack yields a CLEAN frame
+  // (result:null, no error) — so handleMessage must produce ZERO stdout AND
+  // ZERO warnings. The pre-fix path produced two warnings per notification
+  // (`Gateway non-200` + `Notification forward returned error frame`); this
+  // pins that the noise is gone, not merely suppressed downstream. (The first
+  // warning was renamed to `Gateway non-2xx` in the same commit as this fix.)
+  test('notification → gateway 202 clean success → no push, no warn', async () => {
+    const logFn = collectingLogger();
+    const pushed = [];
+    await handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }),
+      {
+        tokenCache: null,
+        pushFn: (l) => pushed.push(l),
+        logFn,
+        // What forwardRequest now returns for a 202/204 ack.
+        forwardRequestFn: async () => ({ jsonrpc: '2.0', result: null, id: null })
+      }
+    );
+    assert.equal(pushed.length, 0, 'pushFn must not be called for a notification');
+    assert.equal(
+      logFn.warnCalls.length,
+      0,
+      'a clean 202 ack must produce zero warnings (root cause fixed, not just suppressed)'
+    );
+  });
+
+  test('request (with id) → gateway 200 → pushFn called (regression guard)', async () => {
+    const pushed = [];
+    const responseFrame = { jsonrpc: '2.0', result: { tools: [] }, id: 99 };
+    await handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', id: 99 }),
+      {
+        tokenCache: null,
+        pushFn: (l) => pushed.push(l),
+        forwardRequestFn: async () => responseFrame
+      }
+    );
+    assert.equal(pushed.length, 1, 'pushFn must be called for a normal request with id');
+    assert.deepEqual(JSON.parse(pushed[0]), responseFrame);
+  });
+
+  test('request with id: null → pushFn called (null is a valid id, NOT a notification)', async () => {
+    // §4.1 discriminator contract. `'id' in message` is true for `{ id: null }`,
+    // so isNotification is false and the response MUST be pushed. `null` is a
+    // legal JSON-RPC request id, not the absence of one. A future refactor to
+    // `message.id == null` would wrongly suppress this and still pass every
+    // other test in this suite — this is the pin that catches that regression.
+    const pushed = [];
+    const responseFrame = { jsonrpc: '2.0', result: {}, id: null };
+    await handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'tools/call', id: null }),
+      {
+        tokenCache: null,
+        pushFn: (l) => pushed.push(l),
+        forwardRequestFn: async () => responseFrame
+      }
+    );
+    assert.equal(
+      pushed.length,
+      1,
+      'id: null is a valid request id, not a notification — pushFn must be called'
+    );
+    assert.deepEqual(JSON.parse(pushed[0]), responseFrame);
+  });
+
+  test('notification → forwardRequestFn throws → pushFn NOT called, log.error fired', async () => {
+    const logFn = collectingLogger();
+    const pushed = [];
+    await handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }),
+      {
+        tokenCache: null,
+        pushFn: (l) => pushed.push(l),
+        logFn,
+        forwardRequestFn: async () => {
+          throw new Error('network-failure');
+        }
+      }
+    );
+    assert.equal(pushed.length, 0, 'pushFn must not be called when notification handler throws');
+    assert.equal(logFn.errorCalls.length, 1);
+    assert.equal(logFn.errorCalls[0].msg, 'Unexpected forwardRequest error');
+  });
+
+  test('notification → forwardRequestFn returns undefined → pushFn NOT called, log.warn fired', async () => {
+    const logFn = collectingLogger();
+    const pushed = [];
+    await handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }),
+      {
+        tokenCache: null,
+        pushFn: (l) => pushed.push(l),
+        logFn,
+        forwardRequestFn: async () => undefined
+      }
+    );
+    assert.equal(pushed.length, 0, 'pushFn must not be called for a notification with undefined response');
+    assert.equal(logFn.warnCalls.length, 1);
+    assert.equal(
+      logFn.warnCalls[0].msg,
+      'Notification forward returned unexpected null/undefined response'
+    );
+    assert.equal(logFn.warnCalls[0].data.method, 'notifications/initialized');
+  });
 });
 
 describe('forwardRequest — multi-byte UTF-8 response body (dl-review 2026-05-17 MEDIUM #1)', () => {
@@ -1026,6 +1214,377 @@ describe('forwardRequest — abort signal (2026-05-18 hygiene)', () => {
     assert.equal(result.id, 100);
     assert.deepEqual(result.result, { ok: 1 });
   });
+
+  test('already aborted before send → -32000 Aborted on shutdown (not -32603)', async () => {
+    // Shutdown drain raced forwardRequest entry: abortSignal is already
+    // aborted when the socket is created. Must resolve the SAME -32000 frame
+    // as the abort-listener path, not fall through to req.on('error')'s -32603.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const httpMock = pendingRequestMock();
+    const controller = new AbortController();
+    controller.abort();
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/list', id: 11 },
+      {
+        tokenCache,
+        httpRequestFn: httpMock,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 60_000,
+        abortSignal: controller.signal
+      }
+    );
+    assert.equal(result.error.code, -32000);
+    assert.match(result.error.message, /Aborted on shutdown/);
+    assert.equal(result.id, 11);
+    assert.equal(httpMock.captured.destroyed, true);
+  });
+
+  test('already aborted before send → no write/end after destroy (return guard, tracker [005])', async () => {
+    // The before-send abort fast-path must `return` after resolving, or it
+    // falls through to req.write()/req.end() on the just-destroyed socket.
+    // pendingRequestMock above can't catch this (its write/end are silent
+    // no-ops); this mock flags any write/end that runs after destroy().
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const calls = {
+      destroyed: false,
+      writeAfterDestroy: false,
+      endAfterDestroy: false
+    };
+    const httpMock = () => {
+      const req = new EventEmitter();
+      req.write = () => {
+        if (calls.destroyed) calls.writeAfterDestroy = true;
+      };
+      req.end = () => {
+        if (calls.destroyed) calls.endAfterDestroy = true;
+      };
+      req.destroy = () => {
+        calls.destroyed = true;
+      };
+      return req;
+    };
+    const controller = new AbortController();
+    controller.abort();
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/list', id: 16 },
+      {
+        tokenCache,
+        httpRequestFn: httpMock,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 60_000,
+        abortSignal: controller.signal
+      }
+    );
+    assert.equal(result.error.code, -32000);
+    assert.match(result.error.message, /Aborted on shutdown/);
+    assert.equal(calls.destroyed, true);
+    assert.equal(
+      calls.writeAfterDestroy,
+      false,
+      'req.write must not run after destroy()'
+    );
+    assert.equal(
+      calls.endAfterDestroy,
+      false,
+      'req.end must not run after destroy()'
+    );
+  });
+});
+
+describe('forwardRequest — response stream failure (mid-response)', () => {
+  // Emits a failure on the RESPONSE stream (not req) after headers arrive,
+  // simulating Cloud Run dropping the connection mid-body.
+  function responseStreamFailureMock({ event, code }) {
+    return (_options, callback) => {
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.destroy = () => {};
+      req.end = () => {
+        const res = new EventEmitter();
+        res.statusCode = 200;
+        res.headers = { 'content-type': 'application/json' };
+        res.setEncoding = () => {};
+        callback(res);
+        setImmediate(() => {
+          if (event === 'error') {
+            const err = new Error('stream broke');
+            err.code = code;
+            res.emit('error', err);
+          } else {
+            res.emit('aborted');
+          }
+        });
+      };
+      return req;
+    };
+  }
+
+  test("response-stream 'error' → -32603 frame (no process crash)", async () => {
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 12 },
+      {
+        tokenCache,
+        httpRequestFn: responseStreamFailureMock({ event: 'error', code: 'ECONNRESET' }),
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(result.error.code, -32603);
+    assert.match(result.error.message, /Response stream failed/);
+    assert.match(result.error.message, /ECONNRESET/);
+    assert.equal(result.id, 12);
+  });
+
+  test("response 'aborted' mid-stream → -32603 fast-fail (not a 290s hang)", async () => {
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 13 },
+      {
+        tokenCache,
+        httpRequestFn: responseStreamFailureMock({ event: 'aborted' }),
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(result.error.code, -32603);
+    assert.match(result.error.message, /Response stream failed/);
+    assert.equal(result.id, 13);
+  });
+
+  test("'end' after 'aborted' is skipped by the settled guard — no spurious 401 token invalidation", async () => {
+    // Regression pin for tracker [004]: onResponseFailure ('aborted') resolves
+    // -32603 and sets `settled`. If 'end' then fires, res.on('end') must
+    // early-return on `settled` rather than re-running the 401 branch (which
+    // would call tokenCache.invalidate()). tokenCache cache-state is the
+    // observable that distinguishes the guard from its absence.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    await tokenCache.getToken();
+    assert.equal(tokenCache._state().cached, true);
+    const mock = (_options, callback) => {
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.destroy = () => {};
+      req.end = () => {
+        const res = new EventEmitter();
+        res.statusCode = 401;
+        res.headers = { 'content-type': 'application/json' };
+        res.setEncoding = () => {};
+        callback(res);
+        setImmediate(() => {
+          res.emit('aborted'); // → onResponseFailure: resolves -32603, settled=true
+          res.emit('end'); // → must be skipped by the settled guard
+        });
+      };
+      return req;
+    };
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 14 },
+      {
+        tokenCache,
+        httpRequestFn: mock,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(result.error.code, -32603, 'aborted resolved first');
+    assert.equal(
+      tokenCache._state().cached,
+      true,
+      "res.on('end') must early-return on settled — the 401 invalidate path must not run"
+    );
+  });
+});
+
+describe('forwardRequest — request timeout (idle, raised to 290s default)', () => {
+  // A request that never completes — callback is never invoked, so neither
+  // `data` nor `end` ever fires. The deadline must still fire and resolve a
+  // clean JSON-RPC timeout frame.
+  function neverCompletesMock() {
+    const captured = { destroyed: false };
+    const fn = (_options, _callback) => {
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.end = () => {}; // pending — callback never invoked
+      req.destroy = () => {
+        captured.destroyed = true;
+      };
+      return req;
+    };
+    fn.captured = captured;
+    return fn;
+  }
+
+  // Emits `data` at dataAtMs and `end` at endAtMs (real timers) so the
+  // idle-timeout (timeoutId.refresh()) behaviour can be exercised.
+  function timedResponseMock({ statusCode, body, dataAtMs, endAtMs }) {
+    return (_options, callback) => {
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.destroy = () => {};
+      req.end = () => {
+        const res = new EventEmitter();
+        res.statusCode = statusCode;
+        res.headers = { 'content-type': 'application/json' };
+        res.setEncoding = () => {};
+        callback(res);
+        setTimeout(() => res.emit('data', body), dataAtMs);
+        setTimeout(() => res.emit('end'), endAtMs);
+      };
+      return req;
+    };
+  }
+
+  test('fires when the response never arrives → -32000 timeout frame', async () => {
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const httpMock = neverCompletesMock();
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 7 },
+      {
+        tokenCache,
+        httpRequestFn: httpMock,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 50
+      }
+    );
+    assert.equal(result.error.code, -32000);
+    assert.match(result.error.message, /Request timeout after 50ms/);
+    assert.equal(result.id, 7);
+    assert.equal(httpMock.captured.destroyed, true, 'req.destroy() must fire on timeout');
+  });
+
+  test('refresh() on data extends the deadline (idle, not absolute)', async () => {
+    // timeout=300ms; data@200ms; end@400ms. Absolute-from-start would fire at
+    // 300ms (between data and end) → timeout. With refresh() the data@200
+    // resets the deadline to ~500ms, so end@400 wins → success. 100ms slack on
+    // each boundary keeps this robust under CI load.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 8 },
+      {
+        tokenCache,
+        httpRequestFn: timedResponseMock({
+          statusCode: 200,
+          body: JSON.stringify({ jsonrpc: '2.0', result: { ok: 1 }, id: 8 }),
+          dataAtMs: 200,
+          endAtMs: 400
+        }),
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 300
+      }
+    );
+    assert.equal(result.error, undefined, 'refresh() should have prevented the timeout');
+    assert.deepEqual(result.result, { ok: 1 });
+    assert.equal(result.id, 8);
+  });
+
+  // A genuine pre-response connection error (no timeout, no abort) leaves
+  // `settled` false, so req.on('error')'s guard must NOT suppress it — the
+  // handler still logs and resolves the -32603 frame. Pins that the
+  // settled-guard added for the timeout/abort spurious-error case does not
+  // swallow real connection failures.
+  function connectionErrorMock({ code, message }) {
+    return (_options, _callback) => {
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.destroy = () => {};
+      req.end = () => {
+        setImmediate(() => {
+          const err = new Error(message);
+          err.code = code;
+          req.emit('error', err);
+        });
+      };
+      return req;
+    };
+  }
+
+  test('genuine connection error (settled=false) → -32603 frame', async () => {
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 5 },
+      {
+        tokenCache,
+        httpRequestFn: connectionErrorMock({
+          code: 'ECONNREFUSED',
+          message: 'connect ECONNREFUSED'
+        }),
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(result.error.code, -32603);
+    assert.match(result.error.message, /Connection failed/);
+    assert.match(result.error.message, /ECONNREFUSED/);
+    assert.equal(result.id, 5);
+  });
+
+  test('synchronous effectiveFn throw → resolves -32603 (timer cleared, no delayed crash)', async () => {
+    // Regression pin for tracker [003]: if effectiveFn (https/http request)
+    // throws synchronously, forwardRequest must clear the timer and RESOLVE a
+    // -32603 frame — NOT reject (the original fix re-threw, violating the
+    // always-resolve contract and degrading the client error to a generic
+    // Internal error). The post-timeout wait confirms no dangling timer fires
+    // a late ReferenceError crash.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const throwingFn = () => {
+      const err = new Error('connect EINVAL');
+      err.code = 'EINVAL';
+      throw err;
+    };
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 15 },
+      {
+        tokenCache,
+        httpRequestFn: throwingFn,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 40
+      }
+    );
+    assert.equal(result.error.code, -32603);
+    assert.match(result.error.message, /Connection failed/);
+    assert.match(result.error.message, /EINVAL/);
+    assert.equal(result.id, 15);
+    // A dangling/un-cleared timer would fire a late crash during this wait;
+    // the catch's clearTimeout (plus the `if (req)` guard) prevents it.
+    await new Promise((r) => setTimeout(r, 90));
+  });
 });
 
 describe('forwardRequest', () => {
@@ -1100,7 +1659,7 @@ describe('forwardRequest', () => {
     assert.equal(minted, 0);
   });
 
-  test('non-200 non-401 returns gateway error code', async () => {
+  test('non-2xx non-401 returns gateway error code', async () => {
     const tokenCache = createTokenCache({
       execGcloudFn: async () => 'fake-jwt',
       now: () => 0
@@ -1120,6 +1679,76 @@ describe('forwardRequest', () => {
     );
     assert.equal(result.error.code, -32000);
     assert.match(result.error.message, /503/);
+  });
+
+  // 202/204 are the gateway's success responses for a notification ack (issue
+  // #8 root cause). Before the fix, `!== 200` routed them into the error path
+  // → spurious `{error: "Gateway returned 202"}`. forwardRequest must now
+  // resolve a CLEAN, well-formed success frame (result present, error absent).
+  test('202 Accepted resolves a clean success frame (no error)', async () => {
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'notifications/initialized' }, // notification: no id
+      {
+        tokenCache,
+        httpRequestFn: mockHttpRequest({ statusCode: 202, body: '' }),
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(result.error, undefined, '202 must NOT produce an error frame');
+    assert.ok('result' in result, 'frame must carry `result` to be valid JSON-RPC');
+    assert.equal(result.result, null);
+    assert.equal(result.jsonrpc, '2.0');
+  });
+
+  test('204 No Content resolves a clean success frame (no error)', async () => {
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'notifications/initialized' },
+      {
+        tokenCache,
+        httpRequestFn: mockHttpRequest({ statusCode: 204, body: '' }),
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(result.error, undefined, '204 must NOT produce an error frame');
+    assert.ok('result' in result);
+    assert.equal(result.result, null);
+  });
+
+  test('202 with id-bearing message preserves id in resolved frame', async () => {
+    // Pins the `id: message.id ?? null` expression for the non-null id case.
+    // The MCP spec makes 202 on an id-bearing request spec-impossible, but the
+    // bridge must handle it correctly regardless — the comment in forwardRequest
+    // documents this as a defensive case. Without this test, the `?? null`
+    // fallback is exercised only for the no-id (notification) path above.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 42 },
+      {
+        tokenCache,
+        httpRequestFn: mockHttpRequest({ statusCode: 202, body: '' }),
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(result.error, undefined, '202 must NOT produce an error frame');
+    assert.equal(result.result, null, 'result must be null');
+    assert.equal(result.id, 42, 'id from original message must be preserved');
   });
 
   // User-Agent reports the actual package version on every outbound request.
@@ -1704,11 +2333,13 @@ function makeTmpDir() {
 
 function collectingLogger() {
   const warnCalls = [];
+  const errorCalls = [];
   return {
     warnCalls,
+    errorCalls,
     warn: (msg, data) => warnCalls.push({ msg, data }),
     info: () => {},
-    error: () => {},
+    error: (msg, data) => errorCalls.push({ msg, data }),
     debug: () => {}
   };
 }

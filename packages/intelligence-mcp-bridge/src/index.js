@@ -35,7 +35,9 @@ try {
  * - GATEWAY_PATH: MCP endpoint path (default /mcp)
  * - GATEWAY_AUDIENCE: JWT aud claim (default GATEWAY_URL)
  * - REQUIRED_DOMAIN: required Workspace domain for active gcloud account (default hafla.com)
- * - REQUEST_TIMEOUT_MS: HTTP request timeout in ms (default 30000)
+ * - REQUEST_TIMEOUT_MS: HTTP request timeout in ms (default 290000 — just
+ *   under the gateway's 300s Cloud Run request timeout; behaves as an idle
+ *   timeout, see forwardRequest)
  * - TOKEN_REFRESH_BEFORE_MS: refresh-ahead window in ms (default 300000 = 5 min)
  * - DEBUG: set to "1" for verbose logging
  *
@@ -151,7 +153,14 @@ const config = {
     'https://mcp.hafla.com',
   requiredDomain: process.env.REQUIRED_DOMAIN || 'hafla.com',
   requestTimeoutMs: Number.parseInt(
-    process.env.REQUEST_TIMEOUT_MS || '30000',
+    // 290s — just under the gateway's 300s Cloud Run request timeout. The old
+    // 30s killed legitimate heavy tool calls: the gateway (MCP SDK Streamable
+    // HTTP, stateless, no keepalive) returns the whole SSE response in one
+    // burst only when the tool handler resolves, so nothing reaches the bridge
+    // mid-compute. Sitting just under 300s lets the bridge emit a clean
+    // JSON-RPC timeout instead of letting Cloud Run 504 (whose HTML body the
+    // bridge would fail to parse → -32700). Override via REQUEST_TIMEOUT_MS.
+    process.env.REQUEST_TIMEOUT_MS || '290000',
     10
   ),
   tokenRefreshBeforeMs: Number.parseInt(
@@ -917,8 +926,26 @@ export async function forwardRequest(
   }
 
   return new Promise((resolve) => {
+    // `settled` marks the request as having reached a terminal state we
+    // initiated (timeout / normal end / abort). It guards two follow-on hazards
+    // that surface AFTER we've destroyed the socket and resolved:
+    //   1. res.on('data'): a buffered late chunk calling timeoutId.refresh()
+    //      would re-arm an EXPIRED-but-not-cleared timer (Node restarts expired
+    //      timers on refresh) → a spurious second 'Request timeout' ~290s later.
+    //      Verified on Node 24: refresh() does NOT resurrect a clearTimeout'd
+    //      timer, so strictly only the timeout path (which expires without
+    //      clearing) needs this; end/abort clear the timer and are belt-and-
+    //      suspenders here.
+    //   2. req.on('error'): our own req.destroy() emits 'error' (ECONNRESET for
+    //      the no-arg timeout destroy; the passed Error for abort) AFTER we've
+    //      logged + resolved. Without the guard the handler logs a misleading
+    //      'Gateway request failed' over the real cause and attempts a no-op
+    //      resolve. Preserves the clearTimeout discipline (commit adaf64d).
+    let settled = false;
+    let req;
     const timeoutId = setTimeout(() => {
-      req.destroy();
+      settled = true;
+      if (req) req.destroy();
       log.warn('Request timeout', {
         method: message.method,
         id: message.id,
@@ -953,7 +980,7 @@ export async function forwardRequest(
 
     const effectiveFn =
       httpRequestFn ?? (url.protocol === 'http:' ? httpRequest : httpsRequest);
-    const req = effectiveFn(options, (res) => {
+    const onResponse = (res) => {
       // Engage Node's internal StringDecoder so partial multi-byte UTF-8
       // sequences across TCP chunk boundaries are buffered safely. Without
       // this, a 4-byte emoji or 2-3 byte Arabic codepoint split across two
@@ -968,8 +995,48 @@ export async function forwardRequest(
       let body = '';
       res.on('data', (chunk) => {
         body += chunk; // chunk is now a string; no .toString() needed
+        // Reset the deadline on each chunk → idle/inactivity timeout rather
+        // than absolute-from-start. Defense-in-depth: today's gateway sends
+        // the full response in one burst at handler completion (no keepalive,
+        // verified against MCP SDK StreamableHTTPServerTransport), so this
+        // only guards the transfer phase of a large body. The 290s base
+        // timeout — not refresh() — is what actually rescued long tool calls;
+        // refresh() future-proofs the bridge if the gateway ever streams
+        // incrementally or emits SSE keepalives. Skipped once the request is
+        // settled (`settled`) so a late buffered chunk can't re-arm the
+        // expired timeout timer.
+        if (!settled) {
+          timeoutId.refresh();
+        }
       });
+      // A mid-response failure surfaces on the RESPONSE stream, not `req`.
+      // Verified on Node 24: when the gateway drops the connection mid-body,
+      // `res` emits 'aborted' (and `req.on('error')` does NOT fire) — without
+      // a handler the request would hang until the 290s timeout. A response-
+      // stream/framing 'error' is rarer but, left unhandled, crashes the whole
+      // process (unhandled 'error' on an EventEmitter throws). Both resolve a
+      // clean -32603 frame; `settled` guards against a double-resolve after a
+      // normal 'end'.
+      const onResponseFailure = (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        const detail = err?.code || err?.message || 'response aborted mid-stream';
+        log.error('Gateway response stream failed', {
+          error: detail,
+          id: message.id
+        });
+        resolve({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: `Response stream failed: ${detail}` },
+          id: message.id ?? null
+        });
+      };
+      res.on('error', onResponseFailure);
+      res.on('aborted', () => onResponseFailure(new Error('response aborted mid-stream')));
       res.on('end', () => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeoutId);
 
         // 401 — likely audience mismatch (Cloud Run rejected the token).
@@ -999,8 +1066,8 @@ export async function forwardRequest(
           );
         }
 
-        if (res.statusCode !== 200) {
-          log.warn('Gateway non-200', {
+        if (![200, 202, 204].includes(res.statusCode)) {
+          log.warn('Gateway non-2xx', {
             statusCode: res.statusCode,
             id: message.id,
             bodyPreview: body.slice(0, 200)
@@ -1013,6 +1080,21 @@ export async function forwardRequest(
             },
             id: message.id ?? null
           });
+          return;
+        }
+
+        // 202 Accepted / 204 No Content — the gateway acknowledges the input
+        // but returns no JSON-RPC payload. Per MCP Streamable HTTP (spec
+        // 2024-11-05), this is the success response for a NOTIFICATION (or a
+        // client→server response): a request object without an `id`. Resolve
+        // with a well-formed success frame so (a) JSON.parse(body) is never
+        // called on an empty body, and (b) the frame is valid JSON-RPC even
+        // in the spec-impossible case of an id-bearing request receiving 202
+        // (a bare `{jsonrpc,id}` with neither `result` nor `error` would be
+        // malformed). For the real notification case, handleMessage discards
+        // this frame entirely (no stdout, no warn) — see § 4.1 suppression.
+        if (res.statusCode === 202 || res.statusCode === 204) {
+          resolve({ jsonrpc: '2.0', result: null, id: message.id ?? null });
           return;
         }
 
@@ -1045,9 +1127,40 @@ export async function forwardRequest(
         }
         resolve(payload);
       });
-    });
+    };
+
+    try {
+      req = effectiveFn(options, onResponse);
+    } catch (err) {
+      // effectiveFn (https/http `request`) can throw synchronously on invalid
+      // options/headers. Clear the timer (otherwise it fires ~290s later) and
+      // RESOLVE a clean error frame — forwardRequest always resolves a
+      // JSON-RPC frame, never rejects. Mirror req.on('error')'s -32603 shape.
+      settled = true;
+      clearTimeout(timeoutId);
+      log.error('Gateway request construction failed', {
+        error: err.message,
+        code: err.code,
+        id: message.id
+      });
+      resolve({
+        jsonrpc: '2.0',
+        error: {
+          code: -32603,
+          message: `Connection failed: ${err.code || err.message}`
+        },
+        id: message.id ?? null
+      });
+      return;
+    }
 
     req.on('error', (err) => {
+      // Our own timeout/abort destroy() emits 'error' after we've already
+      // logged + resolved — skip so we don't log a misleading 'Gateway request
+      // failed' over the real cause (timeout/abort) or fire a redundant no-op
+      // resolve. A genuine pre-response connection error leaves `settled` false
+      // and is handled normally below.
+      if (settled) return;
       clearTimeout(timeoutId);
       log.error('Gateway request failed', {
         error: err.message,
@@ -1072,11 +1185,30 @@ export async function forwardRequest(
     // forwardRequest entry and req creation), destroy immediately.
     if (abortSignal) {
       if (abortSignal.aborted) {
+        // Already aborted before the socket was created (shutdown drain raced
+        // forwardRequest entry). Mirror the abort-listener path exactly:
+        // set `settled`, clear the timer, destroy, and resolve the SAME
+        // -32000 frame. Without this the destroy()'d socket's 'error' would
+        // fall through to req.on('error') and resolve an inconsistent -32603
+        // 'Connection failed' frame plus a misleading 'Gateway request failed'.
+        settled = true;
+        clearTimeout(timeoutId);
         req.destroy(new Error('aborted before send'));
+        resolve({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Aborted on shutdown' },
+          id: message.id ?? null
+        });
+        // Return so the destroyed socket isn't written to below — resolve()
+        // does NOT halt the executor, so without this `req.write`/`req.end`
+        // run on a destroyed `req` (a write-after-destroy that req.on('error')
+        // only silently swallows because `settled` is already true).
+        return;
       } else {
         abortSignal.addEventListener(
           'abort',
           () => {
+            settled = true;
             clearTimeout(timeoutId);
             req.destroy(new Error('aborted on shutdown drain'));
             resolve({
@@ -1101,9 +1233,12 @@ export async function forwardRequest(
  * Handle a single MCP message: parse, forward to gateway, emit response.
  *
  * Extracted from main() for testability + so the line-transform's `transform`
- * can be a thin wrapper. Returns a Promise that resolves when the response
- * (or parse-error) has been pushed; tests track concurrency by awaiting
- * multiple in parallel.
+ * can be a thin wrapper. Returns a Promise that resolves once the message has
+ * been fully handled: for a request, after its response (or parse-error) frame
+ * has been pushed; for a notification (no `id`, JSON-RPC § 4.1), after the
+ * forward completes with NO frame pushed (the response is suppressed — see the
+ * `isNotification` gate below). Tests track concurrency by awaiting multiple in
+ * parallel.
  *
  * Concurrency contract: caller MAY invoke this for multiple lines without
  * awaiting each one — that's the whole point of the fix for HIGH #1
@@ -1143,21 +1278,50 @@ export async function handleMessage(
     return;
   }
 
+  if (message === null || typeof message !== 'object' || Array.isArray(message)) {
+    logFn.error('handleMessage: non-object parsed value', {
+      type: Array.isArray(message) ? 'array' : typeof message
+    });
+    pushFn(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: { code: -32600, message: 'Invalid Request' },
+        id: null
+      }) + '\n'
+    );
+    return;
+  }
+
+  const isNotification = !('id' in message);
+
   try {
     const response = await forwardRequestFn(message, {
       tokenCache,
       abortSignal
     });
-    pushFn(JSON.stringify(response) + '\n');
+    if (!isNotification) {
+      pushFn(JSON.stringify(response) + '\n');
+    } else if (response?.error) {
+      logFn.warn('Notification forward returned error frame; suppressed', {
+        method: message.method,
+        error: response.error
+      });
+    } else if (response == null) {
+      logFn.warn('Notification forward returned unexpected null/undefined response', {
+        method: message.method
+      });
+    }
   } catch (err) {
     logFn.error('Unexpected forwardRequest error', { error: err.message });
-    pushFn(
-      JSON.stringify({
-        jsonrpc: '2.0',
-        error: { code: -32603, message: 'Internal error' },
-        id: message.id ?? null
-      }) + '\n'
-    );
+    if (!isNotification) {
+      pushFn(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: 'Internal error' },
+          id: message.id ?? null
+        }) + '\n'
+      );
+    }
   }
 }
 
