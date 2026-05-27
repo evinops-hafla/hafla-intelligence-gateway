@@ -51,6 +51,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   value is the load-bearing change. Override via the `REQUEST_TIMEOUT_MS` env
   var.
 
+- **Request termination hardened — mid-response failures fail fast instead of
+  hanging or crashing.** `forwardRequest` had no handler for a failure on the
+  *response* stream: if the gateway drops the connection mid-body, Node emits
+  `'aborted'` on the response (not `'error'` on the request), so the call hung
+  until the 290s timeout; a rarer response-stream `'error'` was unhandled and
+  would crash the whole bridge process. Both are now caught and resolve a clean
+  `-32603` frame immediately. Two related timeout/abort edge cases were also
+  closed: a late buffered chunk can no longer re-arm the expired timeout timer
+  (which would fire a spurious second timeout ~290s later), and the bridge's
+  own socket-destroy (on timeout or abort) no longer logs a misleading
+  `Gateway request failed` over the real cause. Unified under a single
+  `settled` terminal-state flag.
+
 ## [1.0.6] — 2026-05-26
 
 ### Fixed
