@@ -725,6 +725,33 @@ describe('handleMessage — notification suppression (§ 4.1 compliance)', () =>
     assert.deepEqual(logFn.warnCalls[0].data.error, errFrame);
   });
 
+  // The root-cause partner to the test above. Once forwardRequest treats 202
+  // as success (issue #8 root fix), a notification ack yields a CLEAN frame
+  // (result:null, no error) — so handleMessage must produce ZERO stdout AND
+  // ZERO warnings. The pre-fix path produced two warnings per notification
+  // (`Gateway non-2xx` + `Notification forward returned error frame`); this
+  // pins that the noise is gone, not merely suppressed downstream.
+  test('notification → gateway 202 clean success → no push, no warn', async () => {
+    const logFn = collectingLogger();
+    const pushed = [];
+    await handleMessage(
+      JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }),
+      {
+        tokenCache: null,
+        pushFn: (l) => pushed.push(l),
+        logFn,
+        // What forwardRequest now returns for a 202/204 ack.
+        forwardRequestFn: async () => ({ jsonrpc: '2.0', result: null, id: null })
+      }
+    );
+    assert.equal(pushed.length, 0, 'pushFn must not be called for a notification');
+    assert.equal(
+      logFn.warnCalls.length,
+      0,
+      'a clean 202 ack must produce zero warnings (root cause fixed, not just suppressed)'
+    );
+  });
+
   test('request (with id) → gateway 200 → pushFn called (regression guard)', async () => {
     const pushed = [];
     const responseFrame = { jsonrpc: '2.0', result: { tools: [] }, id: 99 };
@@ -1256,6 +1283,51 @@ describe('forwardRequest', () => {
     );
     assert.equal(result.error.code, -32000);
     assert.match(result.error.message, /503/);
+  });
+
+  // 202/204 are the gateway's success responses for a notification ack (issue
+  // #8 root cause). Before the fix, `!== 200` routed them into the error path
+  // → spurious `{error: "Gateway returned 202"}`. forwardRequest must now
+  // resolve a CLEAN, well-formed success frame (result present, error absent).
+  test('202 Accepted resolves a clean success frame (no error)', async () => {
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'notifications/initialized' }, // notification: no id
+      {
+        tokenCache,
+        httpRequestFn: mockHttpRequest({ statusCode: 202, body: '' }),
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(result.error, undefined, '202 must NOT produce an error frame');
+    assert.ok('result' in result, 'frame must carry `result` to be valid JSON-RPC');
+    assert.equal(result.result, null);
+    assert.equal(result.jsonrpc, '2.0');
+  });
+
+  test('204 No Content resolves a clean success frame (no error)', async () => {
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'notifications/initialized' },
+      {
+        tokenCache,
+        httpRequestFn: mockHttpRequest({ statusCode: 204, body: '' }),
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(result.error, undefined, '204 must NOT produce an error frame');
+    assert.ok('result' in result);
+    assert.equal(result.result, null);
   });
 
   // User-Agent reports the actual package version on every outbound request.

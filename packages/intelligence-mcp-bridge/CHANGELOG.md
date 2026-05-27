@@ -24,7 +24,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   request id, not a notification. Three new tests pin the contract (issue
   [#8](https://github.com/evinops-hafla/hafla-intelligence-gateway/issues/8)).
 
-## [1.0.6] — 2026-05-26
+- **HTTP 202/204 acknowledgements are now treated as success (issue #8 root
+  cause).** Per MCP Streamable HTTP, the gateway answers a notification with
+  `202 Accepted` (no body). `forwardRequest` previously gated on
+  `statusCode !== 200`, so it classed every 202 as an error and returned a
+  `Gateway returned 202` frame — the very frame the suppression gate above
+  then had to discard, while still logging two `warn` lines per notification.
+  `forwardRequest` now accepts `[200, 202, 204]` and resolves 202/204 with a
+  well-formed empty success frame (`{ "jsonrpc": "2.0", "result": null, "id":
+  … }`), eliminating both the false-positive error frame and the stderr
+  noise. Three new tests pin the 202/204 success path.
 
 ### Fixed
 

@@ -999,8 +999,8 @@ export async function forwardRequest(
           );
         }
 
-        if (res.statusCode !== 200) {
-          log.warn('Gateway non-200', {
+        if (![200, 202, 204].includes(res.statusCode)) {
+          log.warn('Gateway non-2xx', {
             statusCode: res.statusCode,
             id: message.id,
             bodyPreview: body.slice(0, 200)
@@ -1013,6 +1013,21 @@ export async function forwardRequest(
             },
             id: message.id ?? null
           });
+          return;
+        }
+
+        // 202 Accepted / 204 No Content — the gateway acknowledges the input
+        // but returns no JSON-RPC payload. Per MCP Streamable HTTP (spec
+        // 2024-11-05), this is the success response for a NOTIFICATION (or a
+        // client→server response): a request object without an `id`. Resolve
+        // with a well-formed success frame so (a) JSON.parse(body) is never
+        // called on an empty body, and (b) the frame is valid JSON-RPC even
+        // in the spec-impossible case of an id-bearing request receiving 202
+        // (a bare `{jsonrpc,id}` with neither `result` nor `error` would be
+        // malformed). For the real notification case, handleMessage discards
+        // this frame entirely (no stdout, no warn) — see § 4.1 suppression.
+        if (res.statusCode === 202 || res.statusCode === 204) {
+          resolve({ jsonrpc: '2.0', result: null, id: message.id ?? null });
           return;
         }
 
