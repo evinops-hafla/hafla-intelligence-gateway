@@ -35,7 +35,9 @@ try {
  * - GATEWAY_PATH: MCP endpoint path (default /mcp)
  * - GATEWAY_AUDIENCE: JWT aud claim (default GATEWAY_URL)
  * - REQUIRED_DOMAIN: required Workspace domain for active gcloud account (default hafla.com)
- * - REQUEST_TIMEOUT_MS: HTTP request timeout in ms (default 30000)
+ * - REQUEST_TIMEOUT_MS: HTTP request timeout in ms (default 290000 — just
+ *   under the gateway's 300s Cloud Run request timeout; behaves as an idle
+ *   timeout, see forwardRequest)
  * - TOKEN_REFRESH_BEFORE_MS: refresh-ahead window in ms (default 300000 = 5 min)
  * - DEBUG: set to "1" for verbose logging
  *
@@ -151,7 +153,14 @@ const config = {
     'https://mcp.hafla.com',
   requiredDomain: process.env.REQUIRED_DOMAIN || 'hafla.com',
   requestTimeoutMs: Number.parseInt(
-    process.env.REQUEST_TIMEOUT_MS || '30000',
+    // 290s — just under the gateway's 300s Cloud Run request timeout. The old
+    // 30s killed legitimate heavy tool calls: the gateway (MCP SDK Streamable
+    // HTTP, stateless, no keepalive) returns the whole SSE response in one
+    // burst only when the tool handler resolves, so nothing reaches the bridge
+    // mid-compute. Sitting just under 300s lets the bridge emit a clean
+    // JSON-RPC timeout instead of letting Cloud Run 504 (whose HTML body the
+    // bridge would fail to parse → -32700). Override via REQUEST_TIMEOUT_MS.
+    process.env.REQUEST_TIMEOUT_MS || '290000',
     10
   ),
   tokenRefreshBeforeMs: Number.parseInt(
@@ -968,6 +977,15 @@ export async function forwardRequest(
       let body = '';
       res.on('data', (chunk) => {
         body += chunk; // chunk is now a string; no .toString() needed
+        // Reset the deadline on each chunk → idle/inactivity timeout rather
+        // than absolute-from-start. Defense-in-depth: today's gateway sends
+        // the full response in one burst at handler completion (no keepalive,
+        // verified against MCP SDK StreamableHTTPServerTransport), so this
+        // only guards the transfer phase of a large body. The 290s base
+        // timeout — not refresh() — is what actually rescued long tool calls;
+        // refresh() future-proofs the bridge if the gateway ever streams
+        // incrementally or emits SSE keepalives.
+        timeoutId.refresh();
       });
       res.on('end', () => {
         clearTimeout(timeoutId);

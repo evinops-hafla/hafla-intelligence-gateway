@@ -1192,6 +1192,97 @@ describe('forwardRequest — abort signal (2026-05-18 hygiene)', () => {
   });
 });
 
+describe('forwardRequest — request timeout (idle, raised to 290s default)', () => {
+  // A request that never completes — callback is never invoked, so neither
+  // `data` nor `end` ever fires. The deadline must still fire and resolve a
+  // clean JSON-RPC timeout frame.
+  function neverCompletesMock() {
+    const captured = { destroyed: false };
+    const fn = (_options, _callback) => {
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.end = () => {}; // pending — callback never invoked
+      req.destroy = () => {
+        captured.destroyed = true;
+      };
+      return req;
+    };
+    fn.captured = captured;
+    return fn;
+  }
+
+  // Emits `data` at dataAtMs and `end` at endAtMs (real timers) so the
+  // idle-timeout (timeoutId.refresh()) behaviour can be exercised.
+  function timedResponseMock({ statusCode, body, dataAtMs, endAtMs }) {
+    return (_options, callback) => {
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.destroy = () => {};
+      req.end = () => {
+        const res = new EventEmitter();
+        res.statusCode = statusCode;
+        res.headers = { 'content-type': 'application/json' };
+        res.setEncoding = () => {};
+        callback(res);
+        setTimeout(() => res.emit('data', body), dataAtMs);
+        setTimeout(() => res.emit('end'), endAtMs);
+      };
+      return req;
+    };
+  }
+
+  test('fires when the response never arrives → -32000 timeout frame', async () => {
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const httpMock = neverCompletesMock();
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 7 },
+      {
+        tokenCache,
+        httpRequestFn: httpMock,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 50
+      }
+    );
+    assert.equal(result.error.code, -32000);
+    assert.match(result.error.message, /Request timeout after 50ms/);
+    assert.equal(result.id, 7);
+    assert.equal(httpMock.captured.destroyed, true, 'req.destroy() must fire on timeout');
+  });
+
+  test('refresh() on data extends the deadline (idle, not absolute)', async () => {
+    // timeout=300ms; data@200ms; end@400ms. Absolute-from-start would fire at
+    // 300ms (between data and end) → timeout. With refresh() the data@200
+    // resets the deadline to ~500ms, so end@400 wins → success. 100ms slack on
+    // each boundary keeps this robust under CI load.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 8 },
+      {
+        tokenCache,
+        httpRequestFn: timedResponseMock({
+          statusCode: 200,
+          body: JSON.stringify({ jsonrpc: '2.0', result: { ok: 1 }, id: 8 }),
+          dataAtMs: 200,
+          endAtMs: 400
+        }),
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 300
+      }
+    );
+    assert.equal(result.error, undefined, 'refresh() should have prevented the timeout');
+    assert.deepEqual(result.result, { ok: 1 });
+    assert.equal(result.id, 8);
+  });
+});
+
 describe('forwardRequest', () => {
   test('200 response is parsed and returned', async () => {
     const tokenCache = createTokenCache({
