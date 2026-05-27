@@ -51,6 +51,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   value is the load-bearing change. Override via the `REQUEST_TIMEOUT_MS` env
   var.
 
+## [1.0.6] — 2026-05-26
+
 ### Fixed
 
 - **`User-Agent` header reports actual package version (was hardcoded
