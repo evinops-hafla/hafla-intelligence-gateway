@@ -4,28 +4,6 @@ All notable changes to `@hafla/intelligence-mcp-bridge` will be documented in th
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Fixed
-
-- **Request timeout raised 30s → 290s, and now resets on response activity.**
-  The bridge aborted any request exceeding a hard 30s deadline measured from
-  request start. But the gateway's Cloud Run request timeout is 300s, and the
-  gateway (MCP SDK Streamable HTTP, stateless, no keepalive) returns the whole
-  SSE response in a single burst only when the tool handler resolves — nothing
-  reaches the bridge mid-compute. So a heavy AlloyDB / Neo4j query or long
-  retrieval taking 30–300s was killed client-side with `-32000 Request
-  timeout`, even though the gateway would have answered. Default
-  `REQUEST_TIMEOUT_MS` is now `290000` (just under the 300s Cloud Run cap, so
-  the bridge emits a clean JSON-RPC timeout instead of letting Cloud Run 504 —
-  whose HTML body the bridge would fail to parse). `res.on('data')` now calls
-  `timeoutId.refresh()`, making the limit an idle/inactivity timeout
-  (defense-in-depth for any future incremental streaming). Note:
-  `timeoutId.refresh()` alone — the originally-proposed fix — would not have
-  helped, because the gateway sends no bytes until completion; the raised base
-  value is the load-bearing change. Override via the `REQUEST_TIMEOUT_MS` env
-  var.
-
 ## [1.0.7] — 2026-05-27
 
 ### Fixed
@@ -54,6 +32,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   well-formed empty success frame (`{ "jsonrpc": "2.0", "result": null, "id":
   … }`), eliminating both the false-positive error frame and the stderr
   noise. Three new tests pin the 202/204 success path.
+
+- **Request timeout raised 30s → 290s, and now resets on response activity.**
+  The bridge aborted any request exceeding a hard 30s deadline measured from
+  request start. But the gateway's Cloud Run request timeout is 300s, and the
+  gateway (MCP SDK Streamable HTTP, stateless, no keepalive) returns the whole
+  SSE response in a single burst only when the tool handler resolves — nothing
+  reaches the bridge mid-compute. So a heavy AlloyDB / Neo4j query or long
+  retrieval taking 30–300s was killed client-side with `-32000 Request
+  timeout`, even though the gateway would have answered. Default
+  `REQUEST_TIMEOUT_MS` is now `290000` (just under the 300s Cloud Run cap, so
+  the bridge emits a clean JSON-RPC timeout instead of letting Cloud Run 504 —
+  whose HTML body the bridge would fail to parse). `res.on('data')` now calls
+  `timeoutId.refresh()`, making the limit an idle/inactivity timeout
+  (defense-in-depth for any future incremental streaming). Note:
+  `timeoutId.refresh()` alone — the originally-proposed fix — would not have
+  helped, because the gateway sends no bytes until completion; the raised base
+  value is the load-bearing change. Override via the `REQUEST_TIMEOUT_MS` env
+  var.
 
 ### Fixed
 
