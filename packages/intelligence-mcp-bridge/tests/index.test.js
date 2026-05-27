@@ -1242,6 +1242,61 @@ describe('forwardRequest — abort signal (2026-05-18 hygiene)', () => {
     assert.equal(result.id, 11);
     assert.equal(httpMock.captured.destroyed, true);
   });
+
+  test('already aborted before send → no write/end after destroy (return guard, tracker [005])', async () => {
+    // The before-send abort fast-path must `return` after resolving, or it
+    // falls through to req.write()/req.end() on the just-destroyed socket.
+    // pendingRequestMock above can't catch this (its write/end are silent
+    // no-ops); this mock flags any write/end that runs after destroy().
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const calls = {
+      destroyed: false,
+      writeAfterDestroy: false,
+      endAfterDestroy: false
+    };
+    const httpMock = () => {
+      const req = new EventEmitter();
+      req.write = () => {
+        if (calls.destroyed) calls.writeAfterDestroy = true;
+      };
+      req.end = () => {
+        if (calls.destroyed) calls.endAfterDestroy = true;
+      };
+      req.destroy = () => {
+        calls.destroyed = true;
+      };
+      return req;
+    };
+    const controller = new AbortController();
+    controller.abort();
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/list', id: 16 },
+      {
+        tokenCache,
+        httpRequestFn: httpMock,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 60_000,
+        abortSignal: controller.signal
+      }
+    );
+    assert.equal(result.error.code, -32000);
+    assert.match(result.error.message, /Aborted on shutdown/);
+    assert.equal(calls.destroyed, true);
+    assert.equal(
+      calls.writeAfterDestroy,
+      false,
+      'req.write must not run after destroy()'
+    );
+    assert.equal(
+      calls.endAfterDestroy,
+      false,
+      'req.end must not run after destroy()'
+    );
+  });
 });
 
 describe('forwardRequest — response stream failure (mid-response)', () => {

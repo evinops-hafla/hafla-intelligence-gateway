@@ -1199,6 +1199,11 @@ export async function forwardRequest(
           error: { code: -32000, message: 'Aborted on shutdown' },
           id: message.id ?? null
         });
+        // Return so the destroyed socket isn't written to below — resolve()
+        // does NOT halt the executor, so without this `req.write`/`req.end`
+        // run on a destroyed `req` (a write-after-destroy that req.on('error')
+        // only silently swallows because `settled` is already true).
+        return;
       } else {
         abortSignal.addEventListener(
           'abort',
