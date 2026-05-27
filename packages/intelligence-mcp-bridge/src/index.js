@@ -1008,6 +1008,31 @@ export async function forwardRequest(
           timeoutId.refresh();
         }
       });
+      // A mid-response failure surfaces on the RESPONSE stream, not `req`.
+      // Verified on Node 24: when the gateway drops the connection mid-body,
+      // `res` emits 'aborted' (and `req.on('error')` does NOT fire) — without
+      // a handler the request would hang until the 290s timeout. A response-
+      // stream/framing 'error' is rarer but, left unhandled, crashes the whole
+      // process (unhandled 'error' on an EventEmitter throws). Both resolve a
+      // clean -32603 frame; `settled` guards against a double-resolve after a
+      // normal 'end'.
+      const onResponseFailure = (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        const detail = err?.code || err?.message || 'response aborted mid-stream';
+        log.error('Gateway response stream failed', {
+          error: detail,
+          id: message.id
+        });
+        resolve({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: `Response stream failed: ${detail}` },
+          id: message.id ?? null
+        });
+      };
+      res.on('error', onResponseFailure);
+      res.on('aborted', () => onResponseFailure(new Error('response aborted mid-stream')));
       res.on('end', () => {
         clearTimeout(timeoutId);
         settled = true;
@@ -1133,7 +1158,20 @@ export async function forwardRequest(
     // forwardRequest entry and req creation), destroy immediately.
     if (abortSignal) {
       if (abortSignal.aborted) {
+        // Already aborted before the socket was created (shutdown drain raced
+        // forwardRequest entry). Mirror the abort-listener path exactly:
+        // set `settled`, clear the timer, destroy, and resolve the SAME
+        // -32000 frame. Without this the destroy()'d socket's 'error' would
+        // fall through to req.on('error') and resolve an inconsistent -32603
+        // 'Connection failed' frame plus a misleading 'Gateway request failed'.
+        settled = true;
+        clearTimeout(timeoutId);
         req.destroy(new Error('aborted before send'));
+        resolve({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Aborted on shutdown' },
+          id: message.id ?? null
+        });
       } else {
         abortSignal.addEventListener(
           'abort',

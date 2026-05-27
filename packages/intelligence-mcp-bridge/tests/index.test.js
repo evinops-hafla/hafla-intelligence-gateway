@@ -1214,6 +1214,104 @@ describe('forwardRequest — abort signal (2026-05-18 hygiene)', () => {
     assert.equal(result.id, 100);
     assert.deepEqual(result.result, { ok: 1 });
   });
+
+  test('already aborted before send → -32000 Aborted on shutdown (not -32603)', async () => {
+    // Shutdown drain raced forwardRequest entry: abortSignal is already
+    // aborted when the socket is created. Must resolve the SAME -32000 frame
+    // as the abort-listener path, not fall through to req.on('error')'s -32603.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const httpMock = pendingRequestMock();
+    const controller = new AbortController();
+    controller.abort();
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/list', id: 11 },
+      {
+        tokenCache,
+        httpRequestFn: httpMock,
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 60_000,
+        abortSignal: controller.signal
+      }
+    );
+    assert.equal(result.error.code, -32000);
+    assert.match(result.error.message, /Aborted on shutdown/);
+    assert.equal(result.id, 11);
+    assert.equal(httpMock.captured.destroyed, true);
+  });
+});
+
+describe('forwardRequest — response stream failure (mid-response)', () => {
+  // Emits a failure on the RESPONSE stream (not req) after headers arrive,
+  // simulating Cloud Run dropping the connection mid-body.
+  function responseStreamFailureMock({ event, code }) {
+    return (_options, callback) => {
+      const req = new EventEmitter();
+      req.write = () => {};
+      req.destroy = () => {};
+      req.end = () => {
+        const res = new EventEmitter();
+        res.statusCode = 200;
+        res.headers = { 'content-type': 'application/json' };
+        res.setEncoding = () => {};
+        callback(res);
+        setImmediate(() => {
+          if (event === 'error') {
+            const err = new Error('stream broke');
+            err.code = code;
+            res.emit('error', err);
+          } else {
+            res.emit('aborted');
+          }
+        });
+      };
+      return req;
+    };
+  }
+
+  test("response-stream 'error' → -32603 frame (no process crash)", async () => {
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 12 },
+      {
+        tokenCache,
+        httpRequestFn: responseStreamFailureMock({ event: 'error', code: 'ECONNRESET' }),
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(result.error.code, -32603);
+    assert.match(result.error.message, /Response stream failed/);
+    assert.match(result.error.message, /ECONNRESET/);
+    assert.equal(result.id, 12);
+  });
+
+  test("response 'aborted' mid-stream → -32603 fast-fail (not a 290s hang)", async () => {
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 13 },
+      {
+        tokenCache,
+        httpRequestFn: responseStreamFailureMock({ event: 'aborted' }),
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(result.error.code, -32603);
+    assert.match(result.error.message, /Response stream failed/);
+    assert.equal(result.id, 13);
+  });
 });
 
 describe('forwardRequest — request timeout (idle, raised to 290s default)', () => {
