@@ -942,9 +942,10 @@ export async function forwardRequest(
     //      'Gateway request failed' over the real cause and attempts a no-op
     //      resolve. Preserves the clearTimeout discipline (commit adaf64d).
     let settled = false;
+    let req;
     const timeoutId = setTimeout(() => {
       settled = true;
-      req.destroy();
+      if (req) req.destroy();
       log.warn('Request timeout', {
         method: message.method,
         id: message.id,
@@ -979,7 +980,8 @@ export async function forwardRequest(
 
     const effectiveFn =
       httpRequestFn ?? (url.protocol === 'http:' ? httpRequest : httpsRequest);
-    const req = effectiveFn(options, (res) => {
+    try {
+      req = effectiveFn(options, (res) => {
       // Engage Node's internal StringDecoder so partial multi-byte UTF-8
       // sequences across TCP chunk boundaries are buffered safely. Without
       // this, a 4-byte emoji or 2-3 byte Arabic codepoint split across two
@@ -1034,6 +1036,7 @@ export async function forwardRequest(
       res.on('error', onResponseFailure);
       res.on('aborted', () => onResponseFailure(new Error('response aborted mid-stream')));
       res.on('end', () => {
+        if (settled) return;
         settled = true;
         clearTimeout(timeoutId);
 
@@ -1126,6 +1129,10 @@ export async function forwardRequest(
         resolve(payload);
       });
     });
+    } catch (err) {
+      clearTimeout(timeoutId);
+      throw err;
+    }
 
     req.on('error', (err) => {
       // Our own timeout/abort destroy() emits 'error' after we've already
