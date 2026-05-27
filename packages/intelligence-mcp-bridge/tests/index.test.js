@@ -1422,6 +1422,31 @@ describe('forwardRequest', () => {
     assert.equal(result.result, null);
   });
 
+  test('202 with id-bearing message preserves id in resolved frame', async () => {
+    // Pins the `id: message.id ?? null` expression for the non-null id case.
+    // The MCP spec makes 202 on an id-bearing request spec-impossible, but the
+    // bridge must handle it correctly regardless — the comment in forwardRequest
+    // documents this as a defensive case. Without this test, the `?? null`
+    // fallback is exercised only for the no-id (notification) path above.
+    const tokenCache = createTokenCache({
+      execGcloudFn: async () => 'fake-jwt',
+      now: () => 0
+    });
+    const result = await forwardRequest(
+      { jsonrpc: '2.0', method: 'tools/call', id: 42 },
+      {
+        tokenCache,
+        httpRequestFn: mockHttpRequest({ statusCode: 202, body: '' }),
+        gatewayUrl: 'https://example.com',
+        gatewayPath: '/mcp',
+        requestTimeoutMs: 1000
+      }
+    );
+    assert.equal(result.error, undefined, '202 must NOT produce an error frame');
+    assert.equal(result.result, null, 'result must be null');
+    assert.equal(result.id, 42, 'id from original message must be preserved');
+  });
+
   // User-Agent reports the actual package version on every outbound request.
   // Pre-1.0.6 this was hardcoded `intelligence-mcp-bridge/1.0`, which masked
   // the real version on 100% of bridge traffic in Cloud Run access logs
