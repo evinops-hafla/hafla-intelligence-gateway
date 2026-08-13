@@ -25,8 +25,8 @@ Full rationale: `hafla-intelligence/mcp-gateway/specs/history-and-future/history
 
 | #   | Skill                  | Status                              |
 | --- | ---------------------- | ----------------------------------- |
-| 1   | `supplier-discovery`   | **spike (this commit)**             |
-| 2   | `pricing-lookup`       | designed, not built                 |
+| 1   | `supplier-discovery`   | **built (tool-first)**              |
+| 2   | `pricing-lookup`       | **built (tool-first)**              |
 | 3   | `product-brief`        | designed, not built                 |
 | 4   | `past-orders`          | designed, not built                 |
 | 5   | `venue-recommendation` | designed (evidence-only), not built |
