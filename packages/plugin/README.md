@@ -28,8 +28,8 @@ Full rationale: `hafla-intelligence/mcp-gateway/specs/history-and-future/history
 | 1   | `supplier-discovery`   | **built (tool-first)**              |
 | 2   | `pricing-lookup`       | **built (tool-first)**              |
 | 3   | `product-brief`        | **built (tool-first orchestrator)** |
-| 4   | `past-orders`          | designed, not built                 |
-| 5   | `venue-recommendation` | designed (evidence-only), not built |
+| 4   | `past-orders`          | **built (tool-first)**              |
+| 5   | `venue-recommendation` | **built (evidence-only)**           |
 
 Design specs live in the sibling repo:
 `hafla-intelligence/mcp-gateway/specs/history-and-future/history/research/intelligence-gateway/skills-wave-1/`
