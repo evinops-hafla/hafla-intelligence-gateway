@@ -50,8 +50,12 @@ SELECT o."orderNumber", ue."userEventNumber", ued."eventTitle",
        o.status, o."createdAt"::date AS "orderedOn",
        (o."orderTotal"/100.0)::numeric(12,2) AS "orderAed"   -- Orders.orderTotal is in fils
 FROM "haflaCore"."Orders" o
-LEFT JOIN "haflaCore"."UserEvents" ue        ON ue.id = o."userEventId"
-LEFT JOIN "haflaCore"."UserEventDetails" ued ON ued."userEventId" = ue.id  -- eventTitle lives here
+LEFT JOIN "haflaCore"."UserEvents" ue ON ue.id = o."userEventId"
+LEFT JOIN LATERAL (                                    -- eventTitle lives on UED, which has
+  SELECT d."eventTitle"                                -- MULTIPLE rows per event → LATERAL LIMIT 1
+  FROM "haflaCore"."UserEventDetails" d                -- to avoid fanning out / duplicating orders
+  WHERE d."userEventId" = ue.id LIMIT 1
+) ued ON true
 WHERE o."userId" = :userId
 ORDER BY o."createdAt" DESC
 LIMIT 25;
