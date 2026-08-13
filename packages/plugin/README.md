@@ -39,13 +39,30 @@ Design specs live in the sibling repo:
 
 ```
 packages/plugin/
-  README.md                          # this file
+  README.md                              # this file
   skills/
-    supplier-discovery/SKILL.md      # the skill definition (portable Agent Skill)
+    supplier-discovery/SKILL.md          # who supplies X (tool-first)
+    pricing-lookup/SKILL.md              # what we charge / paid (selling vs cost)
+    product-brief/SKILL.md               # the 5-source "101" (orchestrator)
+    past-orders/SKILL.md                 # history for a host/partner/order/event
+    venue-recommendation/SKILL.md        # evidence-only venue lookup
 ```
 
 Each skill is a portable `SKILL.md` (YAML frontmatter `name` + `description`, then instructions). The
 `description` is what the host uses to decide when to invoke the skill, so it names the trigger phrases.
+
+## Conventions every skill follows
+
+- **Cite human-readable integer keys** — `Orders.orderNumber`, `UserEvents.userEventNumber`, Zendesk
+  ticket #, partner `tradeName`. **Never surface product/partner UUIDs.**
+- **Source-honesty** — semantic conversation search (`search_internal_knowledge`) is **WhatsApp only**;
+  never claim to semantically search Slack/Zendesk. Disclose the data/corpus window.
+- **Read-only** — no create/book/register (the gateway exposes no write tools).
+- **Money labels** — partner `costAed` (supplier→Hafla) is never a client price; selling price is never
+  a cost. Label which one a number is.
+- **Route out** — supply → `supplier-discovery`, price → `pricing-lookup`, 101 → `product-brief`,
+  history → `past-orders`, venue evidence → `venue-recommendation`; pricing _strategy_ and _margin_ are
+  out of scope (wave-2 commercial intelligence).
 
 ## Prerequisites (to run a skill)
 
@@ -61,12 +78,19 @@ Each skill is a portable `SKILL.md` (YAML frontmatter `name` + `description`, th
   folder to the org (flagged in the delivery-model correction).
 - **Connector availability** — confirm which org connector exposes the gateway tools in Chat / Cowork
   (the old "Ask Hafla" pin is obsolete).
-- **Tool migration** — PR #314/#316/#317/#319/#320 are deploying (2026-08-13). `supplier-discovery` is
-  now **tool-first** (calls the live `supplier_discovery` tool; raw SQL only for what the tool defers —
-  partner-fact, order-#, the WhatsApp "invisible" branch, the graph cross-check). **Build the remaining
-  skills tool-first too:** `pricing-lookup` → `price_truth` + `productPriceBands` (#319);
-  `product-brief` → `product_lookup`/`catalog_search`/`price_truth`; `past-orders` → `customer_360`.
+- **Tool migration — DONE.** PR #314/#316/#317/#319/#320 deployed 2026-08-14. All 5 skills are
+  tool-first where a tool exists: `supplier-discovery` → `supplier_discovery`; `pricing-lookup` →
+  `price_truth` (selling) + `productPriceBands` (cost); `product-brief` → `product_lookup` /
+  `supplier_discovery` / `price_truth` / `related_products`; `past-orders` → `analyze_identity_graph` /
+  `get_ticket_360` / `get_lead_context` / `customer_360`. Remaining raw-SQL grains (generic `--Name--`
+  price, per-host order enumeration, venue evidence) have no tool yet — noted in each SKILL.md's
+  forward note as future tool candidates.
 
-This is a **spike**: one skill, the scaffold it needs, and the corrected delivery model — enough to
-validate the end-to-end product path (skill → connector → gateway) on Claude Desktop before building
-the remaining four.
+## Status
+
+Wave-1 is **built** (all 5 skills) and **schema-verified** against the live gateway — 18 tools +
+`productPriceBands`/`supplierCapabilitySummary` deployed 2026-08-14, every tool-call shape and every raw
+SQL column checked against the deployed schema. Not yet **installed/run** on an enterprise Claude
+Desktop: that end-to-end validation (skill → connector → gateway) plus the Agent-Skill distribution flow
+are the remaining open items above. No `plugin.json` manifest yet — deliberately deferred until the
+enterprise install mechanics are confirmed.

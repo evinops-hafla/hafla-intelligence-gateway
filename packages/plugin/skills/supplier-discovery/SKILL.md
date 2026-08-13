@@ -58,13 +58,13 @@ bespoke segregation and TBA/superseded handling — **do not re-implement those 
 
 ## Step 2 — Route
 
-| The user gave…          | Path                                                                    |
-| ----------------------- | ----------------------------------------------------------------------- |
+| The user gave…                            | Path                                                              |
+| ----------------------------------------- | ----------------------------------------------------------------- |
 | product / category / "top N" / "reliable" | **`supplier_discovery` tool** (then client-filter excludeVendors) |
-| partner name + a fact   | **Branch-C** (raw SQL + `analyze_identity_graph`)                        |
-| Order # / Event #       | **Branch-D** (raw SQL) — also the drill-down target                      |
-| "invisible" / few viable | **Branch-F** (`search_internal_knowledge`, the tool defers this)        |
-| "proven vs just listed?" | **graph cross-check** (`safe_cypher_sandbox`)                           |
+| partner name + a fact                     | **Branch-C** (raw SQL + `analyze_identity_graph`)                 |
+| Order # / Event #                         | **Branch-D** (raw SQL) — also the drill-down target               |
+| "invisible" / few viable                  | **Branch-F** (`search_internal_knowledge`, the tool defers this)  |
+| "proven vs just listed?"                  | **graph cross-check** (`safe_cypher_sandbox`)                     |
 
 ### Always open with scope + the anti-hallucination note (FU-3)
 
@@ -114,7 +114,7 @@ For generic `--Name--` line items, `OrderItems.productNotes` is **Slate JSON**
 The tool defers the WhatsApp corpus (`quotedInChat`, v2), so this branch is the skill's own — run it on
 `invisible`/`widen` or when `marketScout.advised` is true:
 
-1. `search_internal_knowledge("<product> supplier vendor pricing <city?>")` (WhatsApp corpus **only**).
+1. `search_internal_knowledge({ query: "<product> supplier vendor pricing <city?>" })` (WhatsApp corpus **only**).
 2. Candidates = enriched `partnerNames[]` ∪ brand parsed from each chat `title`.
 3. Each candidate: `SELECT count(*) FROM "haflaCore"."Partners" WHERE "tradeName" ILIKE '%cand%' OR "legalName" ILIKE '%cand%'`.
 4. Partition **registered** (count>0) vs **★ invisible** (count=0 — talked to, never registered).
@@ -134,7 +134,7 @@ RETURN p.tradeName AS partner, count(DISTINCT oi) AS provenItems ORDER BY proven
 ## Output (Claude Desktop)
 
 Every reply: **(1)** scope + FU-3 note + parsed constraints + exclusions → **(2)** proven table from
-`delivered[]` (`partner`, `orders`, `costAed` labelled *supplier cost*, `lastWorkedWith`), flagging
+`delivered[]` (`partner`, `orders`, `costAed` labelled _supplier cost_, `lastWorkedWith`), flagging
 `supersededRecord` ("retired record — don't book") and bespoke-only partners as capability signals →
 **(3)** relevant `plannerNotes` (competitor quotes / new vendors) → **(4)** `marketScout` advice if
 `advised` → **(5)** ★ invisible-supplier flag (Branch-F) when run → **(6)** caveats + `drill <partner>`
@@ -146,7 +146,7 @@ offer.
 
 ## Guardrails
 
-- **Read-only.** Never create/book/register. Branch-F only *flags* invisible suppliers.
+- **Read-only.** Never create/book/register. Branch-F only _flags_ invisible suppliers.
 - **No reliability score** — proven-order count + recency is the proxy; state the gap.
 - **No forward availability** — historical fulfilment only.
 - **`costAed` is supplier→Hafla cost, never a client price.** **Corpus = WhatsApp only** (not Slack/ZD).

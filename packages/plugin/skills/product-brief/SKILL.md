@@ -28,7 +28,7 @@ encyclopedia knowledge is one line at most, skipped by default.**
 ## The five sources (compose them; cite as you go)
 
 1. **Catalog match** — `product_lookup({ id|slug|productNumber })` if you have an id, else
-   `catalog_search("<subject>")` to resolve the SKU(s), generic `--Name--` included. Note whether the
+   `catalog_search({ query: "<subject>" })` to resolve the SKU(s), generic `--Name--` included. Note whether the
    subject is a **generic** (`--…--`) item — if so it's the dominant grain (55% of GMV) and sources 2/5
    carry the real detail.
 2. **What was actually ordered** — the negotiated spec/price in `OrderItems.productNotes` /
@@ -54,11 +54,11 @@ encyclopedia knowledge is one line at most, skipped by default.**
    median, ORDER-preferred). Label selling vs cost. (`price_truth` blocks generics → for a `--…--`
    subject, the price lives in source 2/5, say so.)
 5. **WhatsApp negotiated detail + setup gotchas** (only on run choice [2]) —
-   `search_internal_knowledge("<subject> setup pricing supplier")`. Corpus = **WhatsApp only**; disclose
+   `search_internal_knowledge({ query: "<subject> setup pricing supplier" })`. Corpus = **WhatsApp only**; disclose
    the date; cite chat title. Pull recurring setup challenges + partner mentions.
 
 Optional: `related_products({ id })` for "commonly ordered with" (a useful brief line), and
-`get_ticket_360(<n>)` if the user drills into a cited Zendesk ticket.
+`get_ticket_360({ ticket_id: "<n>" })` if the user drills into a cited Zendesk ticket.
 
 ## Brief structure (the one page)
 

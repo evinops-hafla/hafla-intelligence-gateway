@@ -26,8 +26,8 @@ them. Cited by event # / order #."
 
 Extract pax, area/emirate, budget, indoor/outdoor, vibe. Only pax/site-type/address are structurally
 present; **echo the rest but say they aren't filterable** (no structured vibe/budget-per-venue model).
-**Confirm the exact `UserEventDetails` column names with `describe_table("UserEventDetails")` before
-running the SQL** (guest-count / site-type / address column names must be verified, not assumed).
+**Confirm the exact `UserEventDetails` column names with `describe_table({ table: "UserEventDetails" })`
+before running the SQL** (guest-count / site-type / address column names must be verified, not assumed).
 
 ## Step 1 — Site-type mix + recurring venues (`safe_sql_sandbox`)
 
@@ -55,7 +55,7 @@ For the recurring venues, surface the vendors/partners who served events there:
 
 - Where federation links exist, the proven-fulfilment path (`OrderItemPartners → Partners` on those
   events' orders) — cite `tradeName`.
-- `search_internal_knowledge("<venue or area> event vendor catering AV parking")` — the WA corpus
+- `search_internal_knowledge({ query: "<venue or area> event vendor catering AV parking" })` — the WA corpus
   (**WhatsApp only**) carries venue mentions + vendor names + alcohol/parking/capacity context that
   lives nowhere structured. Disclose the corpus date; cite chat title.
 

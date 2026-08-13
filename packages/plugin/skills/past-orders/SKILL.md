@@ -25,15 +25,15 @@ failure mode (coverage push-back).
 
 ## Step 1 — Identify the input (7 shapes) and resolve it
 
-| Input | Resolve with |
-| ----- | ------------ |
-| **host phone / email** | `analyze_identity_graph(<phone or email>)` → canonical identity unifying WA/ZD/HC. Also `customer_360({ mobile })` / `customer_360({ email })` for the lifetime summary. |
-| **Zendesk ticket #** | `get_ticket_360(<n>)` (bundled context — preferred). |
-| **event # / host #** | `get_lead_context({ userEventNumber })` / `get_lead_context({ hostNumber })`. |
-| **order #** | `safe_sql_sandbox` (Branch-Order below). |
-| **partner name** | `safe_sql_sandbox` (Branch-Partner) — their fulfilled orders. |
-| **client / host NAME** | mandatory fallback chain: `Users.name` → `UserEvents.eventTitle` → ZD subject → corpus (corporate buyers live in event titles / ticket subjects, not `Users.name`). |
-| **product / topic only** | this is a discovery question, not a history one — route to `supplier-discovery` (who supplies) or `pricing-lookup` (what it cost). |
+| Input                    | Resolve with                                                                                                                                                                                                |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **host phone / email**   | `analyze_identity_graph({ phone_or_email: "<value>" })` → canonical identity unifying WA/ZD/HC. Also `customer_360({ mobile: "<value>" })` / `customer_360({ email: "<value>" })` for the lifetime summary. |
+| **Zendesk ticket #**     | `get_ticket_360({ ticket_id: "<n>" })` (bundled context — preferred; `ticket_id` is a string).                                                                                                              |
+| **event # / host #**     | `get_lead_context({ userEventNumber })` / `get_lead_context({ hostNumber })`.                                                                                                                               |
+| **order #**              | `safe_sql_sandbox` (Branch-Order below).                                                                                                                                                                    |
+| **partner name**         | `safe_sql_sandbox` (Branch-Partner) — their fulfilled orders.                                                                                                                                               |
+| **client / host NAME**   | mandatory fallback chain: `Users.name` → `UserEvents.eventTitle` → ZD subject → corpus (corporate buyers live in event titles / ticket subjects, not `Users.name`).                                         |
+| **product / topic only** | this is a discovery question, not a history one — route to `supplier-discovery` (who supplies) or `pricing-lookup` (what it cost).                                                                          |
 
 ## Step 2 — Lead with `customer_360` for a host, then enumerate
 
@@ -46,11 +46,12 @@ Then enumerate the actual orders/events (the tool gives counts, not the list) vi
 
 ```sql
 -- resolve name→userId first if needed; here :userId is the resolved host
-SELECT o."orderNumber", ue."userEventNumber", ue."eventTitle",
+SELECT o."orderNumber", ue."userEventNumber", ued."eventTitle",
        o.status, o."createdAt"::date AS "orderedOn",
-       (o."totalAmount"/100.0)::numeric(12,2) AS "orderAed"
+       (o."orderTotal"/100.0)::numeric(12,2) AS "orderAed"   -- Orders.orderTotal is in fils
 FROM "haflaCore"."Orders" o
-LEFT JOIN "haflaCore"."UserEvents" ue ON ue.id = o."userEventId"
+LEFT JOIN "haflaCore"."UserEvents" ue        ON ue.id = o."userEventId"
+LEFT JOIN "haflaCore"."UserEventDetails" ued ON ued."userEventId" = ue.id  -- eventTitle lives here
 WHERE o."userId" = :userId
 ORDER BY o."createdAt" DESC
 LIMIT 25;

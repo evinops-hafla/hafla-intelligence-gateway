@@ -42,7 +42,7 @@ Always separate two different numbers and label them:
 
 ## Step 2 — Cataloged SKU → tool-first
 
-1. **Resolve name → product UUID** with `catalog_search("<term>")` (or `product_lookup` if you already
+1. **Resolve name → product UUID** with `catalog_search({ query: "<term>" })` (or `product_lookup` if you already
    have an id/slug/productNumber). If several match, confirm which SKU.
 2. **Selling price:** `price_truth({ id: <uuid> })`. Read `source`:
    - `ORDER_HISTORY` → p25/median/p75 AED with the order count. If **`reliable`** (≥3 orders) state the
@@ -84,6 +84,7 @@ Always separate two different numbers and label them:
 
    `productNotes`/`priceNotes` are **Slate JSON** (`[{children:[{text}]}]`) — flatten `.children[].text`
    before showing; do NOT dump raw markup. ILIKE on `::text` matches for searching.
+
 2. **WhatsApp negotiated quotes** (`search_internal_knowledge`): the corpus often holds the ONLY
    per-unit number ("Banquet Rectangle Table AED 60/pc/day"). Corpus = **WhatsApp only**; disclose the
    date. Cite chat title + date.
