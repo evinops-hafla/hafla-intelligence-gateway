@@ -61,8 +61,11 @@ Each skill is a portable `SKILL.md` (YAML frontmatter `name` + `description`, th
   folder to the org (flagged in the delivery-model correction).
 - **Connector availability** — confirm which org connector exposes the gateway tools in Chat / Cowork
   (the old "Ask Hafla" pin is obsolete).
-- **Tool migration** — once PR #319 (IDL views) and PR #320 (`supplier_discovery` gateway tool) deploy,
-  thin the skills to call those instead of hand-written SQL (see each SKILL.md's "Forward note").
+- **Tool migration** — PR #314/#316/#317/#319/#320 are deploying (2026-08-13). `supplier-discovery` is
+  now **tool-first** (calls the live `supplier_discovery` tool; raw SQL only for what the tool defers —
+  partner-fact, order-#, the WhatsApp "invisible" branch, the graph cross-check). **Build the remaining
+  skills tool-first too:** `pricing-lookup` → `price_truth` + `productPriceBands` (#319);
+  `product-brief` → `product_lookup`/`catalog_search`/`price_truth`; `past-orders` → `customer_360`.
 
 This is a **spike**: one skill, the scaffold it needs, and the corrected delivery model — enough to
 validate the end-to-end product path (skill → connector → gateway) on Claude Desktop before building
