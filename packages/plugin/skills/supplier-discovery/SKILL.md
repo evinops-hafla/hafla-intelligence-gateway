@@ -86,7 +86,9 @@ WHERE "tradeName" ILIKE '%'||:partner||'%' OR "legalName" ILIKE '%'||:partner||'
 LIMIT 5;
 ```
 
-`address` is mostly NULL — say **"no verified warehouse address"**, don't guess. Phone/email instead of
+`address` is mostly NULL — say **"no verified warehouse address"**, don't guess. Some `emailId`s are
+placeholders (`haflapartner+…@dummy.com`) — treat an `@dummy.` email as "no email on record", not a real
+contact (the `supplier_discovery` tool filters these; this raw query does not). Phone/email instead of
 a name → `analyze_identity_graph`.
 
 ### Branch-D — order # → who supplied, and drill-downs (`safe_sql_sandbox`)

@@ -49,6 +49,11 @@ ORDER BY "events" DESC;
 Then list the specific recurring venues (top `exactAddress` values in the band), each cited by the
 `userEventNumber` / `orderNumber` of an example event so the planner can verify.
 
+> **Caveat (verified on prod):** `exactAddress` is populated for only **~4%** of events (most events are
+> at homes — Villa/Apartment — with no named venue), so the recurring-venue list is **sparse and
+> illustrative, not comprehensive**. Lead with the **site-type mix** (reliable, ~430K events) and the
+> **corpus** (Step 2); present named venues as "some past events used…", never "the venues for this band".
+
 ## Step 2 — Vendors who served those venues (the re-scope's defining feature)
 
 For the recurring venues, surface the vendors/partners who served events there:
