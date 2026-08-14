@@ -28,9 +28,12 @@ encyclopedia knowledge is one line at most, skipped by default.**
 ## The five sources (compose them; cite as you go)
 
 1. **Catalog match** — `product_lookup({ id|slug|productNumber })` if you have an id, else
-   `catalog_search({ query: "<subject>" })` to resolve the SKU(s), generic `--Name--` included. Note whether the
-   subject is a **generic** (`--…--`) item — if so it's the dominant grain (55% of GMV) and sources 2/5
-   carry the real detail.
+   `catalog_search({ query: "<subject>" })` to resolve **named** SKU(s). **`catalog_search` EXCLUDES
+   generic `--Name--` products** (it filters `btrim(name) NOT LIKE '--%--'`), so to detect/resolve a
+   generic run a raw query: `safe_sql_sandbox` → `SELECT id, name FROM "haflaCore"."Products" WHERE name
+   ILIKE '%'||:term||'%' AND name LIKE '--%--'`. If the subject is generic (`--…--`) it's the dominant
+   grain (55% of GMV) — sources 2/5 carry the real detail, and `price_truth` will return
+   `BLOCKED_GENERIC` (say so instead of quoting a catalog price).
 2. **What was actually ordered** — the negotiated spec/price in `OrderItems.productNotes` /
    `priceNotes` (raw `safe_sql_sandbox`; **Slate JSON** → flatten `.children[].text`, don't dump
    markup). Cite `Orders.orderNumber` (integer).

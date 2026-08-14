@@ -22,12 +22,20 @@ returns **what comparable past events actually used**. Every response opens with
 pax/budget/type actually did**: the site-type mix, the venues that recur, and the vendors who served
 them. Cited by event # / order #."
 
+State the coverage honestly in the disclosure (verified on prod, 429,870 event-detail rows): only
+**~17.6%** of events carry a **site-type** and only **~4%** a **named address** (`exactAddress`) — most
+events are homes (Villa/Apartment) with neither. So both signals are **partial samples**, and the
+default window is **the last 24 months** (pre-2024 data is near-zero) — apply
+`WHERE ued."createdAt" > now() - interval '24 months'` (confirm the timestamp column via
+`describe_table`) so the evidence reflects current behaviour.
+
 ## Step 0 — Parse the constraint band
 
 Extract pax, area/emirate, budget, indoor/outdoor, vibe. Only pax/site-type/address are structurally
 present; **echo the rest but say they aren't filterable** (no structured vibe/budget-per-venue model).
-**Confirm the exact `UserEventDetails` column names with `describe_table({ table: "UserEventDetails" })`
-before running the SQL** (guest-count / site-type / address column names must be verified, not assumed).
+**Confirm the exact `UserEventDetails` column names with
+`describe_table({ schema: "haflaCore", table: "UserEventDetails" })` before running the SQL** (both
+`schema` and `table` are required) (guest-count / site-type / address column names must be verified, not assumed).
 
 ## Step 1 — Site-type mix + recurring venues (`safe_sql_sandbox`)
 

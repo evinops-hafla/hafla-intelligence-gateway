@@ -88,9 +88,16 @@ Each skill is a portable `SKILL.md` (YAML frontmatter `name` + `description`, th
 
 ## Status
 
-Wave-1 is **built** (all 5 skills) and **schema-verified** against the live gateway — 18 tools +
-`productPriceBands`/`supplierCapabilitySummary` deployed 2026-08-14, every tool-call shape and every raw
-SQL column checked against the deployed schema. Not yet **installed/run** on an enterprise Claude
-Desktop: that end-to-end validation (skill → connector → gateway) plus the Agent-Skill distribution flow
-are the remaining open items above. No `plugin.json` manifest yet — deliberately deferred until the
-enterprise install mechanics are confirmed.
+Wave-1 is **built** (all 5 skills) and **reviewed + live-tested** against the deployed gateway
+(18 tools + `productPriceBands`/`supplierCapabilitySummary`, 2026-08-14). A fresh-context adversarial
+review + running every embedded SQL/Cypher on prod caught and fixed a series of tool-contract and
+data-reality issues (named-param shapes, `describe_table` needing `schema`, `catalog_search` excluding
+generics, `supplier_discovery.costAed` being an object, `delivered[]` including stated-only rows, a
+join fan-out, ~4%-`exactAddress` / ~17.6%-site-type coverage). Every tool call and SQL query is now
+verified against the live contracts/schema.
+
+**Not yet installed/run on an enterprise Claude Desktop** — that end-to-end validation
+(skill → connector → gateway) plus the Agent-Skill distribution flow are the remaining open items above.
+No `plugin.json` yet (deferred until enterprise install mechanics are confirmed). **Maturity:** the
+underlying R1/pricing/supplier tools are recent first-cuts (some flagged pre-alpha) — richer
+IDL-processed versions are planned, so treat tool outputs as improving, not final.

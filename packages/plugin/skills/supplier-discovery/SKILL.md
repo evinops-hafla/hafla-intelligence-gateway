@@ -29,19 +29,27 @@ Call it first for any "who supplies / top suppliers for X" question:
 supplier_discovery({ product: "<product or category>", limit: 8 })   // limit optional, max 20
 ```
 
-It returns three sections (interpret them precisely — they mean different things):
+It returns three sections (interpret them precisely — field shapes matter):
 
-- **`delivered[]`** — partners who have actually delivered it, one row per partner:
-  `partner` (tradeName), `orders`, `costAed` (**what the SUPPLIER charges Hafla — never a client
-  price**; `null`/a "bespoke only" note when the partner has only `bespokeJobs`), `bespokeJobs`
-  (custom `--…--` jobs in the category — a capability signal with no comparable unit price),
-  `lastWorkedWith`, `active`, `mobile`/`email`/`contactPerson` (supplier contacts, internal use — D-9),
-  and `supersededRecord` (**an old VAT-record rename — the supplier is fine, that record is retired,
-  never book it**). Already sorted recency-then-orders, with TBA/placeholder/dummy rows filtered.
+- **`delivered[]`** — partners matched to the product/category, one row per partner. Fields:
+  `partner` (tradeName), `products`/`productCount` (matched real variants), `bespokeJobs` (custom
+  `--…--` jobs — capability signal, no unit price), **`orders`** (summed `totalOrders` — **can be `0`
+  or `null`**), `costAed` — an **object `{ avg, min, max }` in AED** (**supplier→Hafla cost, never a
+  client price**), or `null` for a bespoke-only partner — plus `costBasis` (a words string, e.g. "N
+  observations from confirmed orders"), `lastWorkedWith`, `active`, contacts `phone` / `hasWhatsapp` /
+  `email` (already dummy-filtered by the tool) / `contactPerson` (internal use — D-9), and
+  `supersededRecord` (**an old VAT-record rename — supplier is fine, that record is retired, never book
+  it**). Sorted recency-then-orders; TBA/placeholder filtered.
+  - **PROVEN vs STATED (important):** the tool does **not** filter `orders > 0`, so `delivered[]` can
+    include stated-only listings (`orders` = 0/null, no proven fulfilment). **Rank/lead with `orders >
+    0` rows as "proven"; label `orders` 0/null rows as "listed, not yet delivered".** Do not call the
+    whole list "proven".
 - **`plannerNotes[]`** — internal Zendesk notes mentioning the product alongside supplier/vendor/price
   (new vendors, competitor quotes, responsiveness). Automation/digests already stripped.
-- **`marketScout`** — `{ advised, viableInternal, reason }`. When `advised` is true (`< 6` viable
-  recent+active suppliers), tell the planner to scout the open market / suggest onboarding.
+- **`marketScout`** — `{ advised, viableInternal, reason }`. When `advised` is `true` (`< 6` viable
+  recent+active suppliers), tell the planner to scout the open market. `advised` can also be **`null`**
+  (the tool couldn't assess — e.g. a source degraded); a top-level **`degraded[]`** may list which
+  source failed — surface "partial results (X unavailable)" rather than asserting a clean count.
 
 The tool encapsulates the old catalog + generic-`--Name--` + category + top-N ranking, plus D-30
 bespoke segregation and TBA/superseded handling — **do not re-implement those in SQL.**
@@ -135,12 +143,13 @@ RETURN p.tradeName AS partner, count(DISTINCT oi) AS provenItems ORDER BY proven
 
 ## Output (Claude Desktop)
 
-Every reply: **(1)** scope + FU-3 note + parsed constraints + exclusions → **(2)** proven table from
-`delivered[]` (`partner`, `orders`, `costAed` labelled _supplier cost_, `lastWorkedWith`), flagging
-`supersededRecord` ("retired record — don't book") and bespoke-only partners as capability signals →
-**(3)** relevant `plannerNotes` (competitor quotes / new vendors) → **(4)** `marketScout` advice if
-`advised` → **(5)** ★ invisible-supplier flag (Branch-F) when run → **(6)** caveats + `drill <partner>`
-offer.
+Every reply: **(1)** scope + FU-3 note + parsed constraints + exclusions → **(2)** ranked table from
+`delivered[]` — `partner`, `orders`, `costAed` as a **range** (e.g. `avg (min–max) AED`, labelled
+_supplier cost_), `lastWorkedWith` — **proven rows (`orders>0`) first, listed-only (`orders` 0/null)
+below a divider**; flag `supersededRecord` ("retired record — don't book") and bespoke-only partners as
+capability signals → **(3)** relevant `plannerNotes` (competitor quotes / new vendors) → **(4)**
+`marketScout` advice when `advised` is `true` (and "partial results" when `degraded[]`/`advised:null`)
+→ **(5)** ★ invisible-supplier flag (Branch-F) when run → **(6)** caveats + `drill <partner>` offer.
 
 - Cite partner `tradeName` + integer `Orders.orderNumber`. **Never surface product/partner UUIDs.**
 - Keep it scannable; for a large/shareable shortlist (≳8 rows, or "save/compare/forward"), offer a

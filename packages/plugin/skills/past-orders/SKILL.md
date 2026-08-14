@@ -80,6 +80,8 @@ Offer it on every response ("want all events for this host / venue / partner, no
 ## Guardrails / routes out
 
 - Read-only. Cite `Orders.orderNumber` / `UserEvents.userEventNumber` / ticket # — **never UUIDs**.
+- **Source-honesty:** the name-fallback's corpus leg (`search_internal_knowledge`) is **WhatsApp only** —
+  Zendesk/Slack are reachable structurally (via `get_ticket_360` / SQL), not semantically.
 - State the real window; on thin data say "thin, not absent" and cite what was found.
 - **Routes out:** "who can supply X" → `supplier-discovery`; "what does X cost" → `pricing-lookup`;
   "101 on X" → `product-brief`. PII (host phone/email) is returned for internal planner use (D-9).

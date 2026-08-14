@@ -61,7 +61,7 @@ Always separate two different numbers and label them:
    FROM intelligence."productPriceBands" WHERE "productId" = :uuid;
    ```
 
-   Lead with **`representativeMedianAed`** (ORDER→CART→CATALOG preferred — real transacted cost beats
+   Lead with **`repMedianAed`** (the `representativeMedianFils` column above; ORDER→CART→CATALOG preferred — real transacted cost beats
    list) and its `representativeTier`; the pooled min/median/max is range context. Custom line items
    are already excluded from this view. This is **partner cost**, label it so.
 
