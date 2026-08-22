@@ -54,6 +54,28 @@ It returns three sections (interpret them precisely — field shapes matter):
 The tool encapsulates the old catalog + generic-`--Name--` + category + top-N ranking, plus D-30
 bespoke segregation and TBA/superseded handling — **do not re-implement those in SQL.**
 
+### If the tool returns empty — DON'T report "no supplier" (proven-fulfilment fallback)
+
+`supplier_discovery` has a **coverage floor for thin-volume / service-type products** — it can return
+`delivered: []` with `marketScout.viableInternal: 0` even when real, recent fulfilment exists (verified:
+`calligraphy` → empty from the tool, yet partner **Tariq** has **16** real orders, last 2026-02). So on
+an empty/zero result for a product that plausibly has history, run the raw proven-fulfilment fallback
+before concluding anything:
+
+```sql
+SELECT pt."tradeName", count(DISTINCT o.id) AS "orders", max(o."createdAt")::date AS "lastOrder"
+FROM "haflaCore"."Products" p
+JOIN "haflaCore"."OrderItems" oi         ON oi."entityId" = p.id
+JOIN "haflaCore"."Orders" o              ON o.id = oi."orderId"
+JOIN "haflaCore"."OrderItemPartners" oip ON oip."orderItemId" = oi.id
+JOIN "haflaCore"."Partners" pt           ON pt.id = oip."partnerId"
+WHERE p.name ILIKE '%'||:term||'%'
+GROUP BY pt."tradeName" ORDER BY "orders" DESC LIMIT 10;
+```
+
+(or the graph `FULFILLED_BY` cross-check below). Only say "no internal supplier / scout the market" if
+**both** the tool and this fallback come back empty.
+
 ## Step 1 — Parse the request (constraints + excluded vendors)
 
 - **product / category / partner-name / order-# / event-#** (routes below).
@@ -161,15 +183,19 @@ capability signals → **(3)** relevant `plannerNotes` (competitor quotes / new 
 - **No reliability score** — proven-order count + recency is the proxy; state the gap.
 - **No forward availability** — historical fulfilment only.
 - **`costAed` is supplier→Hafla cost, never a client price.** **Corpus = WhatsApp only** (not Slack/ZD).
-- **Routes out:** product "101" → `product-brief`; price distribution / cheapest-X / margin →
-  `pricing-lookup`; host → their past orders → `past-orders`.
+- **Routes out:** product "101" → `product-brief`; price distribution / cheapest-X → `pricing-lookup`;
+  **margin / markup → out of scope (wave-2 commercial-intelligence)**, not `pricing-lookup`; host →
+  their past orders → `past-orders`; where/venue evidence for a pax band → `venue-recommendation`.
 
 ## Forward note
 
 `supplier_discovery` is **live** (PR #320). Remaining gaps this skill still fills with raw tools:
 partner-fact, order-# / drill-down, the WhatsApp "invisible" branch (tool `quotedInChat` is v2), and the
 graph proven-vs-stated cross-check. When the tool gains an **exclusion parameter** and the corpus
-branch, thin this skill further. The tool currently rolls up `supplierCapabilityIndex` in-handler; it
-could later read the IDL `intelligence.supplierCapabilitySummary` view (PR #319) — same partner-level
-proven-vs-stated rollup — for consistency. Verify the enterprise install/connector flow on Claude
-Desktop before wide distribution (see the plugin README).
+branch, thin this skill further. **Known tool gap:** `supplier_discovery` under-covers thin-volume /
+service-type products (empty `delivered[]` despite real fulfilment — see the fallback above); the fix
+belongs in the tool, not this skill — until then the raw fallback is load-bearing. The tool currently
+rolls up `supplierCapabilityIndex` in-handler; it could later read the IDL
+`intelligence.supplierCapabilitySummary` view (PR #319) — same partner-level proven-vs-stated rollup —
+for consistency. Verify the enterprise install/connector flow on Claude Desktop before wide
+distribution (see the plugin README).

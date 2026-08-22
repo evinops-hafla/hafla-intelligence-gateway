@@ -98,19 +98,30 @@ Always separate two different numbers and label them:
 - **Lead with median**, not mean (bundle rows skew the mean).
 - Refuse a bare "average" for a generic until you've shown the notes/corpus grain — a single pooled
   number across bundled line items is misleading.
-- **Cite `Orders.orderNumber` (integer), never UUIDs.**
+- **Citations are path-dependent:** on the **generic/raw path (Step 3)** cite `Orders.orderNumber`
+  (integer) — individual orders exist there. On the **cataloged tool path (Step 2)**, `price_truth`
+  returns only aggregates (p25/median/p75 + `orderCount`) with **no order numbers to cite** — ground the
+  figure with the **order count + source tier**, and offer a raw drill-down for the individual #s.
+  **Never surface UUIDs.**
 
 ## Output (Claude Desktop)
 
 Coverage line (how many observations / order count, window) → the number(s) with **selling vs cost
-labelled** and the tier → cited order numbers → denial list honoured → drill-down offer (all order #s ·
-per-partner · per-month trend · full notes for top N · widen to corpus). For a multi-item brief, offer
-a Claude **artifact** price sheet (one row per item: qty, selling median, cost median, tier, n).
+labelled** and the tier → **grounding**: raw/generic path → cite the `orderNumber`s; tool path → cite
+the `orderCount` + tier (no per-order #s exist — offer a raw drill-down to list them) → denial list
+honoured → drill-down offer (all order #s · per-partner · per-month trend · full notes for top N ·
+widen to corpus). For a multi-item brief, offer a Claude **artifact** price sheet (one row per item:
+qty, selling median, cost median, tier, n).
 
 ## Guardrails / routes out
 
 - Read-only. **Not pricing strategy** ("how should we price X" — out of scope). **Not supplier
-  discovery** — "who can supply / who else" → `supplier-discovery`. Product "101" → `product-brief`.
+  discovery** — "who can supply / who else" → `supplier-discovery`. Product "101" → `product-brief`;
+  where/venue evidence → `venue-recommendation`.
+- **Margin / markup / profit is OUT OF SCOPE (wave-2 commercial-intelligence).** Selling and cost both
+  appear here, so it is a real temptation — do **not** compute or present `selling − cost`, markup %, or
+  margin, even when a caller (or `supplier-discovery`) arrives asking for it. Deflect: "margin is wave-2
+  commercial-intelligence." (Consistent with the README + `venue-recommendation`.)
 - No forward guarantees — historical transacted prices only.
 
 ## Forward note
@@ -119,4 +130,5 @@ Cataloged-SKU pricing is now **tool-backed**: `price_truth` (selling) + `product
 PR #319). The generic `--Name--` path (`productNotes`/`priceNotes` + corpus) has **no tool yet** — it
 stays raw here; a future `generic_price` / corpus-pricing tool (or `price_truth` gaining a
 notes/corpus mode) would let this skill go fully tool-first. Coordinate tier labels with
-`supplier-discovery` (both use ORDER/CART/CATALOG).
+`product-brief` (both read `productPriceBands`' ORDER/CART/CATALOG tiers); `supplier-discovery` uses its
+own `costBasis` wording, not these tiers.

@@ -50,8 +50,11 @@ encyclopedia knowledge is one line at most, skipped by default.**
    ```
 
 3. **Proven suppliers** — `supplier_discovery({ product: "<subject>" })` → `delivered[]` (proven by
-   real orders; costs/recency; `bespokeJobs`/`supersededRecord` flags). This replaces the raw
-   `FULFILLED_BY` graph query — use the tool.
+   real orders; costs/recency; `bespokeJobs`/`supersededRecord` flags). Prefer the tool, but it has a
+   **coverage floor for thin-volume / service-type products** (verified: `calligraphy` → `delivered:[]`
+   despite partner *Tariq* having 16 real orders). **If `delivered` is empty, fall back to the raw
+   `FULFILLED_BY` grain** (`safe_cypher_sandbox`, or the `Products→OrderItems→OrderItemPartners→Partners`
+   SQL) before writing "no proven supplier" — do not treat an empty tool result as ground truth.
 4. **Price band** — `price_truth({ id: <uuid> })` for the **selling** band (p25/median/p75,
    reliable/committable); if the caller wants **cost**, `intelligence.productPriceBands` (representative
    median, ORDER-preferred). Label selling vs cost. (`price_truth` blocks generics → for a `--…--`
@@ -80,7 +83,8 @@ Optional: `related_products({ id })` for "commonly ordered with" (a useful brief
   info on calligraphy) — one line max, only if it helps.
 - Cite `Orders.orderNumber` / `UserEvents.userEventNumber` / partner `tradeName` — **never UUIDs**.
 - Read-only. Deep host order history → `past-orders`; price distribution deep-dive → `pricing-lookup`;
-  "who can supply / who else" → `supplier-discovery`.
+  "who can supply / who else" → `supplier-discovery`; where/venue evidence for a pax band →
+  `venue-recommendation`.
 - State the real data window and confidence; don't imply completeness the sources don't have.
 
 ## Forward note

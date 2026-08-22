@@ -37,30 +37,49 @@ present; **echo the rest but say they aren't filterable** (no structured vibe/bu
 `describe_table({ schema: "haflaCore", table: "UserEventDetails" })` before running the SQL** (both
 `schema` and `table` are required) (guest-count / site-type / address column names must be verified, not assumed).
 
-## Step 1 — Site-type mix + recurring venues (`safe_sql_sandbox`)
+## Step 1 — Site-type mix AND recurring venues — TWO separate queries (`safe_sql_sandbox`)
 
-`UserEventDetails (UED)` carries the venue evidence: `eventSiteTypeId → "EventSiteTypes"` (24
-categories) and `exactAddress`. Aggregate what events in the pax band used:
+`UserEventDetails (UED)` carries two venue signals that live on **near-disjoint rows**:
+`eventSiteTypeId → "EventSiteTypes"` (24 categories) and the free-text `exactAddress`. **Verified on
+prod: in a typical pax band they have ~ZERO overlap** (180–220 pax: 1,673 rows carry a site-type, 189
+carry an address, **0 carry both**). So an INNER JOIN to `EventSiteTypes` discards every
+address-bearing row, and any `count(DISTINCT exactAddress)` inside that joined result is **always 0**.
+**Run these as two independent queries — never one combined block** (`expectedGuestCount` is the pax
+column; confirm via `describe_table`).
+
+**1a — site-type mix** (reliable — ~430K events carry a site-type overall):
 
 ```sql
--- verify column names via describe_table first; :paxLo/:paxHi are the parsed band
-SELECT est."name" AS "siteType",
-       count(*) AS "events",
-       count(DISTINCT ued."exactAddress") FILTER (WHERE ued."exactAddress" IS NOT NULL) AS "distinctVenues"
+-- :paxLo/:paxHi = parsed band
+SELECT est."name" AS "siteType", count(*) AS "events"
 FROM "haflaCore"."UserEventDetails" ued
 JOIN "haflaCore"."EventSiteTypes" est ON est.id = ued."eventSiteTypeId"
--- WHERE ued.<guestCountColumn> BETWEEN :paxLo AND :paxHi     -- confirm the column name
+WHERE ued."expectedGuestCount" BETWEEN :paxLo AND :paxHi
 GROUP BY est."name"
 ORDER BY "events" DESC;
 ```
 
-Then list the specific recurring venues (top `exactAddress` values in the band), each cited by the
-`userEventNumber` / `orderNumber` of an example event so the planner can verify.
+**1b — recurring named venues** (INDEPENDENT — no site-type join, since the two columns don't co-occur):
 
-> **Caveat (verified on prod):** `exactAddress` is populated for only **~4%** of events (most events are
-> at homes — Villa/Apartment — with no named venue), so the recurring-venue list is **sparse and
-> illustrative, not comprehensive**. Lead with the **site-type mix** (reliable, ~430K events) and the
-> **corpus** (Step 2); present named venues as "some past events used…", never "the venues for this band".
+```sql
+SELECT ued."exactAddress", count(*) AS "events",
+       max(ue."userEventNumber") AS "exampleEventNumber"   -- the citation key
+FROM "haflaCore"."UserEventDetails" ued
+JOIN "haflaCore"."UserEvents" ue ON ue.id = ued."userEventId"
+WHERE ued."expectedGuestCount" BETWEEN :paxLo AND :paxHi
+  AND ued."exactAddress" IS NOT NULL
+GROUP BY ued."exactAddress"
+HAVING count(*) >= 2
+ORDER BY "events" DESC
+LIMIT 15;
+```
+
+Cite each recurring venue by its `exampleEventNumber` (`userEventNumber`) so the planner can verify.
+
+> **Caveat (verified on prod):** `exactAddress` is populated for only **~4%** of events (most are homes
+> — Villa/Apartment — with no named venue), so 1b is **sparse and illustrative, not comprehensive**.
+> Lead with the **site-type mix (1a)** (reliable) and the **corpus** (Step 2); present named venues as
+> "some past events used…", never "the venues for this band".
 
 ## Step 2 — Vendors who served those venues (the re-scope's defining feature)
 
@@ -80,6 +99,9 @@ For the recurring venues, surface the vendors/partners who served events there:
   commercial-intelligence, out of scope for this skill" (route to the future wave-2 skill). Do not
   compute margin here.
 - Read-only. Non-filterable constraints (vibe/budget) are echoed, not silently applied.
+- **Routes out:** a specific vendor who can supply X → `supplier-discovery`; what a vendor charges / a
+  product's price → `pricing-lookup`; a host's full event history → `past-orders`; a product "101" →
+  `product-brief`.
 
 ## Forward note
 
