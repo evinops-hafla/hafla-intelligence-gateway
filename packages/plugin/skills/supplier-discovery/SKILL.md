@@ -103,22 +103,24 @@ score — none exists. Costs shown are **supplier→Hafla**, not client prices. 
 present." Echo parsed constraints + exclusions. Never invent a per-partner breakdown the tool didn't
 return; never report order counts for off-network (Branch-F) suppliers.
 
-### Branch-C — partner fact (`safe_sql_sandbox` + `analyze_identity_graph`)
+### Branch-C — partner fact (`supplier_brief` tool-first; raw SQL only for `address`)
 
-The tool returns contacts inline, but for "warehouse location / discount % / full contact" on one
-partner:
+For a single-partner dossier — proven vs stated products, categories, order volume, recency, contacts,
+per-product cost — call **`supplier_brief({ partnerName: "<name>" })`** (or `partnerId`; it returns
+candidates to disambiguate a fuzzy name). It gives `capability` (`provenProducts` / `statedOnlyProducts`
+/ `bespokeJobs` / `totalOrders` / `lastWorkedWith`), `categoriesProven` / `categoriesStated`,
+`topProducts[]` with `costAed`, and `contact` (already dummy-filtered). This is also the fastest answer
+to **"proven vs just listed?"** for one partner — no Cypher needed.
+
+Drop to raw SQL only for a field `supplier_brief` omits — chiefly the warehouse **`address` / `cityId`**:
 
 ```sql
-SELECT id, "tradeName", "legalName", "emailId", "mobile", "address", "cityId",
-       "pocName", "pocDesignation", "onBoardingStatus", "isActive"
+SELECT id, "tradeName", "address", "cityId", "pocName", "onBoardingStatus", "isActive"
 FROM "haflaCore"."Partners"
-WHERE "tradeName" ILIKE '%'||:partner||'%' OR "legalName" ILIKE '%'||:partner||'%'
-LIMIT 5;
+WHERE "tradeName" ILIKE '%'||:partner||'%' OR "legalName" ILIKE '%'||:partner||'%' LIMIT 5;
 ```
 
-`address` is mostly NULL — say **"no verified warehouse address"**, don't guess. Some `emailId`s are
-placeholders (`haflapartner+…@dummy.com`) — treat an `@dummy.` email as "no email on record", not a real
-contact (the `supplier_discovery` tool filters these; this raw query does not). Phone/email instead of
+`address` is mostly NULL — say **"no verified warehouse address"**, don't guess. Phone/email instead of
 a name → `analyze_identity_graph`.
 
 ### Branch-D — order # → who supplied, and drill-downs (`safe_sql_sandbox`)
@@ -153,6 +155,10 @@ The tool defers the WhatsApp corpus (`quotedInChat`, v2), so this branch is the 
 5. Cite chat title + date window; **no fabricated order counts** for invisible suppliers.
 
 ### Graph cross-check — proven vs stated (`safe_cypher_sandbox`, on "proven vs just listed?")
+
+> For **one partner's** proven-vs-stated, `supplier_brief` already returns `provenProducts` /
+> `statedOnlyProducts` — use it. Reserve this Cypher for the **product-level, cross-partner** ranking
+> (who has the most proven items for a product).
 
 ```cypher
 MATCH (oi:ORDER_ITEM)-[:FOR_PRODUCT]->(pr:PRODUCT) WHERE pr.name CONTAINS $term
@@ -189,12 +195,14 @@ capability signals → **(3)** relevant `plannerNotes` (competitor quotes / new 
 
 ## Forward note
 
-`supplier_discovery` is **live** (PR #320). Remaining gaps this skill still fills with raw tools:
-partner-fact, order-# / drill-down, the WhatsApp "invisible" branch (tool `quotedInChat` is v2), and the
-graph proven-vs-stated cross-check. When the tool gains an **exclusion parameter** and the corpus
-branch, thin this skill further. **Known tool gap:** `supplier_discovery` under-covers thin-volume /
-service-type products (empty `delivered[]` despite real fulfilment — see the fallback above); the fix
-belongs in the tool, not this skill — until then the raw fallback is load-bearing. The tool currently
+`supplier_discovery` is **live** (PR #320); **`supplier_brief`** (2026-08-22) now covers the
+single-partner dossier + proven-vs-stated (Branch-C), so those are tool-first too. Remaining gaps this
+skill still fills with raw tools: order-# / drill-down, warehouse `address`, the WhatsApp "invisible"
+branch (tool `quotedInChat` is v2), and product-level cross-partner proven ranking (the Cypher). When
+`supplier_discovery` gains an **exclusion parameter** and the corpus branch, thin this skill further.
+**Known tool gap:** `supplier_discovery` under-covers thin-volume / service-type products (empty
+`delivered[]` despite real fulfilment — see the fallback above); the fix belongs in the tool, not this
+skill — until then the raw fallback is load-bearing. The tool currently
 rolls up `supplierCapabilityIndex` in-handler; it could later read the IDL
 `intelligence.supplierCapabilitySummary` view (PR #319) — same partner-level proven-vs-stated rollup —
 for consistency. Verify the enterprise install/connector flow on Claude Desktop before wide

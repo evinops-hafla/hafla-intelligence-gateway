@@ -105,8 +105,10 @@ so Claude Code is the working surface today.
 
 ## Status
 
-Wave-1 is **built** (all 5 skills), **reviewed + live-tested** against the deployed gateway (18 tools +
-`productPriceBands`/`supplierCapabilitySummary`), and **packaged** as a Claude Code plugin
+Wave-1 is **built** (all 5 skills), **reviewed + live-tested** against the deployed gateway (20+
+read-only tools; the tool surface grows — skills are tool-first where a tool exists, incl.
+`price_anchor` (cost) + `supplier_brief` (partner dossier), and fall back to raw SQL otherwise), and
+**packaged** as a Claude Code plugin
 (`.claude-plugin/plugin.json` + repo-root `marketplace.json`). A fresh-context adversarial review +
 running every embedded SQL/Cypher on prod caught and fixed a series of tool-contract and data-reality
 issues (named-param shapes, `describe_table` needing `schema`, `catalog_search` excluding generics,

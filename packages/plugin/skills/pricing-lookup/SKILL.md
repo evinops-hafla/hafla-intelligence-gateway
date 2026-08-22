@@ -51,19 +51,14 @@ Always separate two different numbers and label them:
    - `CATALOG_PRICE` → list price only (no order history — ~71% of products hit this); label it
      clearly as a list price, not a transacted one.
    - `BLOCKED_GENERIC` → it's a generic; go to Step 3.
-3. **Partner cost** (only if asked "what did we pay"): read `intelligence.productPriceBands` via
-   `safe_sql_sandbox`:
-
-   ```sql
-   SELECT "representativeMedianFils"/100.0 AS "repMedianAed", "representativeTier",
-          "p25Fils"/100.0 AS "p25Aed", "medianFils"/100.0 AS "medianAed", "p75Fils"/100.0 AS "p75Aed",
-          "observationCount", "orderObsCount", "cartObsCount", "catalogObsCount"
-   FROM intelligence."productPriceBands" WHERE "productId" = :uuid;
-   ```
-
-   Lead with **`repMedianAed`** (the `representativeMedianFils` column above; ORDER→CART→CATALOG preferred — real transacted cost beats
-   list) and its `representativeTier`; the pooled min/median/max is range context. Custom line items
-   are already excluded from this view. This is **partner cost**, label it so.
+3. **Partner cost** (only if asked "what did we pay"): **tool-first — `price_anchor({ id: <uuid> })`.**
+   Returns `anchorAed` (tier-aware: ORDER→CART→CATALOG, real transacted cost beats list), a `band`
+   (min/p25/median/p75/max), `tier`+`confidence`, `provenance` (obs / partner counts), and per-partner
+   `observations` — the `productPriceBands` rollup wrapped, plus the partner breakdown. Pass `partnerId`
+   to narrow to one supplier. Lead with `anchorAed` + `tier`. This is **partner cost**, label it so.
+   *(Raw fallback only if you need a column the tool omits, or to cross-check a recent-tool result:
+   `SELECT "representativeMedianFils"/100.0 AS "repMedianAed", "representativeTier", … FROM
+   intelligence."productPriceBands" WHERE "productId" = :uuid;`)*
 
 ## Step 3 — Generic `--Name--` → raw tools (the gold; price_truth blocks these)
 
@@ -126,9 +121,10 @@ qty, selling median, cost median, tier, n).
 
 ## Forward note
 
-Cataloged-SKU pricing is now **tool-backed**: `price_truth` (selling) + `productPriceBands` (cost,
-PR #319). The generic `--Name--` path (`productNotes`/`priceNotes` + corpus) has **no tool yet** — it
-stays raw here; a future `generic_price` / corpus-pricing tool (or `price_truth` gaining a
-notes/corpus mode) would let this skill go fully tool-first. Coordinate tier labels with
-`product-brief` (both read `productPriceBands`' ORDER/CART/CATALOG tiers); `supplier-discovery` uses its
-own `costBasis` wording, not these tiers.
+Cataloged-SKU pricing is **tool-backed both ways**: `price_truth` (selling) + `price_anchor` (cost —
+wraps `productPriceBands`, tier-aware; shipped 2026-08-22). Only the generic `--Name--` path
+(`productNotes`/`priceNotes` + corpus) has **no tool yet** — it stays raw here; a future `generic_price`
+/ corpus-pricing tool would close that. `price_anchor` is recent — prefer it, but the raw
+`productPriceBands` query is the documented fallback if an output looks off. Coordinate tier labels with
+`product-brief` (both surface ORDER/CART/CATALOG tiers); `supplier-discovery` uses its own `costBasis`
+wording, not these tiers.

@@ -56,9 +56,9 @@ encyclopedia knowledge is one line at most, skipped by default.**
    `FULFILLED_BY` grain** (`safe_cypher_sandbox`, or the `Products→OrderItems→OrderItemPartners→Partners`
    SQL) before writing "no proven supplier" — do not treat an empty tool result as ground truth.
 4. **Price band** — `price_truth({ id: <uuid> })` for the **selling** band (p25/median/p75,
-   reliable/committable); if the caller wants **cost**, `intelligence.productPriceBands` (representative
-   median, ORDER-preferred). Label selling vs cost. (`price_truth` blocks generics → for a `--…--`
-   subject, the price lives in source 2/5, say so.)
+   reliable/committable); if the caller wants **cost**, `price_anchor({ id: <uuid> })` (tier-aware
+   partner-cost anchor + band, ORDER-preferred). Label selling vs cost. (`price_truth` blocks generics →
+   for a `--…--` subject, the price lives in source 2/5, say so.)
 5. **WhatsApp negotiated detail + setup gotchas** (only on run choice [2]) —
    `search_internal_knowledge({ query: "<subject> setup pricing supplier" })`. Corpus = **WhatsApp only**; disclose
    the date; cite chat title. Pull recurring setup challenges + partner mentions.
@@ -90,7 +90,7 @@ Optional: `related_products({ id })` for "commonly ordered with" (a useful brief
 ## Forward note
 
 Now largely **tool-first**: sources 1/3/4/optional are `product_lookup`/`catalog_search`,
-`supplier_discovery`, `price_truth`/`productPriceBands`, `related_products`. Only source 2
-(`productNotes`/`priceNotes`) stays raw (no tool yet). A future generic/notes tool would make this
-fully tool-first. Verify the enterprise install/connector flow on Claude Desktop before wide
-distribution (see the plugin README).
+`supplier_discovery` (+ `supplier_brief` for a single-partner deep dive), `price_truth`/`price_anchor`,
+`related_products`. Only source 2 (`productNotes`/`priceNotes`) stays raw (no tool yet). A future
+generic/notes tool would make this fully tool-first. Verify the enterprise install/connector flow on
+Claude Desktop before wide distribution (see the plugin README).
