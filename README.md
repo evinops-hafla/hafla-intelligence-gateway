@@ -120,7 +120,11 @@ npm pack --dry-run                                                   # confirm t
 npm version <patch|minor|major> --no-git-tag-version
 
 # 2. CHANGELOG.md: rename [Unreleased] → [<version>] — <YYYY-MM-DD>; add a fresh empty [Unreleased].
-# 3. Update the version-pinned install refs in BOTH READMEs (this file + the package README).
+# 3. Update EVERY version-pinned bridge ref (grep first: `git grep -n "intelligence-mcp-bridge@"`):
+#      - this README's Packages table ("<version> — live on npm")
+#      - the package README's install commands (`npm install -g …@<version>`)
+#      - packages/plugin/.claude-plugin/plugin.json (mcpServers.args — the plugin RUNS the bridge via
+#        `npx …@<version>`, so a stale pin ships a stale bridge to every plugin user)
 # 4. Sync the workspace lockfile from the repo root:
 cd ../.. && npm install --package-lock-only
 
@@ -128,6 +132,7 @@ cd ../.. && npm install --package-lock-only
 git add packages/intelligence-mcp-bridge/package.json \
         packages/intelligence-mcp-bridge/CHANGELOG.md \
         README.md packages/intelligence-mcp-bridge/README.md \
+        packages/plugin/.claude-plugin/plugin.json \
         package-lock.json
 git commit -m "chore(bridge): release <version> — <one-line summary>"
 git push                                                             # bot re-reviews the release commit
