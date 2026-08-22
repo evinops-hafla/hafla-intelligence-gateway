@@ -21,8 +21,8 @@ Talk about "the MCP Gateway server" when you mean the Cloud Run service; "the In
 
 | Package                                                                  | Type                                      | Status                  |
 | ------------------------------------------------------------------------ | ----------------------------------------- | ----------------------- |
-| [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge`    | 1.0.6 — symlink-class regression fix + Antigravity CLI / 2.0 onboarding |
-| `packages/plugin/`                                                       | Claude Code plugin / Gemini CLI extension | Planned                 |
+| [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge`    | 1.0.7 — live on npm     |
+| [`packages/plugin/`](packages/plugin/)                                   | Claude Code plugin — wave-1 Agent Skills  | 5 skills built ([#12](https://github.com/evinops-hafla/hafla-intelligence-gateway/pull/12)) |
 
 ### `@hafla/intelligence-mcp-bridge`
 
@@ -55,15 +55,21 @@ node -v      # should print v24.15.x
 
 ```text
 intelligence-gateway/
+├── .claude-plugin/
+│   └── marketplace.json            # this repo is its own Claude Code marketplace
 ├── packages/
-│   └── intelligence-mcp-bridge/    # @hafla/intelligence-mcp-bridge on npm
-│       ├── src/index.js            # stdio↔HTTPS forwarder + token mint/cache
-│       ├── src/version-check.js    # Node 24 LTS runtime guard
-│       ├── tests/index.test.js     # node:test unit tests
-│       ├── package.json
-│       ├── README.md               # operator-facing install guide
-│       ├── CHANGELOG.md
-│       └── LICENSE                 # MIT (root LICENSE; the package symlinks via npm `files`)
+│   ├── intelligence-mcp-bridge/    # @hafla/intelligence-mcp-bridge on npm
+│   │   ├── src/index.js            # stdio↔HTTPS forwarder + token mint/cache
+│   │   ├── src/version-check.js    # Node 24 LTS runtime guard
+│   │   ├── tests/index.test.js     # node:test unit tests
+│   │   ├── package.json
+│   │   ├── README.md               # operator-facing install guide
+│   │   ├── CHANGELOG.md
+│   │   └── LICENSE                 # MIT (root LICENSE; the package symlinks via npm `files`)
+│   └── plugin/                     # Claude Code plugin — wave-1 Agent Skills
+│       ├── .claude-plugin/plugin.json   # plugin manifest (name: evwa-intelligence)
+│       ├── skills/                 # 5 SKILL.md folders (auto-discovered)
+│       └── README.md               # plugin + skills conventions
 ├── package.json                    # npm workspaces root
 ├── .nvmrc                          # 24.15.0
 ├── .npmrc                          # engine-strict=true

@@ -64,40 +64,58 @@ Each skill is a portable `SKILL.md` (YAML frontmatter `name` + `description`, th
   history → `past-orders`, venue evidence → `venue-recommendation`; pricing _strategy_ and _margin_ are
   out of scope (wave-2 commercial intelligence).
 
+## Install
+
+**Claude Code (works today):**
+
+```bash
+/plugin marketplace add evinops-hafla/hafla-intelligence-gateway
+/plugin install evwa-intelligence@hafla-intelligence-gateway
+```
+
+Installing wires the 5 skills **and** the gateway connector (`hafla-evwa-idl-gateway`, via
+`npx @hafla/intelligence-mcp-bridge`) together. Prerequisite: `gcloud` installed + `gcloud auth login`
+with your `@hafla.com` account — the bridge mints a Google ID token and cannot bundle auth (see the
+bridge README for full onboarding).
+
+**Claude Desktop / claude.ai (Chat / Cowork):** per-user — upload each skill folder as a **zip**
+(Customize → Skills → Add; code-execution enabled) and connect the gateway. **Not live yet:** the
+claude.ai remote-connector surface needs the gateway to speak OAuth 2.1 (OAuth "Stage 2", not built),
+so Claude Code is the working surface today.
+
 ## Prerequisites (to run a skill)
 
-1. The EvWA Intelligence gateway added as a **connector** in Claude Desktop (the read-only MCP server at
-   `mcp.hafla.com`), so the tools (`safe_sql_sandbox`, `safe_cypher_sandbox`,
-   `search_internal_knowledge`, `analyze_identity_graph`, `get_ticket_360`, plus the R1–R5 tools) are
-   available in Chat / Cowork.
-2. The skill installed on the surface (Claude Desktop via Customize/Capabilities, or Claude Code).
+1. The EvWA Intelligence gateway available as MCP tools — wired automatically by the Claude Code plugin
+   above, or added as a **connector** on Claude Desktop — so `safe_sql_sandbox`, `safe_cypher_sandbox`,
+   `search_internal_knowledge`, `analyze_identity_graph`, `get_ticket_360`, plus the R1–R5 tools are
+   available.
+2. The skill installed on the surface (Claude Code plugin, or Claude Desktop skill zip).
 
-## Open items (verify before wide distribution)
+## Distribution (researched 2026-08-23 vs current Anthropic docs)
 
-- **Enterprise Agent-Skill distribution on Claude Desktop** — confirm the admin flow for pushing a skill
-  folder to the org (flagged in the delivery-model correction).
-- **Connector availability** — confirm which org connector exposes the gateway tools in Chat / Cowork
-  (the old "Ask Hafla" pin is obsolete).
-- **Tool migration — DONE.** PR #314/#316/#317/#319/#320 deployed 2026-08-14. All 5 skills are
-  tool-first where a tool exists: `supplier-discovery` → `supplier_discovery`; `pricing-lookup` →
-  `price_truth` (selling) + `productPriceBands` (cost); `product-brief` → `product_lookup` /
-  `supplier_discovery` / `price_truth` / `related_products`; `past-orders` → `analyze_identity_graph` /
-  `get_ticket_360` / `get_lead_context` / `customer_360`. Remaining raw-SQL grains (generic `--Name--`
-  price, per-host order enumeration, venue evidence) have no tool yet — noted in each SKILL.md's
-  forward note as future tool candidates.
+- **Claude Code** — installable now via the plugin/marketplace above; connector auth = bridge + Google
+  token (stdio).
+- **claude.ai Chat / Cowork** — the remote connector calls from Anthropic's cloud and needs the gateway
+  as an OAuth 2.1 resource server → **OAuth Stage 2 (deferred).** Blocked until then.
+- **No org-wide custom-Skill distribution exists on any plan** (incl. Enterprise) — skills are per-user
+  zip upload; only the remote **connector** is org-deployable by an owner.
+- Tool migration **DONE** (PR #314/#316/#317/#319/#320, 2026-08-14): all 5 skills are tool-first where a
+  tool exists; remaining raw-SQL grains (generic `--Name--` price, per-host order enumeration, venue
+  evidence) have no tool yet — noted in each SKILL.md's forward note.
 
 ## Status
 
-Wave-1 is **built** (all 5 skills) and **reviewed + live-tested** against the deployed gateway
-(18 tools + `productPriceBands`/`supplierCapabilitySummary`, 2026-08-14). A fresh-context adversarial
-review + running every embedded SQL/Cypher on prod caught and fixed a series of tool-contract and
-data-reality issues (named-param shapes, `describe_table` needing `schema`, `catalog_search` excluding
-generics, `supplier_discovery.costAed` being an object, `delivered[]` including stated-only rows, a
-join fan-out, ~4%-`exactAddress` / ~17.6%-site-type coverage). Every tool call and SQL query is now
-verified against the live contracts/schema.
+Wave-1 is **built** (all 5 skills), **reviewed + live-tested** against the deployed gateway (18 tools +
+`productPriceBands`/`supplierCapabilitySummary`), and **packaged** as a Claude Code plugin
+(`.claude-plugin/plugin.json` + repo-root `marketplace.json`). A fresh-context adversarial review +
+running every embedded SQL/Cypher on prod caught and fixed a series of tool-contract and data-reality
+issues (named-param shapes, `describe_table` needing `schema`, `catalog_search` excluding generics,
+`supplier_discovery.costAed` being an object, `delivered[]` including stated-only rows, a join fan-out,
+~4%-`exactAddress` / ~17.6%-site-type coverage). Every tool call and SQL query is verified against the
+live contracts/schema.
 
-**Not yet installed/run on an enterprise Claude Desktop** — that end-to-end validation
-(skill → connector → gateway) plus the Agent-Skill distribution flow are the remaining open items above.
-No `plugin.json` yet (deferred until enterprise install mechanics are confirmed). **Maturity:** the
-underlying R1/pricing/supplier tools are recent first-cuts (some flagged pre-alpha) — richer
-IDL-processed versions are planned, so treat tool outputs as improving, not final.
+**Remaining:** a hands-on `/plugin install` + one-query run on a gcloud-authed machine, then merge
+([#12](https://github.com/evinops-hafla/hafla-intelligence-gateway/pull/12)); the claude.ai/Desktop
+surface awaits OAuth Stage 2. **Maturity:** the underlying R1/pricing/supplier tools are recent
+first-cuts (some flagged pre-alpha) — richer IDL-processed versions are planned, so treat tool outputs
+as improving, not final.
