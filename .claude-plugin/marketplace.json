@@ -1,0 +1,16 @@
+{
+  "name": "hafla-intelligence-gateway",
+  "owner": { "name": "Hafla Intelligence", "email": "sidd@hafla.com" },
+  "metadata": {
+    "description": "Marketplace for the Hafla Intelligence Gateway — Agent Skills over the read-only EvWA gateway (mcp.hafla.com).",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "evwa-intelligence",
+      "source": "./packages/plugin",
+      "description": "Wave-1 Agent Skills (supplier-discovery, pricing-lookup, product-brief, past-orders, venue-recommendation) + the EvWA gateway MCP connector via the intelligence-mcp-bridge.",
+      "version": "0.1.0"
+    }
+  ]
+}
