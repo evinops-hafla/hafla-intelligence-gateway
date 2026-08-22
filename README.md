@@ -106,37 +106,42 @@ The first line of stderr is a `Pre-flight OK` log; the response on stdout is a J
 
 The bridge publishes via npm with provenance (OIDC trusted publisher). See [packages/intelligence-mcp-bridge/CHANGELOG.md](packages/intelligence-mcp-bridge/CHANGELOG.md) for version history.
 
-**Workflow:** review-first, release-from-main. Open a PR with the substantive change (do NOT bump `version` or finalize a versioned CHANGELOG entry on the chore branch); let `ci.yml` + `gemini-code-assist[bot]` review fire; address findings; merge; then run the release sequence below ON `main`. The internal Hafla `09-bridge-package-release-workflow-e375.md` spec has the full gated sequence; the short form for maintainers is:
+**Workflow: review-first, release-from-PR.** The version bump is reviewed *before* the irreversible `npm publish`, so the release commit rides the PR branch — it is **never** pushed straight to `main`. (This is what actually ships: every tag `v1.0.4`–`v1.0.7` sits on a PR **merge commit**, with the `chore(bridge): release` bump already inside the branch.) The internal Hafla `09-bridge-package-release-workflow-e375.md` spec is canonical and has the full gated sequence; the short form for maintainers:
 
 ```bash
-# After merging to main and pulling locally:
-nvm use                                                              # picks up .nvmrc → 24.15.0
+# On the PR branch, AFTER the substantive change is green and review threads are
+# resolved (ci.yml + gemini-code-assist[bot] have fired). Node 24.15.0 via .nvmrc.
+nvm use
 cd packages/intelligence-mcp-bridge
 npm test                                                             # all tests must pass
-npm pack --dry-run                                                   # confirm tarball contents
+npm pack --dry-run                                                   # confirm the files allowlist
 
-# 1. Bump version WITHOUT npm's auto-commit + auto-tag (we orchestrate the atomic commit ourselves):
+# 1. Bump version WITHOUT npm's auto-commit + auto-tag (we orchestrate the commit):
 npm version <patch|minor|major> --no-git-tag-version
 
-# 2. Edit CHANGELOG.md: rename [Unreleased] → [<version>] — <YYYY-MM-DD>; add a fresh empty [Unreleased] above.
+# 2. CHANGELOG.md: rename [Unreleased] → [<version>] — <YYYY-MM-DD>; add a fresh empty [Unreleased].
+# 3. Update the version-pinned install refs in BOTH READMEs (this file + the package README).
+# 4. Sync the workspace lockfile from the repo root:
+cd ../.. && npm install --package-lock-only
 
-# 3. Sync the root workspace lockfile from intelligence-gateway/ root:
-cd ../..
-npm install --package-lock-only
-
-# 4. Atomic release commit (one commit containing version + CHANGELOG + lockfile sync):
+# 5. ONE atomic release commit, APPENDED TO THE PR BRANCH (the bots re-review it):
 git add packages/intelligence-mcp-bridge/package.json \
         packages/intelligence-mcp-bridge/CHANGELOG.md \
+        README.md packages/intelligence-mcp-bridge/README.md \
         package-lock.json
 git commit -m "chore(bridge): release <version> — <one-line summary>"
+git push                                                             # bot re-reviews the release commit
 
-# 5. Annotated tag (MUST use -a; plain `git tag` creates a lightweight tag
-#    that `git push --follow-tags` silently skips):
+# 6. Merge the PR to main (--merge, keeps the 2-parent merge commit; never squash/rebase). Then:
+git checkout main && git pull
+
+# 7. Annotated tag ON THE MERGE COMMIT (MUST use -a; a lightweight tag is silently skipped by tooling).
+#    Tag-staleness check: if anything landed on main since the merge, delete + recreate on HEAD first.
 git tag -a v<version> -m "v<version>"
+git push origin v<version>                                           # explicit — NOT --follow-tags
 
-# 6. Push branch + tag together → triggers release.yml → npm publish:
-git push --follow-tags
-gh run watch                                                         # confirm CI publish green
+# 8. The tag push triggers release.yml → npm publish --provenance. Confirm:
+gh run watch                                                         # CI publish green
 npm view @hafla/intelligence-mcp-bridge@<version> version            # confirm on npm
 ```
 
