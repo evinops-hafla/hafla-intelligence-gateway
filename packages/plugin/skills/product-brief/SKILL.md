@@ -82,6 +82,10 @@ Optional: `related_products({ id })` for "commonly ordered with" (a useful brief
 - **Hafla-context-first.** Do not pad with generic encyclopedia knowledge (a planner rejected general
   info on calligraphy) — one line max, only if it helps.
 - Cite `Orders.orderNumber` / `UserEvents.userEventNumber` / partner `tradeName` — **never UUIDs**.
+- **Margin / markup / profit is OUT OF SCOPE (wave-2 commercial-intelligence).** The brief puts selling
+  (`price_truth`) and cost (`price_anchor`) on one page, so it's a real temptation — do **not** compute
+  or present `selling − cost`, markup %, or margin. Deflect: "margin is wave-2 commercial-intelligence."
+  (Matches `pricing-lookup` / `supplier-discovery` / `venue-recommendation`.)
 - Read-only. Deep host order history → `past-orders`; price distribution deep-dive → `pricing-lookup`;
   "who can supply / who else" → `supplier-discovery`; where/venue evidence for a pax band →
   `venue-recommendation`.
