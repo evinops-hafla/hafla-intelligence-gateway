@@ -110,7 +110,10 @@ per-product cost — call **`supplier_brief({ partnerName: "<name>" })`** (or `p
 candidates to disambiguate a fuzzy name). It gives `capability` (`provenProducts` / `statedOnlyProducts`
 / `bespokeJobs` / `totalOrders` / `lastWorkedWith`), `categoriesProven` / `categoriesStated`,
 `topProducts[]` with `costAed`, and `contact` (already dummy-filtered). This is also the fastest answer
-to **"proven vs just listed?"** for one partner — no Cypher needed.
+to **"proven vs just listed?"** for one partner — no Cypher needed. **`topProducts[].costAed` is a
+blended-tier average** (ORDER+CART+CATALOG pooled) — **indicative, not order-only**; present it as an
+approximate cost signal, not a firm per-order price (the `supplier_discovery` tool's `costAed`, by
+contrast, is order-based with a `costBasis` count). For a firm per-product cost, use `price_anchor`.
 
 Drop to raw SQL only for a field `supplier_brief` omits — chiefly the warehouse **`address` / `cityId`**:
 
