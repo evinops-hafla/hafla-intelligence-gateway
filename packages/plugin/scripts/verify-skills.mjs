@@ -130,7 +130,9 @@ const conventionBlocks = new Map(); // skill -> extracted output-conventions blo
 for (const skill of skillDirs) {
   const file = join(SKILLS_DIR, skill, 'SKILL.md');
   if (!existsSync(file)) { err(skill, 'no SKILL.md'); continue; }
-  const text = readFileSync(file, 'utf8');
+  // Normalize CRLF→LF: the \n-anchored frontmatter/SQL regexes below must not depend on the
+  // checkout's line endings (Windows CI checks out CRLF by default). Belt to .gitattributes' braces.
+  const text = readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
 
   // 1. frontmatter
   const fm = parseFrontmatter(text);

@@ -1,0 +1,10 @@
+# Force LF for tooling + skill sources on every platform. Windows CI checks out
+# CRLF by default, which broke verify-skills.mjs's \n-anchored frontmatter/SQL
+# regexes (0 blocks found, "malformed frontmatter"). Shell scripts also MUST be LF
+# to run. Files are already stored LF, so this only affects checkout, not history.
+*.mjs  text eol=lf
+*.js   text eol=lf
+*.sh   text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf

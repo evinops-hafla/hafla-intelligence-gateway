@@ -38,7 +38,7 @@ const OUT_OF_SCOPE = 'out-of-scope';
 
 // --- load the 6 skill descriptions (the ONLY signal the host uses to route) ------------------------
 function loadDescription(skillDir) {
-  const text = readFileSync(join(SKILLS_DIR, skillDir, 'SKILL.md'), 'utf8');
+  const text = readFileSync(join(SKILLS_DIR, skillDir, 'SKILL.md'), 'utf8').replace(/\r\n/g, '\n');
   const fm = text.match(/^---\n([\s\S]*?)\n---/);
   if (!fm) return null;
   const body = fm[1];
