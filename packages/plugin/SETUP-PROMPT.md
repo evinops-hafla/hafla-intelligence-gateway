@@ -1,11 +1,12 @@
+<!-- markdownlint-disable MD013 -->
+
 # EvWA MCP — setup & verification (Claude Code)
 
 Paste the prompt below into Claude Code. It sets up and verifies your access to Hafla's EvWA
 Intelligence MCP (`mcp.hafla.com`) on this machine, lists the live tools, and refreshes any stale local
 notes. It confirms before changing any config file.
 
----
-
+```text
 You're setting up and verifying my access to Hafla's EvWA Intelligence MCP (the
 mcp.hafla.com gateway) on THIS machine, and refreshing any stale notes about it.
 Work through the steps below in order, verify each one, and only change a config
@@ -47,15 +48,14 @@ at the end.
 
 Report back: what was already correct, what you fixed, what still needs my action,
 and the final working tool count.
-
----
+```
 
 ## Optional — also install the EvWA skills (plugin)
 
 To install the EvWA skills (supplier-discovery, pricing-lookup, product-brief, past-orders,
 venue-recommendation, event-needs), run these two commands in Claude Code:
 
-```
+```text
 /plugin marketplace add evinops-hafla/hafla-intelligence-gateway
 /plugin install evwa-intelligence@hafla-intelligence-gateway
 ```
