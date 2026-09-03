@@ -4,7 +4,8 @@ description: >-
   Who SUPPLIES a product, service, or category — rank Hafla suppliers/partners by PROVEN fulfilment
   (real past orders), not a reliability score. NOT "who did/worked company X's event" — that is
   history, route to past-orders. Use when the user asks "who can give / who provides / supplier for /
-  top suppliers for X", pastes a terse multi-constraint sourcing request (product + date + city + qty
+  top suppliers for X", wants one supplier's capability dossier (proven vs just-listed products for a
+  named partner), pastes a terse multi-constraint sourcing request (product + date + city + qty
   + a denied/already-tried vendor list), or wants the "invisible" supply chain (partners talked to in
   WhatsApp but never registered). Read-only. Talks to the EvWA Intelligence gateway (mcp.hafla.com)
   via the connected MCP tools.

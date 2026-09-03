@@ -26,8 +26,13 @@ discipline** around them.
 4. **Routing graph** — every skill must route to ≥1 sibling AND be routed to by ≥1 (no orphans /
    dead-ends). `verify-skills.mjs` enforces this; add reciprocal routes when you add a skill.
 5. **Frontmatter** — `name`: kebab-case, ≤64, no "anthropic"/"claude", must equal the folder name.
-   `description`: ≤1024 (platform max); **≤200 is safest** for the claude.ai upload UI, but Claude Code
-   needs the trigger phrases — keep it tight but complete. `verify-skills.mjs` flags violations.
+   `description`: ≤1024 (platform max); the claude.ai UI shows only ~200 chars, so **front-load the
+   disambiguating trigger (and any NOT-clause) into the first 200** rather than shortening — `verify-skills.mjs`
+   errors if a skill's first 200 chars lack its core trigger phrase (per-skill `TRIGGER_PHRASES`).
+6. **Output-conventions block** — the `OUTPUT-CONVENTIONS` block (table/money-÷100/bands/dates/Sources
+   footer/artifact) must be present and **byte-identical** in every SKILL.md — a Desktop zip ships only
+   its own SKILL.md, so the block has to live inside each. `verify-skills.mjs` errors on drift; when you
+   edit the block, edit it in all 6 (copy one into the others) and re-run until PASS.
 
 ## Adding a new skill
 
@@ -45,7 +50,21 @@ discipline** around them.
 - Claude Code: the plugin/marketplace (see README). Claude Desktop: per-user zip upload +
   the org connector — see [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md) (pending OAuth Stage 2).
 
+## Answer-quality eval (routing)
+
+`verify-skills.mjs` can't tell whether a question routes to the *right* skill — that lives entirely in
+the frontmatter descriptions, and a description bug (or the semantically-wrong/schema-valid class like
+`event_playbook family="Wedding"`) passes every static gate and only fails at answer time. The
+[`eval/`](eval/) directory holds the routing eval — see [`eval/README.md`](eval/README.md). **After any
+description edit**, run the credential-free structural check:
+
+```bash
+node eval/run-routing-eval.mjs --check      # golden-set structure (CI-safe, no key)
+node eval/run-routing-eval.mjs              # the real routing eval (needs ANTHROPIC_API_KEY)
+```
+
 ## CI
 
-`.github/workflows/ci.yml` runs `verify-skills.mjs` on every PR (static gate). Live query execution and
-tool-output verification remain a manual pre-merge step — do them when you touch a tool-backed branch.
+`.github/workflows/ci.yml` runs `verify-skills.mjs` on every PR (static gate). The routing eval and live
+query/tool-output verification stay **out of CI** (they need a credential/token) — they are the manual
+pre-merge step; do them when you touch a description or a tool-backed branch.
