@@ -169,7 +169,7 @@ irm https://antigravity.google/cli/install.ps1 | iex
 agy --version
 ```
 
-Expected: a version string (e.g. `1.0.2`). No `EBADENGINE` warning is possible — `agy` is not a Node package.
+Expected: a version string (e.g. `1.0.3`). No `EBADENGINE` warning is possible — `agy` is not a Node package.
 
 #### Option C — Desktop apps (Cursor, Claude Desktop, Antigravity 2.0) — NOT Node-managed
 
@@ -386,7 +386,7 @@ Or open a new terminal tab. Then verify:
 agy --version
 ```
 
-Expected: a version string (e.g. `1.0.2`). No `EBADENGINE` warning is possible — `agy` is not a Node package.
+Expected: a version string (e.g. `1.0.3`). No `EBADENGINE` warning is possible — `agy` is not a Node package.
 
 #### Option C — Desktop apps (Cursor, Claude Desktop, Antigravity 2.0) — NOT Node-managed
 
