@@ -24,6 +24,11 @@ order counts and supplier-cost per tier, ending in a `Sources:` line. If you get
 your own question. If not, run `scripts/doctor.sh` (Claude Code path) or see the bridge README's
 troubleshooting.
 
+> **Getting a 403 / "token verification failed"?** Your gcloud may have been set up via a non-standard
+> OAuth client (e.g. Gemini Code Assist / Cloud Code / a branded installer), whose token audience the
+> gateway doesn't accept. Fix: re-authenticate with the **vanilla** CLI — `gcloud auth login` — then
+> retry. `scripts/doctor.sh` confirms the exact cause.
+
 ## Pick by what you're asking
 
 | If you're asking… | Skill | Example |
