@@ -34,7 +34,8 @@ Full rationale: `hafla-intelligence/mcp-gateway/specs/history-and-future/history
 
 Design specs live in the sibling repo:
 `hafla-intelligence/mcp-gateway/specs/history-and-future/history/research/intelligence-gateway/skills-wave-1/`
-(`00-shared-context.md` + one `proposal-<skill>.md` each).
+(`00-shared-context.md` + one `proposal-<skill>.md` per **wave-1** skill; `event-needs` is wave-1.5 and
+has no proposal doc).
 
 ## Layout
 

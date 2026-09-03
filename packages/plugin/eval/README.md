@@ -59,18 +59,18 @@ today, anywhere**; only fresh trajectory capture needs the gateway.
 
 ## The golden set
 
-`golden-routing.json` is a **seed** (~25 cases), weighted toward real `#ask-evwa` demand and covering all
+`golden-routing.json` has **67 cases**, extracted from the `#ask-evwa` taxonomy (categories A–I in the
+private `mcp-gateway/.../2026-05-23-evwa-v0-analysis.md`) and weighted toward real demand, covering all
 6 skills. Three cases are tagged `"negative": true` — the hiccups-hunt collisions where a sibling skill
 plausibly grabs the question but must not ("what does a wedding cost" → event-needs, not pricing-lookup;
-"who did the AUS event" → past-orders, not supplier-discovery). Two are `out-of-scope` (margin /
-pricing-strategy). The full target is the ~106 `#ask-evwa` questions (taxonomy in the private
-`mcp-gateway/.../2026-05-23-evwa-v0-analysis.md`); ~60–70 are recoverable by re-extraction — a Batch-2
-first task.
+"who did the AUS event" → past-orders, not supplier-discovery). Four are `out-of-scope` (margin /
+pricing-strategy / ops-meta). This is the recoverable subset of the ~108 top-level `#ask-evwa` questions;
+the rest were too vendor/entity-specific to phrase as clean routing cases.
 
 **Adding cases:** append to `cases[]` with `question` + `expectedSkill` (a folder name or
 `out-of-scope`). Re-run `--check` — it enforces valid targets, no duplicate questions, and ≥1 case per
 skill.
 
-> This eval already earned its keep: routing the seed set flagged that `supplier-discovery`'s description
+> This eval already earned its keep: routing the set flagged that `supplier-discovery`'s description
 > never mentioned its single-partner *dossier* capability, so "dossier on supplier X" was ambiguous
 > against `past-orders`. The description was fixed before the set shipped.
