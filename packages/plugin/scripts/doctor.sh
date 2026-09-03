@@ -57,6 +57,7 @@ else
 fi
 
 # 4. end-to-end: tools/list through the bridge (the real auth+reachability test)
+GATEWAY_URL="${GATEWAY_URL:-https://mcp.hafla.com}"
 if [ "${1:-}" = "--skip-live" ]; then
   warn "skipping the live gateway check (--skip-live)"
 else
@@ -65,9 +66,34 @@ else
   if printf '%s' "$RESP" | grep -q '"tools"'; then
     pass "gateway reachable — tools/list returned a tool list"
   elif printf '%s' "$RESP" | grep -qE 'Gateway returned 403|\b403\b'; then
-    # A JSON-RPC response came back (bridge + token OK), but the gateway forbade this identity.
-    fail "gateway returned 403 (token minted + reached, but this identity is not authorized)" \
-      "confirm your @hafla.com account is in the team@hafla.com Workspace group with isEmployeeActive=true (see the bridge README) — the plugin uses this same bridge path"
+    # The bridge masks the gateway's error body (just "Gateway returned 403"). The gateway distinguishes
+    # several 403s with different fixes, so curl it directly with the SAME human token (plain gcloud
+    # identity token — the bridge's human path also omits --audiences) to read the precise `detail`.
+    DETAIL=""
+    if command -v curl >/dev/null 2>&1; then
+      TOK=$(gcloud auth print-identity-token 2>/dev/null || true)
+      [ -n "$TOK" ] && DETAIL=$(curl -s -X POST "$GATEWAY_URL/mcp" \
+        -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" \
+        -H "Accept: application/json, text/event-stream" \
+        -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' 2>/dev/null | head -c 400 || true)
+    fi
+    case "$DETAIL" in
+      *"token verification failed"*|*"Invalid token"*)
+        # aud/iss mismatch — request REACHED the app (so IAM/group + isEmployeeActive are NOT the issue).
+        # The usual cause: your gcloud credential was minted by a NON-standard OAuth client (e.g. Gemini
+        # Code Assist / Cloud Code / a branded installer), so the token's `aud` isn't one the gateway accepts.
+        fail "gateway 403 — token verification failed (audience mismatch, not a group/employee issue)" \
+          "your gcloud identity token's aud isn't accepted. Re-auth with STANDARD gcloud: 'gcloud auth login' (vanilla CLI → the universal client the gateway accepts). If that doesn't fix it, your OAuth client ID must be added to the gateway's accepted audiences — ask ops (see gateway auth GCLOUD_OAUTH_CLIENT_ID)." ;;
+      *"employee_inactive"*)
+        fail "gateway 403 — account not flagged as an active employee" \
+          "ask ops to set haflaCore.OpsUsers.isEmployeeActive=true for your @hafla.com account" ;;
+      *"wrong_workspace_domain"*)
+        fail "gateway 403 — Google account domain not allowlisted" \
+          "sign in with your @hafla.com Google account (hd claim must be in the gateway's WORKSPACE_DOMAINS)" ;;
+      *)
+        fail "gateway returned 403 (couldn't read the precise reason)" \
+          "run this to see it: gcloud auth print-identity-token | (read T; curl -s -X POST $GATEWAY_URL/mcp -H \"Authorization: Bearer \$T\" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}'); then see the bridge README" ;;
+    esac
   elif [ -n "$RESP" ]; then
     fail "gateway returned an error, not a tool list: $(printf '%s' "$RESP" | head -c 200)" \
       "re-run; if it persists see the bridge README troubleshooting"
