@@ -86,6 +86,17 @@ Always separate two different numbers and label them:
 3. **CATALOG/`ProductPartner` price is a trap for generics** ("fooling the system") — do not present it
    as the negotiated price.
 
+## Optional — total delivered cost (`delivery_fee`)
+
+If the caller wants the **all-in delivered price** (not just the unit/product price), add delivery on top
+of the product subtotal:
+`delivery_fee({ items: [{ category, quantity, name, isService? }], deliveryLocation, venueType?, deliveryTimeHour? })`
+→ `feeAed` (+ `vatAed`, `feeInclVatAed`), a `zone`, `trucks`, and a `breakdown`. It covers **delivery AND
+collection**; mark **people/services** (artist, DJ, chef, photographer…) `isService: true` → they carry no
+fee, and a booking of **only services/venues has no delivery fee at all**. Deterministic published-rate
+lookup — always returns a number. **Label it "delivery"**, separate from product price / partner cost.
+(This is a total-cost add-on, not core pricing — only when asked for delivered/all-in cost.)
+
 ## Confidence & honesty rules
 
 - Structured tiers: **ORDER 0.90 · CART 0.85** are trustworthy; **CATALOG 0.70 is OFF by default**
