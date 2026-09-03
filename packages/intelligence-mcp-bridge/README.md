@@ -29,7 +29,7 @@ Add this to your MCP client config (Gemini CLI / Claude Code / Cursor / Antigrav
 }
 ```
 
-`"trust": true` suppresses the per-tool-call confirmation prompt that Gemini CLI / Antigravity CLI raise on every invocation (5 tools × many calls per session — unusable without it). Claude Code / Claude Desktop / Cursor ignore the unknown field; no harm to add.
+`"trust": true` suppresses the per-tool-call confirmation prompt that Gemini CLI / Antigravity CLI raise on every invocation (23 tools × many calls per session — unusable without it). Claude Code / Claude Desktop / Cursor ignore the unknown field; no harm to add.
 
 Restart your MCP client. Done.
 
@@ -345,17 +345,69 @@ A row count comes back, you're done. The first request takes ~1–2 s longer whi
 
 ## What tools you get
 
-Five read-only tools, all backed by Hafla's data lakes + identity layer (live at `mcp.hafla.com`):
+**23 read-only tools**, all backed by Hafla's data lakes + identity layer (live at `mcp.hafla.com`).
+They fall into seven groups. (Your MCP client sees the authoritative list — and each tool's full
+schema — from `tools/list` at connect; this table is the human overview.)
 
-| Tool                        | What it does                                                     |
-| --------------------------- | ---------------------------------------------------------------- |
-| `safe_sql_sandbox`          | Parameterised read-only AlloyDB SQL across all lakes             |
-| `safe_cypher_sandbox`       | Parameterised read-only Neo4j Cypher over the identity graph     |
-| `analyze_identity_graph`    | Cross-lake identity resolution — one unified profile per person  |
-| `get_ticket_360`            | Full Zendesk ticket with linked WhatsApp chats and Slack threads |
-| `search_internal_knowledge` | Semantic search over the WhatsApp / Slack conversation corpus    |
+### Raw query sandboxes
 
-All five are read-only at the database layer — the bridge cannot write.
+| Tool                    | What it does                                                                                          |
+| ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| `safe_sql_sandbox`      | Read-only SQL across the AlloyDB lakes (`zendesk`, `whatsappPeriskope`, `slack`, `intelligence`, `haflaCore`); 60 s timeout, 500-row cap. `haflaCore` here is a ~4 h-synced mirror |
+| `safe_sql_sandbox_core` | Read-only SQL against the **live** Hafla Core RDS primary — current-second freshness                   |
+| `safe_cypher_sandbox`   | Read-only Cypher over the 838K-node Neo4j identity/event graph (hosts, events, orders, products, partners, tickets…); 60 s timeout, 500-record cap |
+| `describe_table`        | Column names / types / nullability for a lake or core table — run before writing SQL                  |
+
+### Identity & customer
+
+| Tool                     | What it does                                                                                          |
+| ------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `analyze_identity_graph` | 1-degree identity subgraph around a phone/email across WhatsApp, Zendesk, and Hafla Core              |
+| `customer_360`           | Lifetime transactional profile for one host — spend, cadence, budget tier, segment, taste categories  |
+| `get_org_events`         | Event history for a corporate buyer, keyed by email `orgDomain` (domain = org identity)               |
+
+### Support & conversations
+
+| Tool                        | What it does                                                                                    |
+| --------------------------- | ----------------------------------------------------------------------------------------------- |
+| `get_ticket_360`            | Full Zendesk ticket — comment thread + linked Hafla Core UserEvents                              |
+| `search_internal_knowledge` | Semantic search over the WhatsApp conversation corpus (Vertex AI)                                |
+
+### Catalog & pricing
+
+| Tool               | What it does                                                                                          |
+| ------------------ | ----------------------------------------------------------------------------------------------------- |
+| `catalog_search`   | Keyword search of the published product catalog, with narrowing facets                                 |
+| `product_lookup`   | Resolve one product to a compact card (price, image, status) by id / slug / productNumber              |
+| `related_products` | What to offer alongside a product — curated upsell + real market-basket co-occurrence                  |
+| `price_truth`      | Real transacted **sell** price (p25 / median / p75) for a product; catalog list-price fallback         |
+| `price_anchor`     | Partner **cost** anchor for a product (negotiation) — what Hafla pays suppliers, not a client price     |
+| `delivery_fee`     | Deterministic delivery + collection fee (AED) for a set of items to a UAE location                     |
+
+### Events & demand
+
+| Tool                 | What it does                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------- |
+| `event_need_profile` | Category attach-rate for an event family — what real orders actually included                         |
+| `event_playbook`     | Authored "ideal" bill-of-needs for an event type / family (reference content)                         |
+| `seasonal_demand`    | Monthly booking or demand curve for UAE events, with an index vs the yearly mean                      |
+
+### Suppliers
+
+| Tool                 | What it does                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------- |
+| `supplier_brief`     | Capability dossier for one supplier — proven vs stated products, order volume, per-product cost       |
+| `supplier_discovery` | Find partners who have delivered a product/category (costs, contacts) + internal planner notes        |
+
+### Leads & pipeline
+
+| Tool                   | What it does                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------- |
+| `get_lead_context`     | Fetch one bot-triage lead (HEBA↔Oscar handoff) by lead / Zendesk ticket / host / event number      |
+| `lead_pipeline_health` | Fleet-wide stuck-lead / pipeline-health check against live Hafla Core                               |
+| `get_data_freshness`   | Last completed run + sync watermark per pipeline — the canonical "as-of" source                    |
+
+All 23 are read-only at the database layer — the bridge cannot write.
 
 ---
 
