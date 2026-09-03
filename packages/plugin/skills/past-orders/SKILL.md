@@ -21,9 +21,10 @@ WhatsApp / Zendesk / Hafla-Core footprints resolve to one canonical identity bef
 
 Open every response with: "History window: orders **2021 → present** (dense from 2023; ~1,120 rows
 pre-2023). I cite `orderNumber` / `userEventNumber` / ticket #, never UUIDs." This pre-empts the #1
-failure mode (coverage push-back).
+failure mode (coverage push-back). For the exact as-of, `get_data_freshness` → `haflaCoreMirror.lastSyncAt`
+(the ~4h order mirror these reads run against).
 
-## Step 1 — Identify the input (7 shapes) and resolve it
+## Step 1 — Identify the input (8 shapes) and resolve it
 
 | Input                    | Resolve with                                                                                                                                                                                                |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -32,7 +33,8 @@ failure mode (coverage push-back).
 | **event # / host #**     | `get_lead_context({ userEventNumber })` / `get_lead_context({ hostNumber })`.                                                                                                                               |
 | **order #**              | `safe_sql_sandbox` (Branch-Order below).                                                                                                                                                                    |
 | **partner name**         | `safe_sql_sandbox` (Branch-Partner) — their fulfilled orders.                                                                                                                                               |
-| **client / host NAME**   | mandatory fallback chain: `Users.name` → `UserEvents.eventTitle` → ZD subject → corpus (corporate buyers live in event titles / ticket subjects, not `Users.name`).                                         |
+| **company / org (email domain)** | `get_org_events({ orgDomain: "<domain>" })` — a company's full event history keyed on **email domain** (haflaCore has no org table; the domain IS the org identity). Rejects consumer/placeholder/`hafla.com` domains; unknown-but-valid → empty list, not an error. Returns events (title, date, contact, guests, `valueAed` — a **pre-sale estimate**, not a realized order total; check `valueBasis`). **The clean path for a corporate buyer** (e.g. "AUS" → `aus.edu`) — far better than name-matching. |
+| **client / host NAME**   | mandatory fallback chain: `Users.name` → `UserEvents.eventTitle` → ZD subject → corpus (corporate buyers live in event titles / ticket subjects, not `Users.name`). **If it's a company with a known email domain, use `get_org_events` (row above) instead of name-matching.** |
 | **product / topic only** | this is a discovery question, not a history one — route to `supplier-discovery` (who supplies) or `pricing-lookup` (what it cost).                                                                          |
 
 ## Step 2 — Lead with `customer_360` for a host, then enumerate

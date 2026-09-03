@@ -57,6 +57,9 @@ Each skill is a portable `SKILL.md` (YAML frontmatter `name` + `description`, th
   ticket #, partner `tradeName`. **Never surface product/partner UUIDs.**
 - **Source-honesty** — semantic conversation search (`search_internal_knowledge`) is **WhatsApp only**;
   never claim to semantically search Slack/Zendesk. Disclose the data/corpus window.
+- **Freshness** — when disclosing that window, cite the real watermark from `get_data_freshness`
+  (`waCorpusGeneration.lastSyncAt` = the WhatsApp corpus; `haflaCoreMirror.lastSyncAt` = the ~4h
+  order/history mirror) instead of a hardcoded date.
 - **Read-only** — no create/book/register (the gateway exposes no write tools).
 - **Money labels** — partner `costAed` (supplier→Hafla) is never a client price; selling price is never
   a cost. Label which one a number is.

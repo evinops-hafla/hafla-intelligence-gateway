@@ -156,7 +156,8 @@ The tool defers the WhatsApp corpus (`quotedInChat`, v2), so this branch is the 
 2. Candidates = enriched `partnerNames[]` ∪ brand parsed from each chat `title`.
 3. Each candidate: `SELECT count(*) FROM "haflaCore"."Partners" WHERE "tradeName" ILIKE '%cand%' OR "legalName" ILIKE '%cand%'`.
 4. Partition **registered** (count>0) vs **★ invisible** (count=0 — talked to, never registered).
-5. Cite chat title + date window; **no fabricated order counts** for invisible suppliers.
+5. Cite chat title + date window (corpus as-of: `waCorpusGeneration.lastSyncAt` via `get_data_freshness`);
+   **no fabricated order counts** for invisible suppliers.
 
 ### Graph cross-check — proven vs stated (`safe_cypher_sandbox`, on "proven vs just listed?")
 

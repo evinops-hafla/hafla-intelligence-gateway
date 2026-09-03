@@ -82,7 +82,7 @@ Always separate two different numbers and label them:
 
 2. **WhatsApp negotiated quotes** (`search_internal_knowledge`): the corpus often holds the ONLY
    per-unit number ("Banquet Rectangle Table AED 60/pc/day"). Corpus = **WhatsApp only**; disclose the
-   date. Cite chat title + date.
+   date (`waCorpusGeneration.lastSyncAt` via `get_data_freshness`). Cite chat title + date.
 3. **CATALOG/`ProductPartner` price is a trap for generics** ("fooling the system") — do not present it
    as the negotiated price.
 

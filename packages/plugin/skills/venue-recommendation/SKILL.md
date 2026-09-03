@@ -89,7 +89,8 @@ For the recurring venues, surface the vendors/partners who served events there:
   events' orders) — cite `tradeName`.
 - `search_internal_knowledge({ query: "<venue or area> event vendor catering AV parking" })` — the WA corpus
   (**WhatsApp only**) carries venue mentions + vendor names + alcohol/parking/capacity context that
-  lives nowhere structured. Disclose the corpus date; cite chat title.
+  lives nowhere structured. Disclose the corpus date (`waCorpusGeneration.lastSyncAt` via
+  `get_data_freshness`); cite chat title.
 
 ## Guardrails / routes out
 
