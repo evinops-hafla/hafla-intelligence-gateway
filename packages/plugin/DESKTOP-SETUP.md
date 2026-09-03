@@ -12,6 +12,10 @@ Your team asks in plain English in **Claude Desktop Chat/Cowork**, and Claude an
 EvWA skills over our own data (`mcp.hafla.com`): `supplier-discovery`, `pricing-lookup`,
 `product-brief`, `past-orders`, `venue-recommendation`, `event-needs`.
 
+> **New to the skills?** The persona × surface quickstart, the first-success query, and per-skill starter
+> prompts are in [`SKILLS-GUIDE.md`](SKILLS-GUIDE.md) — hand teammates that page. This file is the
+> connector/skill **install** runbook.
+
 ## How Desktop distribution actually works (from current Anthropic docs)
 
 Two independent pieces — **you can push one, not the other**:

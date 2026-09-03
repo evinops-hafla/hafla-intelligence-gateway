@@ -50,9 +50,17 @@ packages/plugin/
     event-needs/SKILL.md                 # "what do I need for a <event>?" (ideal vs actual)
   scripts/
     pack-skills.sh                       # zip each skill for Claude Desktop upload (verifies first)
-    verify-skills.mjs                    # static integrity checks (params/frontmatter/routing) — CI gate
+    verify-skills.mjs                    # static integrity checks (params/frontmatter/routing/conventions) — CI gate
     tool-schemas.json                    # gateway tool-param snapshot (source of truth for verify)
-  SKILLS-GUIDE.md                        # user-facing "which skill do I use?"
+    doctor.sh                            # Claude Code preflight (node/gcloud/token/bridge tools/list)
+  eval/                                  # answer-quality evals (routing + trajectory) — see eval/README.md
+    golden-routing.json                  # Tier-1: question -> expected skill (67 cases)
+    run-routing-eval.mjs                 # Tier-1 runner (--check credential-free; real run needs a key)
+    assertions.mjs                       # Tier-2 shape/grounding checks (+ --self-test)
+    golden-trajectory.json               # Tier-2: 16 stratified cases (shape assertions)
+    run-trajectory-eval.mjs              # Tier-2 runner (--check; --score a recorded run — credential-free)
+    samples/                             # real recorded trajectory fixtures (score green)
+  SKILLS-GUIDE.md                        # user-facing "which skill do I use?" + quickstart router
   AUTHORING.md                           # how to add/change a skill (verification discipline)
   DESKTOP-SETUP.md                       # Desktop connector + skill-install runbook (draft)
 ```
@@ -90,6 +98,9 @@ answer time; `verify-skills.mjs` asserts the 6 copies match):
 - **Artifact** at ≳8 rows or on save/share/compare intent.
 
 ## Install
+
+> **Not sure where you run this?** Start with the persona × surface quickstart + first-success query at
+> the top of [`SKILLS-GUIDE.md`](SKILLS-GUIDE.md). The canonical commands are below.
 
 **Claude Code (works today):**
 

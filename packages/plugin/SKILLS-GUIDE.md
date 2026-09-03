@@ -4,6 +4,26 @@ A plain-English guide for Sales / CX / supply. Just ask your question naturally 
 skill. This is the map of what each one answers. Everything is **read-only** and answers are **cited by
 real order / event / ticket numbers**.
 
+## Quickstart — where do I run this?
+
+Find your row, do the one thing in it, then paste the first-success query below.
+
+| You are… | On… | Do this |
+| -------- | --- | ------- |
+| **Sales / CX** | **Claude Desktop / claude.ai** | **Not live yet** — needs OAuth Stage 2. For now, ask an engineer on the team to run your question in Claude Code (below), or wait for the Desktop rollout. |
+| **Sales / CX** | via a teammate | Send your question to anyone set up with Claude Code — the answer is the same. |
+| **Engineer** | **Claude Code** | ① `gcloud auth login` with your `@hafla.com` account · ② `/plugin marketplace add evinops-hafla/hafla-intelligence-gateway` · ③ `/plugin install evwa-intelligence@hafla-intelligence-gateway`. Then just ask. |
+| **Engineer** | raw MCP client (Cursor / Gemini CLI) | Wire the bridge directly — see the [bridge README](../intelligence-mcp-bridge/README.md). |
+
+**First-success query** (once connected, paste this):
+
+> **Who supplies chiavari chairs?**
+
+You should get a ranked table of partners (Al Jefoon, Sabir Events, Bouncy Time…) with their proven
+order counts and supplier-cost per tier, ending in a `Sources:` line. If you get that, you're set — try
+your own question. If not, run `scripts/doctor.sh` (Claude Code path) or see the bridge README's
+troubleshooting.
+
 ## Pick by what you're asking
 
 | If you're asking… | Skill | Example |
