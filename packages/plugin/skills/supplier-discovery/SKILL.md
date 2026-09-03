@@ -1,12 +1,13 @@
 ---
 name: supplier-discovery
 description: >-
-  Find Hafla suppliers/partners for a product, service, or category and rank them by PROVEN
-  fulfilment (real past orders), not a reliability score. Use when the user asks "who can give / who
-  provides / supplier for / top suppliers for X", pastes a terse multi-constraint sourcing request
-  (product + date + city + qty + a denied/already-tried vendor list), or wants the "invisible" supply
-  chain (partners talked to in WhatsApp but never registered). Read-only. Talks to the EvWA
-  Intelligence gateway (mcp.hafla.com) via the connected MCP tools.
+  Who SUPPLIES a product, service, or category — rank Hafla suppliers/partners by PROVEN fulfilment
+  (real past orders), not a reliability score. NOT "who did/worked company X's event" — that is
+  history, route to past-orders. Use when the user asks "who can give / who provides / supplier for /
+  top suppliers for X", pastes a terse multi-constraint sourcing request (product + date + city + qty
+  + a denied/already-tried vendor list), or wants the "invisible" supply chain (partners talked to in
+  WhatsApp but never registered). Read-only. Talks to the EvWA Intelligence gateway (mcp.hafla.com)
+  via the connected MCP tools.
 ---
 
 # supplier-discovery
@@ -20,6 +21,15 @@ WhatsApp/"invisible" branch, the proven-vs-stated graph cross-check), and the ho
 > EvWA gateway (MCP). Not a Slack bot, not Gemini CLI — prefer a clear scannable table, and on Desktop
 > offer to render large/shareable results as an **artifact**. The same gateway tools also back M2M and
 > the Maya/HEBA agents, so keep logic thin — the gateway/IDL is the source of truth.
+
+## Guard first — is the term actually a product/category?
+
+**If the extracted term is a company / event / person name — not a product or category noun — do NOT
+scout.** (e.g. "who did the AUS event", "who worked Rixos gala", an org name, a `userEventNumber` /
+`orderNumber`-shaped token, "the <company> event"). `supplier_discovery` does not error on such input —
+it silently returns `delivered: []` **plus a confident "scout the open market" recommendation**, which
+reads as a real finding but is a wrong answer to a history question. Say the question is about who
+*worked/served* a specific event or client — that's history, not sourcing — and route to `past-orders`.
 
 ## Primary tool — `supplier_discovery`
 
@@ -157,7 +167,8 @@ The tool defers the WhatsApp corpus (`quotedInChat`, v2), so this branch is the 
 3. Each candidate: `SELECT count(*) FROM "haflaCore"."Partners" WHERE "tradeName" ILIKE '%cand%' OR "legalName" ILIKE '%cand%'`.
 4. Partition **registered** (count>0) vs **★ invisible** (count=0 — talked to, never registered).
 5. Cite chat title + date window (corpus as-of: `waCorpusGeneration.lastSyncAt` via `get_data_freshness`);
-   **no fabricated order counts** for invisible suppliers.
+   **no fabricated order counts** for invisible suppliers. Corpus hits are **truncated snippets** — a
+   quoted price can be cut off mid-number; verify it's complete before citing, never complete it.
 
 ### Graph cross-check — proven vs stated (`safe_cypher_sandbox`, on "proven vs just listed?")
 
@@ -194,6 +205,8 @@ capability signals → **(3)** relevant `plannerNotes` (competitor quotes / new 
 - **No reliability score** — proven-order count + recency is the proxy; state the gap.
 - **No forward availability** — historical fulfilment only.
 - **`costAed` is supplier→Hafla cost, never a client price.** **Corpus = WhatsApp only** (not Slack/ZD).
+- **Cost bands/extremes can contain outliers** (bespoke/bundled line items). Quote the tier-preferred
+  anchor `aed` / median / p25–p75; **never quote a raw `max` as a price.**
 - **Routes out:** product "101" → `product-brief`; price distribution / cheapest-X → `pricing-lookup`;
   **margin / markup → out of scope (wave-2 commercial-intelligence)**, not `pricing-lookup`; host →
   their past orders → `past-orders`; where/venue evidence for a pax band → `venue-recommendation`;

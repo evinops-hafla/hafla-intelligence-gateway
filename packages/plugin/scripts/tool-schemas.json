@@ -21,6 +21,7 @@
     "get_org_events":           { "params": ["orgDomain"], "requiredOneOf": [["orgDomain"]] },
     "search_internal_knowledge":{ "params": ["query"], "requiredOneOf": [["query"]] },
     "get_data_freshness":       { "params": [], "requiredOneOf": [] },
+    "lead_pipeline_health":     { "params": ["stalePendingHours", "queueGraceHours"], "requiredOneOf": [] },
     "describe_table":           { "params": ["schema", "table", "source"], "requiredOneOf": [["schema"], ["table"]] },
     "delivery_fee":             { "params": ["items", "deliveryLocation", "venueType", "deliveryTimeHour"], "requiredOneOf": [["items"], ["deliveryLocation"]] },
     "event_need_profile":       { "params": ["eventFamily", "limit"], "requiredOneOf": [["eventFamily"]] },

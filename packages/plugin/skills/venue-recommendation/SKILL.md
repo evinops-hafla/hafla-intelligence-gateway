@@ -25,9 +25,11 @@ them. Cited by event # / order #."
 State the coverage honestly in the disclosure (verified on prod, 429,870 event-detail rows): only
 **~17.6%** of events carry a **site-type** and only **~4%** a **named address** (`exactAddress`) — most
 events are homes (Villa/Apartment) with neither. So both signals are **partial samples**, and the
-default window is **the last 24 months** (pre-2024 data is near-zero) — apply
-`WHERE ued."createdAt" > now() - interval '24 months'` (confirm the timestamp column via
-`describe_table`) so the evidence reflects current behaviour.
+default window is **the last 24 months of actual event dates** (pre-2024 data is near-zero) — apply
+`WHERE ued."eventDate" > now() - interval '24 months' AND ued."eventDate" <= now()`. Use
+**`eventDate`** (when the event happened), NOT `createdAt` (when the row was inserted — a booking
+entered yesterday for an event 10 months out is not past evidence); the upper bound excludes
+future-dated bookings, since this skill reports what past events **did**.
 
 ## Step 0 — Parse the constraint band
 
@@ -55,6 +57,8 @@ SELECT est."name" AS "siteType", count(*) AS "events"
 FROM "haflaCore"."UserEventDetails" ued
 JOIN "haflaCore"."EventSiteTypes" est ON est.id = ued."eventSiteTypeId"
 WHERE ued."expectedGuestCount" BETWEEN :paxLo AND :paxHi
+  AND ued."eventDate" > now() - interval '24 months'
+  AND ued."eventDate" <= now()          -- past evidence only: exclude future-dated bookings
 GROUP BY est."name"
 ORDER BY "events" DESC;
 ```
@@ -67,6 +71,8 @@ SELECT ued."exactAddress", count(*) AS "events",
 FROM "haflaCore"."UserEventDetails" ued
 JOIN "haflaCore"."UserEvents" ue ON ue.id = ued."userEventId"
 WHERE ued."expectedGuestCount" BETWEEN :paxLo AND :paxHi
+  AND ued."eventDate" > now() - interval '24 months'
+  AND ued."eventDate" <= now()          -- past evidence only: exclude future-dated bookings
   AND ued."exactAddress" IS NOT NULL
 GROUP BY ued."exactAddress"
 HAVING count(*) >= 2

@@ -128,8 +128,10 @@ issues (named-param shapes, `describe_table` needing `schema`, `catalog_search` 
 ~4%-`exactAddress` / ~17.6%-site-type coverage). Every tool call and SQL query is verified against the
 live contracts/schema.
 
-**Remaining:** a hands-on `/plugin install` + one-query run on a gcloud-authed machine, then merge
-([#12](https://github.com/evinops-hafla/hafla-intelligence-gateway/pull/12)); the claude.ai/Desktop
-surface awaits OAuth Stage 2. **Maturity:** the underlying R1/pricing/supplier tools are recent
+**Shipped:** the wave-1 skills merged via
+[#12](https://github.com/evinops-hafla/hafla-intelligence-gateway/pull/12) (2026-08-23) and the
+hands-on `/plugin install` + one-query run is done — Claude Code is the working surface today.
+**Remaining:** the current branch's launch-hardening PR; the claude.ai/Desktop surface awaits OAuth
+Stage 2. **Maturity:** the underlying R1/pricing/supplier tools are recent
 first-cuts (some flagged pre-alpha) — richer IDL-processed versions are planned, so treat tool outputs
 as improving, not final.

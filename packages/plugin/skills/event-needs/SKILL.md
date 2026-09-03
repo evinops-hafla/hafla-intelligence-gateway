@@ -31,12 +31,28 @@ sells, and what's an upsell/risk (ideal needs that rarely get booked).
 - **Corporate** (Conference, Summit, Product Launch, Gala Dinner, Team Offsite…) →
   `event_playbook({ eventType: "<type>" })` → `budgetBand`, `coreNeeds`, `whatMakesItDifferent`,
   `oftenForgotten`, `haflaShouldPitch[]`, `nonCoreNeeds[]`, `indicativePerGuestAed` (p25/med/p75).
+  `eventType` fuzzy-matches reasonably well — but always check `matchType` (`exact` vs looser) and
+  say when the match was loose.
 - **Social / personal** (Wedding, Engagement, Birthday, Baby Shower…) →
   `event_playbook({ family: "<family>" })` → `needs[]` with `importance` (core/common/optional),
   `applies_to`, `conditions`, `often_forgotten`.
 
-If unsure which, try the corporate `eventType` first; check `matchType` (`exact` vs looser). If neither
-resolves, say so and fall back to the actuals (Step 2) alone.
+**`family` is EXACT-match against 8 enum strings — the user's word alone will error.** The valid
+families are exactly:
+
+`Birthday Party` · `Wedding and Engagement` · `Corporate` · `Festive Celebration` ·
+`Social Get Together` · `Personal Celebration` · `MICE and Launch Activation` · `Public and School Event`
+
+**Map the user's word to the exact enum before calling** — e.g. "wedding" / "engagement" →
+`Wedding and Engagement`; "birthday" → `Birthday Party`; "Diwali" / "Eid" / "Christmas" →
+`Festive Celebration`; "exhibition" / "launch" / "activation" → `MICE and Launch Activation`. Calling
+`event_playbook({ family: "Wedding" })` fails ("No family matches"); on such an error the tool returns
+an `availableFamilies` array — pick the closest family from it and retry (one retry, then say so).
+Note: `event_need_profile.eventFamily` (Step 2) DOES prefix-match ("Wedding" works there) — only
+`event_playbook.family` is exact.
+
+If unsure which mode, try the corporate `eventType` first; check `matchType`. If neither resolves, say
+so and fall back to the actuals (Step 2) alone.
 
 ## Step 2 — What Hafla actually books (`event_need_profile`)
 
@@ -69,6 +85,8 @@ resolves, say so and fall back to the actuals (Step 2) alone.
 - `attachRatePct` sums &gt;100% by design (share, not partition); `medianUnitAed` /
   `indicativePerGuestAed` are **selling** (client) prices, never cost. **Margin/markup is out of scope**
   (wave-2 commercial-intelligence).
+- **Price bands can contain extreme outliers** (bespoke/bundled line items). Quote medians and
+  p25–p75 ranges; **never quote a raw `max` as a price.**
 - Cite category names + `familyOrderCount`; **never surface UUIDs**.
 - **Routes out:** a single product's "101" → `product-brief`; who can supply a need → `supplier-discovery`;
   the price of one product → `pricing-lookup`; where events like this happen (venue evidence) →

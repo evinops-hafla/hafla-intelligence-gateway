@@ -62,7 +62,8 @@ encyclopedia knowledge is one line at most, skipped by default.**
 5. **WhatsApp negotiated detail + setup gotchas** (only on run choice [2]) —
    `search_internal_knowledge({ query: "<subject> setup pricing supplier" })`. Corpus = **WhatsApp only**; disclose
    the date (`waCorpusGeneration.lastSyncAt` via `get_data_freshness`); cite chat title. Pull recurring
-   setup challenges + partner mentions.
+   setup challenges + partner mentions. **Snippet caveat:** hits are truncated snippets — a price can be
+   cut off mid-number; verify a corpus price is complete before quoting it, never complete a cut-off number.
 
 Optional: `related_products({ id })` for "commonly ordered with" (a useful brief line), and
 `get_ticket_360({ ticket_id: "<n>" })` if the user drills into a cited Zendesk ticket.

@@ -155,6 +155,23 @@ for (const skill of skillDirs) {
     }
   }
 
+  // 2b. unknown tool-shaped calls — a snake_case `name({ ... })` pattern whose name is NOT in the
+  //     schema snapshot is probably a typo'd/renamed gateway tool the param check silently skips.
+  //     WARNING (not error): the heuristic (contains `_`, appears with `({`) avoids most JS/SQL
+  //     function false-positives, but can't rule them out entirely.
+  {
+    const seen = new Set();
+    const unknownRe = /\b([a-z][a-z0-9]*(?:_[a-z0-9]+)+)\s*\(\s*\{/g;
+    let um;
+    while ((um = unknownRe.exec(text))) {
+      const name = um[1];
+      if (!TOOLS[name] && !seen.has(name)) {
+        seen.add(name);
+        warn(skill, `${name}({ ... }) looks like a tool call but "${name}" is not in tool-schemas.json — typo, or snapshot needs a refresh? (params NOT validated)`);
+      }
+    }
+  }
+
   // 3. routing edges — scoped to the "## Guardrails / routes out" section, so a prose mention
   //    elsewhere (e.g. a forward-note "coordinate tier labels with X") is NOT counted as a route.
   const gm = text.match(/##\s*Guardrails[\s\S]*?(?=\n##\s|$)/i);

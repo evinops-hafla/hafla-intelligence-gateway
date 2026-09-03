@@ -1,13 +1,13 @@
 ---
 name: pricing-lookup
 description: >-
-  Look up what Hafla CHARGES or PAID for a product/service — real transacted prices (p25/median/p75)
-  and the negotiated per-unit numbers buried in order notes and WhatsApp. Use for "what does X cost /
-  what did we pay for X / typical or per-unit rate / dry-hire charge for N chairs + M tables". Handles
-  both fully-cataloged SKUs (structured) and generic "--Name--" / dry-hire / F&B items (whose real
-  price lives in notes + chat, not a price column). Read-only, via the EvWA gateway. NOT pricing
-  strategy ("how should we price X") and NOT supplier discovery (route vendor questions to
-  supplier-discovery).
+  What a named PRODUCT/service costs — what Hafla CHARGES or PAID for it: real transacted prices
+  (p25/median/p75) plus negotiated per-unit numbers from order notes and WhatsApp. NOT whole-event
+  cost ("what does a wedding cost" → event-needs). Use for "what does X cost / what did we pay for X /
+  typical or per-unit rate / dry-hire charge for N chairs + M tables". Handles both fully-cataloged
+  SKUs (structured) and generic "--Name--" / dry-hire / F&B items (whose real price lives in notes +
+  chat, not a price column). Read-only, via the EvWA gateway. NOT pricing strategy ("how should we
+  price X") and NOT supplier discovery (route vendor questions to supplier-discovery).
 ---
 
 # pricing-lookup
@@ -34,6 +34,10 @@ Always separate two different numbers and label them:
 
 ## Step 1 — Parse the request
 
+- **Is it a product at all?** A bare event-type/family name (wedding, gala, conference…) is **never a
+  product** — `catalog_search("wedding")` returns 1,000+ wedding-tagged SKUs and a chair's price is not
+  "what a wedding costs". Route whole-event cost questions to `event-needs`; only named products/services
+  stay here.
 - **Identifier?** Order# / Event# / Ticket# → direct lookup (Branch-I).
 - **Terse multi-constraint brief** ("12× chairs, 4× tables, vendor Fern, 4 April, Meadows"): parse
   `items[]=[{qty,name}]`, date, location, pax/duration, and **vendorsTried[]** (`Vendor: X` / "X, Y
@@ -56,6 +60,9 @@ Always separate two different numbers and label them:
    (min/p25/median/p75/max), `tier`+`confidence`, `provenance` (obs / partner counts), and per-partner
    `observations` — the `productPriceBands` rollup wrapped, plus the partner breakdown. Pass `partnerId`
    to narrow to one supplier. Lead with `anchorAed` + `tier`. This is **partner cost**, label it so.
+   **Outlier caveat:** `minAed`/`maxAed` are raw extremes and can be wildly non-representative
+   (bespoke/bundled line items, data-entry errors — verified live: a ~10 AED chair with `maxAed: 1260`).
+   Quote `anchorAed` / median and the **p25–p75** band; **NEVER quote the raw `max` as a price.**
    *(Raw fallback only if you need a column the tool omits, or to cross-check a recent-tool result:
    `SELECT "representativeMedianFils"/100.0 AS "repMedianAed", "representativeTier", … FROM
    intelligence."productPriceBands" WHERE "productId" = :uuid;`)*
@@ -83,6 +90,9 @@ Always separate two different numbers and label them:
 2. **WhatsApp negotiated quotes** (`search_internal_knowledge`): the corpus often holds the ONLY
    per-unit number ("Banquet Rectangle Table AED 60/pc/day"). Corpus = **WhatsApp only**; disclose the
    date (`waCorpusGeneration.lastSyncAt` via `get_data_freshness`). Cite chat title + date.
+   **Snippet caveat:** the tool returns a truncated snippet, not the full message — a price can be cut
+   off mid-number. Verify a corpus price is complete before quoting; if truncated or ambiguous between
+   variants, say so — never complete the number.
 3. **CATALOG/`ProductPartner` price is a trap for generics** ("fooling the system") — do not present it
    as the negotiated price.
 

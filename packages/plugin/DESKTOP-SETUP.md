@@ -81,5 +81,5 @@ re-uploads. (Maintain the `SKILL.md` folders in Git as the source of truth.)
 - [ ] Whether Google `hd` claim reaches the token, or we rely on the AS domain-allowlist for `@hafla.com`.
 - [ ] End-to-end: connect connector → invoke a skill → real gateway query, on a real teammate's Desktop.
 
-Full internal design: private `mcp-gateway/specs/history-and-future/research/2026-08-web-connector-oauth/`.
-Vendor decision support: `tmp/2026-08-23-oauth-stage2-vendor-brief.md`.
+Full internal design (incl. the Auth Server vendor decision support): private
+`mcp-gateway/specs/history-and-future/research/2026-08-web-connector-oauth/`.

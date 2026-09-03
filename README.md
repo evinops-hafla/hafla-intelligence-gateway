@@ -68,7 +68,7 @@ intelligence-gateway/
 │   │   └── LICENSE                 # MIT (root LICENSE; the package symlinks via npm `files`)
 │   └── plugin/                     # Claude Code plugin — wave-1 Agent Skills
 │       ├── .claude-plugin/plugin.json   # plugin manifest (name: evwa-intelligence)
-│       ├── skills/                 # 5 SKILL.md folders (auto-discovered)
+│       ├── skills/                 # 6 SKILL.md folders (auto-discovered)
 │       └── README.md               # plugin + skills conventions
 ├── package.json                    # npm workspaces root
 ├── .nvmrc                          # 24.15.0
@@ -98,7 +98,7 @@ cd packages/intelligence-mcp-bridge
 echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | node src/index.js
 ```
 
-The first line of stderr is a `Pre-flight OK` log; the response on stdout is a JSON-RPC `tools/list` reply with the 5 tools.
+The first line of stderr is a `Pre-flight OK` log; the response on stdout is a JSON-RPC `tools/list` reply listing the gateway tools (20+ read-only tools; the surface grows).
 
 ---
 
