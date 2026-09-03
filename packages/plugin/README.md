@@ -30,6 +30,7 @@ Full rationale: `hafla-intelligence/mcp-gateway/specs/history-and-future/history
 | 3   | `product-brief`        | **built (tool-first orchestrator)** |
 | 4   | `past-orders`          | **built (tool-first)**              |
 | 5   | `venue-recommendation` | **built (evidence-only)**           |
+| 6   | `event-needs`          | **built (wave-1.5 — planning bill-of-needs)** |
 
 Design specs live in the sibling repo:
 `hafla-intelligence/mcp-gateway/specs/history-and-future/history/research/intelligence-gateway/skills-wave-1/`
@@ -46,6 +47,9 @@ packages/plugin/
     product-brief/SKILL.md               # the 5-source "101" (orchestrator)
     past-orders/SKILL.md                 # history for a host/partner/order/event
     venue-recommendation/SKILL.md        # evidence-only venue lookup
+    event-needs/SKILL.md                 # "what do I need for a <event>?" (ideal vs actual)
+  scripts/pack-skills.sh                 # zip each skill for Claude Desktop upload
+  DESKTOP-SETUP.md                       # Desktop connector + skill-install runbook (draft)
 ```
 
 Each skill is a portable `SKILL.md` (YAML frontmatter `name` + `description`, then instructions). The
@@ -64,8 +68,8 @@ Each skill is a portable `SKILL.md` (YAML frontmatter `name` + `description`, th
 - **Money labels** — partner `costAed` (supplier→Hafla) is never a client price; selling price is never
   a cost. Label which one a number is.
 - **Route out** — supply → `supplier-discovery`, price → `pricing-lookup`, 101 → `product-brief`,
-  history → `past-orders`, venue evidence → `venue-recommendation`; pricing _strategy_ and _margin_ are
-  out of scope (wave-2 commercial intelligence).
+  history → `past-orders`, venue evidence → `venue-recommendation`, "what do I need for a &lt;event&gt;" →
+  `event-needs`; pricing _strategy_ and _margin_ are out of scope (wave-2 commercial intelligence).
 
 ## Install
 
@@ -76,7 +80,7 @@ Each skill is a portable `SKILL.md` (YAML frontmatter `name` + `description`, th
 /plugin install evwa-intelligence@hafla-intelligence-gateway
 ```
 
-Installing wires the 5 skills **and** the gateway connector (`hafla-evwa-idl-gateway`, via
+Installing wires the skills **and** the gateway connector (`hafla-evwa-idl-gateway`, via
 `npx @hafla/intelligence-mcp-bridge`) together. Prerequisite: `gcloud` installed + `gcloud auth login`
 with your `@hafla.com` account — the bridge mints a Google ID token and cannot bundle auth (see the
 bridge README for full onboarding).
@@ -102,13 +106,13 @@ so Claude Code is the working surface today.
   as an OAuth 2.1 resource server → **OAuth Stage 2 (deferred).** Blocked until then.
 - **No org-wide custom-Skill distribution exists on any plan** (incl. Enterprise) — skills are per-user
   zip upload; only the remote **connector** is org-deployable by an owner.
-- Tool migration **DONE** (PR #314/#316/#317/#319/#320, 2026-08-14): all 5 skills are tool-first where a
+- Tool migration **DONE** (PR #314/#316/#317/#319/#320, 2026-08-14): all skills are tool-first where a
   tool exists; remaining raw-SQL grains (generic `--Name--` price, per-host order enumeration, venue
   evidence) have no tool yet — noted in each SKILL.md's forward note.
 
 ## Status
 
-Wave-1 is **built** (all 5 skills), **reviewed + live-tested** against the deployed gateway (20+
+Wave-1 is **built** (5 skills) + wave-1.5 `event-needs`, **reviewed + live-tested** against the deployed gateway (20+
 read-only tools; the tool surface grows — skills are tool-first where a tool exists, incl.
 `price_anchor` (cost) + `supplier_brief` (partner dossier), and fall back to raw SQL otherwise), and
 **packaged** as a Claude Code plugin

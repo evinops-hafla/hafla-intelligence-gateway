@@ -102,7 +102,7 @@ For the recurring venues, surface the vendors/partners who served events there:
 - Read-only. Non-filterable constraints (vibe/budget) are echoed, not silently applied.
 - **Routes out:** a specific vendor who can supply X → `supplier-discovery`; what a vendor charges / a
   product's price → `pricing-lookup`; a host's full event history → `past-orders`; a product "101" →
-  `product-brief`.
+  `product-brief`; "what do I need for a &lt;event&gt;" (planning checklist) → `event-needs`.
 
 ## Forward note
 

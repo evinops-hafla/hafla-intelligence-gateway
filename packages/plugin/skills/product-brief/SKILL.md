@@ -89,7 +89,7 @@ Optional: `related_products({ id })` for "commonly ordered with" (a useful brief
   (Matches `pricing-lookup` / `supplier-discovery` / `venue-recommendation`.)
 - Read-only. Deep host order history → `past-orders`; price distribution deep-dive → `pricing-lookup`;
   "who can supply / who else" → `supplier-discovery`; where/venue evidence for a pax band →
-  `venue-recommendation`.
+  `venue-recommendation`; "what do I need for a &lt;event&gt;" (planning checklist) → `event-needs`.
 - State the real data window and confidence; don't imply completeness the sources don't have.
 
 ## Forward note
