@@ -34,9 +34,10 @@ It returns three sections (interpret them precisely — field shapes matter):
 - **`delivered[]`** — partners matched to the product/category, one row per partner. Fields:
   `partner` (tradeName), `products`/`productCount` (matched real variants), `bespokeJobs` (custom
   `--…--` jobs — capability signal, no unit price), **`orders`** (summed `totalOrders` — **can be `0`
-  or `null`**), `costAed` — an **object `{ avg, min, max }` in AED** (**supplier→Hafla cost, never a
+  or `null`**), `costAed` — a **tier-preferred anchor `{ aed, tier, observations, lastObserved }` in
+  AED** (`tier` = ORDER→CART→CATALOG preferred, matching `price_anchor`; **supplier→Hafla cost, never a
   client price**), or `null` for a bespoke-only partner — plus `costBasis` (a words string, e.g. "N
-  observations from confirmed orders"), `lastWorkedWith`, `active`, contacts `phone` / `hasWhatsapp` /
+  observations from real orders"), `lastWorkedWith`, `active`, contacts `phone` / `hasWhatsapp` /
   `email` (already dummy-filtered by the tool) / `contactPerson` (internal use — D-9), and
   `supersededRecord` (**an old VAT-record rename — supplier is fine, that record is retired, never book
   it**). Sorted recency-then-orders; TBA/placeholder filtered.
@@ -111,9 +112,9 @@ candidates to disambiguate a fuzzy name). It gives `capability` (`provenProducts
 / `bespokeJobs` / `totalOrders` / `lastWorkedWith`), `categoriesProven` / `categoriesStated`,
 `topProducts[]` with `costAed`, and `contact` (already dummy-filtered). This is also the fastest answer
 to **"proven vs just listed?"** for one partner — no Cypher needed. **`topProducts[].costAed` is a
-blended-tier average** (ORDER+CART+CATALOG pooled) — **indicative, not order-only**; present it as an
-approximate cost signal, not a firm per-order price (the `supplier_discovery` tool's `costAed`, by
-contrast, is order-based with a `costBasis` count). For a firm per-product cost, use `price_anchor`.
+tier-preferred anchor** — `{ aed, tier, observations, lastObserved }`, `tier` = ORDER cost preferred
+over CART over CATALOG (same model as `price_anchor` and `supplier_discovery.delivered[].costAed`). Cite
+the `aed` with its `tier` + `observations` count — a firm-ish per-partner anchor, not a range.
 
 Drop to raw SQL only for a field `supplier_brief` omits — chiefly the warehouse **`address` / `cityId`**:
 
@@ -175,7 +176,7 @@ RETURN p.tradeName AS partner, count(DISTINCT oi) AS provenItems ORDER BY proven
 ## Output (Claude Desktop)
 
 Every reply: **(1)** scope + FU-3 note + parsed constraints + exclusions → **(2)** ranked table from
-`delivered[]` — `partner`, `orders`, `costAed` as a **range** (e.g. `avg (min–max) AED`, labelled
+`delivered[]` — `partner`, `orders`, `costAed` as **`aed` AED (`tier`)** (e.g. `10 AED (ORDER)`, labelled
 _supplier cost_), `lastWorkedWith` — **proven rows (`orders>0`) first, listed-only (`orders` 0/null)
 below a divider**; flag `supersededRecord` ("retired record — don't book") and bespoke-only partners as
 capability signals → **(3)** relevant `plannerNotes` (competitor quotes / new vendors) → **(4)**
