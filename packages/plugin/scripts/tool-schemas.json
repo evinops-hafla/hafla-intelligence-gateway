@@ -4,18 +4,18 @@
     "capturedAt": "2026-09-03",
     "capturedFrom": "live mcp.hafla.com tool inputSchemas (via -token gateway)",
     "refreshWhen": "the gateway adds/renames a tool param — re-capture from the tool inputSchema and bump capturedAt.",
-    "paramShape": "params = all accepted keys; requiredOneOf = groups where at least one key must be present (a tool may list several)."
+    "paramShape": "params = all accepted keys. requiredOneOf = list of groups; within a group >=1 key must be present (OR), and multiple groups are ANDed (each satisfied) — 'both required' is encoded as singleton groups e.g. [[\"schema\"],[\"table\"]]. exactlyOneOf = list of groups; within a group EXACTLY one key is allowed (the tool errors on 0 or >1, e.g. product_lookup / get_lead_context)."
   },
   "tools": {
     "supplier_discovery":       { "params": ["product", "limit"], "requiredOneOf": [["product"]] },
     "supplier_brief":           { "params": ["partnerId", "partnerName"], "requiredOneOf": [["partnerId", "partnerName"]] },
     "price_anchor":             { "params": ["productId", "productName", "partnerId", "quantity"], "requiredOneOf": [["productId", "productName"]] },
     "price_truth":              { "params": ["id"], "requiredOneOf": [["id"]] },
-    "product_lookup":           { "params": ["id", "slug", "productNumber"], "requiredOneOf": [["id", "slug", "productNumber"]] },
+    "product_lookup":           { "params": ["id", "slug", "productNumber"], "exactlyOneOf": [["id", "slug", "productNumber"]] },
     "related_products":         { "params": ["id", "limit"], "requiredOneOf": [["id"]] },
     "catalog_search":           { "params": ["query", "value", "limit"], "requiredOneOf": [["query"]] },
     "customer_360":             { "params": ["mobile", "email"], "requiredOneOf": [["mobile", "email"]] },
-    "get_lead_context":         { "params": ["leadId", "zendeskTicketId", "hostNumber", "userEventNumber", "source"], "requiredOneOf": [["leadId", "zendeskTicketId", "hostNumber", "userEventNumber"]] },
+    "get_lead_context":         { "params": ["leadId", "zendeskTicketId", "hostNumber", "userEventNumber", "source"], "exactlyOneOf": [["leadId", "zendeskTicketId", "hostNumber", "userEventNumber"]] },
     "analyze_identity_graph":   { "params": ["phone_or_email"], "requiredOneOf": [["phone_or_email"]] },
     "get_ticket_360":           { "params": ["ticket_id"], "requiredOneOf": [["ticket_id"]] },
     "get_org_events":           { "params": ["orgDomain"], "requiredOneOf": [["orgDomain"]] },

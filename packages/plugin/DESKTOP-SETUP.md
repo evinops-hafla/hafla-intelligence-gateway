@@ -8,9 +8,9 @@
 
 ## What this enables
 
-Your team asks in plain English in **Claude Desktop Chat/Cowork**, and Claude answers using the five
+Your team asks in plain English in **Claude Desktop Chat/Cowork**, and Claude answers using the six
 EvWA skills over our own data (`mcp.hafla.com`): `supplier-discovery`, `pricing-lookup`,
-`product-brief`, `past-orders`, `venue-recommendation`.
+`product-brief`, `past-orders`, `venue-recommendation`, `event-needs`.
 
 ## How Desktop distribution actually works (from current Anthropic docs)
 
@@ -19,7 +19,7 @@ Two independent pieces — **you can push one, not the other**:
 | Piece | Who installs it | Org-wide push? |
 | ----- | --------------- | -------------- |
 | **The gateway connector** (remote MCP) | Owner adds it org-wide; each member connects once | ✅ Owner-deployable |
-| **The five skills** | **Each member uploads the zips themselves** | ❌ **No org-wide skill push exists on ANY plan** (Team or Enterprise) |
+| **The six skills** | **Each member uploads the zips themselves** | ❌ **No org-wide skill push exists on ANY plan** (Team or Enterprise) |
 
 So the rollout is: **owner deploys the connector once → each teammate connects it + uploads the skill
 zips.** Distribute the zips via this repo + this guide.
@@ -57,10 +57,10 @@ zips.** Distribute the zips via this repo + this guide.
 From the repo root:
 
 ```bash
-bash packages/plugin/scripts/pack-skills.sh     # → packages/plugin/dist/<skill>.zip  (5 zips)
+bash packages/plugin/scripts/pack-skills.sh     # → packages/plugin/dist/<skill>.zip  (6 zips)
 ```
 
-Each zip contains `<skill>/SKILL.md`. Share the five zips (Slack/drive) with a link to this guide.
+Each zip contains `<skill>/SKILL.md`. Share the six zips (Slack/drive) with a link to this guide.
 Re-run and re-share after any skill update — **skills do not auto-sync across surfaces**; each member
 re-uploads. (Maintain the `SKILL.md` folders in Git as the source of truth.)
 

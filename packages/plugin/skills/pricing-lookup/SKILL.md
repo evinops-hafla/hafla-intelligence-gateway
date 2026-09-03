@@ -123,7 +123,7 @@ qty, selling median, cost median, tier, n).
 
 - Read-only. **Not pricing strategy** ("how should we price X" — out of scope). **Not supplier
   discovery** — "who can supply / who else" → `supplier-discovery`. Product "101" → `product-brief`;
-  where/venue evidence → `venue-recommendation`.
+  where/venue evidence → `venue-recommendation`; "what do I need for a &lt;event&gt;" → `event-needs`.
 - **Margin / markup / profit is OUT OF SCOPE (wave-2 commercial-intelligence).** Selling and cost both
   appear here, so it is a real temptation — do **not** compute or present `selling − cost`, markup %, or
   margin, even when a caller (or `supplier-discovery`) arrives asking for it. Deflect: "margin is wave-2

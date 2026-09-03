@@ -41,7 +41,7 @@ function parseFrontmatter(text) {
   const name = (body.match(/^name:\s*(.+)$/m) || [])[1]?.trim();
   // description may be a `>-` folded block spanning lines until the next top-level key
   let description = (body.match(/^description:\s*(.+)$/m) || [])[1]?.trim();
-  if (description === '>-' || description === '>' || description === '|' || description === undefined) {
+  if (description === undefined || /^[|>][+-]?\d*$/.test(description)) { // any YAML block scalar: | > |- >- |+ >+ |2 …
     const lines = body.split('\n');
     const di = lines.findIndex((l) => /^description:/.test(l));
     const buf = [];
@@ -83,6 +83,8 @@ function topLevelSplit(body) {
 }
 
 // From a params body, return the set of top-level param KEYS the call passes.
+// NOTE: only TOP-LEVEL keys are validated. Fields inside a nested object/array literal
+// (e.g. delivery_fee `items: [{ category, quantity, ... }]`) are NOT shape-checked here.
 function extractKeys(body) {
   const keys = [];
   for (const seg of topLevelSplit(body)) {
@@ -143,15 +145,22 @@ for (const skill of skillDirs) {
       for (const k of keys) {
         if (!spec.params.includes(k)) err(skill, `${tool}({ ${k} }) — unknown param "${k}"; valid: ${spec.params.join(', ') || '(none)'}`);
       }
-      for (const group of spec.requiredOneOf) {
+      for (const group of (spec.requiredOneOf || [])) {
         if (!group.some((g) => keys.includes(g))) err(skill, `${tool}(...) — missing a required param (one of: ${group.join(' | ')})`);
+      }
+      for (const group of (spec.exactlyOneOf || [])) {
+        const n = group.filter((g) => keys.includes(g)).length;
+        if (n !== 1) err(skill, `${tool}(...) — needs EXACTLY one of: ${group.join(' | ')} (got ${n}; the tool errors on 0 or >1)`);
       }
     }
   }
 
-  // 3. routing edges (which sibling skills this one references)
+  // 3. routing edges — scoped to the "## Guardrails / routes out" section, so a prose mention
+  //    elsewhere (e.g. a forward-note "coordinate tier labels with X") is NOT counted as a route.
+  const gm = text.match(/##\s*Guardrails[\s\S]*?(?=\n##\s|$)/i);
+  const routeRegion = gm ? gm[0] : text; // fall back to whole file if no Guardrails section
   for (const other of skillNames) {
-    if (other !== skill && new RegExp(`\\b${other}\\b`).test(text)) routesOut.get(skill).add(other);
+    if (other !== skill && new RegExp(`\\b${other}\\b`).test(routeRegion)) routesOut.get(skill).add(other);
   }
 
   // 4. count embedded queries

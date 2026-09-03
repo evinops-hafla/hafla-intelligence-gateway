@@ -27,7 +27,7 @@ encyclopedia knowledge is one line at most, skipped by default.**
 
 ## The five sources (compose them; cite as you go)
 
-1. **Catalog match** — `product_lookup({ id|slug|productNumber })` if you have an id, else
+1. **Catalog match** — `product_lookup({ id })` (or `{ slug }` / `{ productNumber }` — exactly one) if you have an identifier, else
    `catalog_search({ query: "<subject>" })` to resolve **named** SKU(s). **`catalog_search` EXCLUDES
    generic `--Name--` products** (it filters `btrim(name) NOT LIKE '--%--'`), so to detect/resolve a
    generic run a raw query: `safe_sql_sandbox` → `SELECT id, name FROM "haflaCore"."Products" WHERE name

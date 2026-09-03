@@ -196,7 +196,8 @@ capability signals → **(3)** relevant `plannerNotes` (competitor quotes / new 
 - **`costAed` is supplier→Hafla cost, never a client price.** **Corpus = WhatsApp only** (not Slack/ZD).
 - **Routes out:** product "101" → `product-brief`; price distribution / cheapest-X → `pricing-lookup`;
   **margin / markup → out of scope (wave-2 commercial-intelligence)**, not `pricing-lookup`; host →
-  their past orders → `past-orders`; where/venue evidence for a pax band → `venue-recommendation`.
+  their past orders → `past-orders`; where/venue evidence for a pax band → `venue-recommendation`;
+  "what do I need for a &lt;event&gt;" → `event-needs`.
 
 ## Forward note
 
