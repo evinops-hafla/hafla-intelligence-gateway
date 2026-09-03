@@ -1,0 +1,33 @@
+{
+  "_meta": {
+    "purpose": "Snapshot of EvWA gateway tool input params — the source of truth for verify-skills.mjs param checks. Credential-free: lets CI catch skill tool-call param drift (e.g. price_anchor takes productId, not id) without hitting the gateway.",
+    "capturedAt": "2026-09-03",
+    "capturedFrom": "live mcp.hafla.com tool inputSchemas (via -token gateway)",
+    "refreshWhen": "the gateway adds/renames a tool param — re-capture from the tool inputSchema and bump capturedAt.",
+    "paramShape": "params = all accepted keys; requiredOneOf = groups where at least one key must be present (a tool may list several)."
+  },
+  "tools": {
+    "supplier_discovery":       { "params": ["product", "limit"], "requiredOneOf": [["product"]] },
+    "supplier_brief":           { "params": ["partnerId", "partnerName"], "requiredOneOf": [["partnerId", "partnerName"]] },
+    "price_anchor":             { "params": ["productId", "productName", "partnerId", "quantity"], "requiredOneOf": [["productId", "productName"]] },
+    "price_truth":              { "params": ["id"], "requiredOneOf": [["id"]] },
+    "product_lookup":           { "params": ["id", "slug", "productNumber"], "requiredOneOf": [["id", "slug", "productNumber"]] },
+    "related_products":         { "params": ["id", "limit"], "requiredOneOf": [["id"]] },
+    "catalog_search":           { "params": ["query", "value", "limit"], "requiredOneOf": [["query"]] },
+    "customer_360":             { "params": ["mobile", "email"], "requiredOneOf": [["mobile", "email"]] },
+    "get_lead_context":         { "params": ["leadId", "zendeskTicketId", "hostNumber", "userEventNumber", "source"], "requiredOneOf": [["leadId", "zendeskTicketId", "hostNumber", "userEventNumber"]] },
+    "analyze_identity_graph":   { "params": ["phone_or_email"], "requiredOneOf": [["phone_or_email"]] },
+    "get_ticket_360":           { "params": ["ticket_id"], "requiredOneOf": [["ticket_id"]] },
+    "get_org_events":           { "params": ["orgDomain"], "requiredOneOf": [["orgDomain"]] },
+    "search_internal_knowledge":{ "params": ["query"], "requiredOneOf": [["query"]] },
+    "get_data_freshness":       { "params": [], "requiredOneOf": [] },
+    "describe_table":           { "params": ["schema", "table", "source"], "requiredOneOf": [["schema"], ["table"]] },
+    "delivery_fee":             { "params": ["items", "deliveryLocation", "venueType", "deliveryTimeHour"], "requiredOneOf": [["items"], ["deliveryLocation"]] },
+    "event_need_profile":       { "params": ["eventFamily", "limit"], "requiredOneOf": [["eventFamily"]] },
+    "event_playbook":           { "params": ["eventType", "family"], "requiredOneOf": [["eventType", "family"]] },
+    "seasonal_demand":          { "params": ["dimension", "category", "year"], "requiredOneOf": [["dimension"]] },
+    "safe_sql_sandbox":         { "params": ["sql"], "requiredOneOf": [["sql"]] },
+    "safe_sql_sandbox_core":    { "params": ["sql"], "requiredOneOf": [["sql"]] },
+    "safe_cypher_sandbox":      { "params": ["cypher"], "requiredOneOf": [["cypher"]] }
+  }
+}

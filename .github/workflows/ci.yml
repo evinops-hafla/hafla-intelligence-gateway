@@ -30,6 +30,12 @@ jobs:
       - name: test all workspaces
         run: npm test --workspaces --if-present
 
+      # Static skill integrity: tool-call params vs the checked-in gateway schema
+      # snapshot (catches e.g. price_anchor({ id }) drift), frontmatter limits,
+      # and routing-graph orphans. Credential-free — no gateway access needed.
+      - name: verify skills
+        run: node packages/plugin/scripts/verify-skills.mjs
+
       # F-1 smoke (BS-8 symlink-class regression catch).
       # `scripts/smoke.mjs --mode=symlink` runs: npm pack → npm install -g →
       # spawn `npx -y @hafla/intelligence-mcp-bridge` from os.tmpdir() →

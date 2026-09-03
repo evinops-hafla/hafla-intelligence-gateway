@@ -21,6 +21,13 @@ OUT_DIR="${OUT_DIR:-$PLUGIN_DIR/dist}"
 command -v zip >/dev/null || { echo "error: 'zip' not found on PATH" >&2; exit 1; }
 [ -d "$SKILLS_DIR" ] || { echo "error: skills dir not found: $SKILLS_DIR" >&2; exit 1; }
 
+# Gate: don't package skills that fail static verification (params/frontmatter/routing).
+# Set SKIP_VERIFY=1 to bypass (not recommended).
+if [ "${SKIP_VERIFY:-0}" != "1" ] && command -v node >/dev/null; then
+  echo "verifying skills before packaging…"
+  node "$SCRIPT_DIR/verify-skills.mjs" || { echo "error: verify-skills failed — fix errors or SKIP_VERIFY=1 to override" >&2; exit 1; }
+fi
+
 mkdir -p "$OUT_DIR"
 count=0
 for skill_path in "$SKILLS_DIR"/*/; do
