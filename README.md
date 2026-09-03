@@ -98,7 +98,7 @@ cd packages/intelligence-mcp-bridge
 echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | node src/index.js
 ```
 
-The first line of stderr is a `Pre-flight OK` log; the response on stdout is a JSON-RPC `tools/list` reply listing the gateway tools (20+ read-only tools; the surface grows).
+The first line of stderr is a `Pre-flight OK` log; the response on stdout is a JSON-RPC `tools/list` reply listing the gateway's 23 read-only tools.
 
 ---
 

@@ -142,7 +142,7 @@ so Claude Code is the working surface today.
 
 ## Status
 
-Wave-1 is **built** (5 skills) + wave-1.5 `event-needs`, **reviewed + live-tested** against the deployed gateway (20+
+Wave-1 is **built** (5 skills) + wave-1.5 `event-needs`, **reviewed + live-tested** against the deployed gateway (23
 read-only tools; the tool surface grows — skills are tool-first where a tool exists, incl.
 `price_anchor` (cost) + `supplier_brief` (partner dossier), and fall back to raw SQL otherwise), and
 **packaged** as a Claude Code plugin
