@@ -11,7 +11,7 @@ This repo is the public side of the Hafla intelligence stack: small, audit-frien
 | Term                              | What                                                                                                           | Where                   |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------- |
 | **MCP Gateway** (server)          | Cloud Run service at `https://mcp.hafla.com` — IAM-gated HTTP MCP endpoint, AlloyDB + Neo4j + Vertex AI Search | private — separate repo |
-| **Intelligence Gateway** (client) | Plugins, skills, agents, bridge — everything an employee installs to reach the MCP Gateway server              | this repo               |
+| **Intelligence Gateway** (client) | The bridge (npm), the Claude Code plugin, and the 6 skills it bundles — everything an employee installs to reach the MCP Gateway server | this repo               |
 
 Talk about "the MCP Gateway server" when you mean the Cloud Run service; "the Intelligence Gateway" when you mean this repo or the user-facing pieces in it.
 
@@ -22,7 +22,7 @@ Talk about "the MCP Gateway server" when you mean the Cloud Run service; "the In
 | Package                                                                  | Type                                      | Status                  |
 | ------------------------------------------------------------------------ | ----------------------------------------- | ----------------------- |
 | [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge`    | 1.0.7 — live on npm     |
-| [`packages/plugin/`](packages/plugin/)                                   | Claude Code plugin — Agent Skills         | 6 skills (5 wave-1 + `event-needs`), tool-first; verified in CI |
+| [`packages/plugin/`](packages/plugin/)                                   | Claude Code plugin (git — this repo's marketplace) — bundles the 6 skills + wires the gateway connector by running the bridge via npx | 6 skills (5 wave-1 + `event-needs`), tool-first; verified in CI |
 
 ### `@hafla/intelligence-mcp-bridge`
 
@@ -66,7 +66,7 @@ intelligence-gateway/
 │   │   ├── README.md               # operator-facing install guide
 │   │   ├── CHANGELOG.md
 │   │   └── LICENSE                 # MIT (root LICENSE; the package symlinks via npm `files`)
-│   └── plugin/                     # Claude Code plugin — wave-1 Agent Skills
+│   └── plugin/                     # Claude Code plugin — bundles 6 skills + wires the bridge as MCP server
 │       ├── .claude-plugin/plugin.json   # plugin manifest (name: evwa-intelligence)
 │       ├── skills/                 # 6 SKILL.md folders (auto-discovered)
 │       └── README.md               # plugin + skills conventions

@@ -108,8 +108,10 @@ deliberately *hard* one that exercises an honesty rule.
 
 ## Where it runs
 
-- **Claude Code:** installed as a plugin — invoke with `/evwa-intelligence:<skill>` or just ask.
+- **Claude Code:** ship inside the `evwa-intelligence` plugin, which also connects the gateway for you —
+  invoke with `/evwa-intelligence:<skill>` or just ask.
 - **Claude Desktop:** per-user skill install + the EvWA connector — see
   [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md) (rolling out with OAuth Stage 2).
 
-Needs the EvWA gateway connected. Questions → your team channel.
+Needs the EvWA gateway connected (automatic with the Claude Code plugin; a separate connector on
+Desktop). Questions → your team channel.

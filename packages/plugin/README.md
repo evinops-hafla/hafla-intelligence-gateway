@@ -1,8 +1,12 @@
-# EvWA Intelligence — plugin (wave-1 skills)
+# EvWA Intelligence — Claude Code plugin (6 skills + gateway connector)
 
 Agent **skills** that sit on top of the read-only EvWA Intelligence gateway (`mcp.hafla.com`) and turn
 "who supplies X / what did we pay / 101 on X" questions into governed, cited answers — for Hafla's
 Sales / CX / supply team.
+
+This package is the **Claude Code plugin** (`evwa-intelligence`): it bundles the six skills *and* wires
+the gateway as an MCP server (running `npx @hafla/intelligence-mcp-bridge`). The skills themselves are
+portable `SKILL.md` files — the same files load standalone as per-user zips on Claude Desktop.
 
 ## Delivery model (2026-08-13 correction — read this before building more)
 
@@ -146,7 +150,8 @@ Wave-1 is **built** (5 skills) + wave-1.5 `event-needs`, **reviewed + live-teste
 read-only tools; the tool surface grows — skills are tool-first where a tool exists, incl.
 `price_anchor` (cost) + `supplier_brief` (partner dossier), and fall back to raw SQL otherwise), and
 **packaged** as a Claude Code plugin
-(`.claude-plugin/plugin.json` + repo-root `marketplace.json`). A fresh-context adversarial review +
+(`.claude-plugin/plugin.json` — skills auto-discovered + the bridge wired as MCP server — plus repo-root
+`marketplace.json`). A fresh-context adversarial review +
 running every embedded SQL/Cypher on prod caught and fixed a series of tool-contract and data-reality
 issues (named-param shapes, `describe_table` needing `schema`, `catalog_search` excluding generics,
 `supplier_discovery.costAed` being an object, `delivered[]` including stated-only rows, a join fan-out,
