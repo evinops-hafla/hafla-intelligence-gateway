@@ -15,7 +15,7 @@ these — only routing/trajectory evals do.
 | Tier | What it checks | Cost | Where | Status |
 | ---- | -------------- | ---- | ----- | ------ |
 | **1 — routing** | Given only the 6 descriptions, does a question hit the right skill? | ~cheap single calls | `run-routing-eval.mjs` + `golden-routing.json` | **built** (seed set) |
-| **2 — sampled trajectory** | 15–20 stratified questions run through the skills + live gateway; assert shape/grounding (right skill, right tools, ≥1 integer citation, no UUID, money labelled, freshness shown, no first-call enum error, no raw `max` quoted) | moderate | (Batch 2) | planned |
+| **2 — sampled trajectory** | 16 stratified questions; assert shape/grounding (right skill, right tools, ≥1 integer citation, no UUID, money labelled, freshness shown, no first-call enum error, no raw `max` quoted) | moderate (recording); free (scoring) | `run-trajectory-eval.mjs` + `assertions.mjs` + `golden-trajectory.json` | **built** (scorer + assertions credential-free; recording is the keyed step) |
 | **3 — full answer-quality grading** | LLM-judge scoring of the whole ~106-question set | high | (deferred) | on trigger only |
 
 Tier 1 is the safety net for the frontmatter **descriptions** — the one thing no other check covers, and
@@ -36,6 +36,26 @@ The runner gives a model **only** the 6 `name: description` pairs and asks which
 golden question should trigger, then scores against `golden-routing.json` (threshold ≥95%). A miss is
 either a **description bug** or a **golden-label bug** — investigate both. `EVAL_MODEL` overrides the
 default (`claude-haiku-4-5-20251001`).
+
+## Running Tier 2
+
+Tier 2 is split by credential profile — **scoring is free, recording is the keyed step**:
+
+```bash
+node assertions.mjs --self-test                                   # prove the assertions (24 synthetic cases)
+node run-trajectory-eval.mjs --check                              # validate golden-trajectory.json (structure)
+node run-trajectory-eval.mjs --score samples/sample-trajectories.json   # score a RECORDED run (credential-free)
+```
+
+A record is `{ question, skill, trace: [{ tool, args?, error? }], answer }`. A case passes iff **all** its
+assertions pass. `samples/sample-trajectories.json` holds real fixtures hand-recorded from live 2026-09-03
+calls (they score green, and carry both shipped-bug regressions: the White-Chiavari 1260 band outlier
+must not be quoted; `event_playbook` must be called with the exact `Wedding and Engagement` enum).
+
+**Recording** a full run (driving the 16 questions through the skills + live gateway to produce a
+trajectories file) needs the Claude Agent SDK + gateway credentials and is the manual pre-launch step —
+not wired here or into CI. The value split is deliberate: the **scorer + assertions catch regressions
+today, anywhere**; only fresh trajectory capture needs the gateway.
 
 ## The golden set
 

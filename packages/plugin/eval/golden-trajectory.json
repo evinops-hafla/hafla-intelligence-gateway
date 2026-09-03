@@ -1,0 +1,27 @@
+{
+  "_meta": {
+    "purpose": "Tier-2 sampled trajectory eval — asserts SHAPE/GROUNDING of a skill's answer + tool trace, never values (values drift with data). 16 stratified cases (>=1 per skill + the follow-up FU-1 drill + the two shipped-bug regressions).",
+    "regressions": "Case pricing-cost-chiavari carries the Finding-8 guard (noRawMaxQuoted the 1260 outlier); case event-needs-wedding carries the Finding-1 guard (noFirstCallEnumError — event_playbook must be called with the exact family enum, never the bareword 'Wedding').",
+    "execution": "Recording a trajectory needs the Agent SDK + live gateway (not CI-safe). SCORING a recorded trajectories file is credential-free — see run-trajectory-eval.mjs --score. eval/samples/sample-trajectories.json holds real hand-recorded fixtures (2026-09-03) that score green.",
+    "expectedToolsMeaning": "the MINIMUM tools the trajectory must include; more is fine.",
+    "lastReviewed": "2026-09-03"
+  },
+  "cases": [
+    { "question": "Who supplies chiavari chairs?", "expectedSkill": "supplier-discovery", "expectedTools": ["supplier_discovery"], "assertions": ["usedExpectedSkill", "usedExpectedTools", "moneyLabelled", "noUuid"] },
+    { "question": "Who provides confetti blasters? Scout the market if we're thin.", "expectedSkill": "supplier-discovery", "expectedTools": ["supplier_discovery"], "assertions": ["usedExpectedSkill", "usedExpectedTools", "moneyLabelled", "noUuid"] },
+    { "question": "Give me a dossier on Al Jefoon", "expectedSkill": "supplier-discovery", "expectedTools": ["supplier_brief"], "assertions": ["usedExpectedSkill", "usedExpectedTools", "moneyLabelled", "noUuid"] },
+    { "question": "What did we pay suppliers for a white chiavari chair?", "expectedSkill": "pricing-lookup", "expectedTools": ["price_anchor"], "assertions": ["usedExpectedSkill", "usedExpectedTools", "moneyLabelled", "noRawMaxQuoted", "noUuid"], "forbiddenValues": [1260] },
+    { "question": "What do we charge clients for a banquet chair?", "expectedSkill": "pricing-lookup", "expectedTools": ["catalog_search", "price_truth"], "assertions": ["usedExpectedSkill", "usedExpectedTools", "moneyLabelled", "noUuid"] },
+    { "question": "Dry-hire cost for 100 chairs and 20 tables delivered to Business Bay", "expectedSkill": "pricing-lookup", "expectedTools": ["safe_sql_sandbox"], "assertions": ["usedExpectedSkill", "moneyLabelled", "noUuid"] },
+    { "question": "Give me a 101 on banquet chairs", "expectedSkill": "product-brief", "expectedTools": ["catalog_search", "supplier_discovery"], "assertions": ["usedExpectedSkill", "hasIntegerCitation", "moneyLabelled", "noUuid"] },
+    { "question": "Brief me on arabic calligraphy", "expectedSkill": "product-brief", "expectedTools": ["catalog_search"], "assertions": ["usedExpectedSkill", "noUuid"] },
+    { "question": "Past events for AUS", "expectedSkill": "past-orders", "expectedTools": ["get_org_events"], "assertions": ["usedExpectedSkill", "usedExpectedTools", "moneyLabelled", "freshnessShown", "noUuid"] },
+    { "question": "What was on order #28487?", "expectedSkill": "past-orders", "expectedTools": ["safe_sql_sandbox"], "assertions": ["usedExpectedSkill", "hasIntegerCitation", "noUuid"] },
+    { "question": "Past events for AUS — give me the event numbers", "expectedSkill": "past-orders", "expectedTools": ["get_org_events"], "assertions": ["hasIntegerCitation", "noUuid"] },
+    { "question": "Where do 200-pax outdoor events happen?", "expectedSkill": "venue-recommendation", "expectedTools": ["safe_sql_sandbox"], "assertions": ["usedExpectedSkill", "hasIntegerCitation", "noUuid"] },
+    { "question": "What do I need for a wedding?", "expectedSkill": "event-needs", "expectedTools": ["event_playbook", "event_need_profile"], "assertions": ["usedExpectedSkill", "usedExpectedTools", "noFirstCallEnumError", "moneyLabelled", "freshnessShown", "noUuid"] },
+    { "question": "Checklist for an industry conference", "expectedSkill": "event-needs", "expectedTools": ["event_playbook"], "assertions": ["usedExpectedSkill", "moneyLabelled", "noUuid"] },
+    { "question": "What do we actually sell for birthdays?", "expectedSkill": "event-needs", "expectedTools": ["event_need_profile"], "assertions": ["usedExpectedSkill", "usedExpectedTools", "moneyLabelled", "noUuid"] },
+    { "question": "Top suppliers for chiavari chairs", "expectedSkill": "supplier-discovery", "expectedTools": ["supplier_discovery"], "assertions": ["usedExpectedSkill", "moneyLabelled", "noUuid"] }
+  ]
+}
