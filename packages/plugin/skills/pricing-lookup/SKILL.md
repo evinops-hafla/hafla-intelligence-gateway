@@ -51,7 +51,7 @@ Always separate two different numbers and label them:
    - `CATALOG_PRICE` → list price only (no order history — ~71% of products hit this); label it
      clearly as a list price, not a transacted one.
    - `BLOCKED_GENERIC` → it's a generic; go to Step 3.
-3. **Partner cost** (only if asked "what did we pay"): **tool-first — `price_anchor({ id: <uuid> })`.**
+3. **Partner cost** (only if asked "what did we pay"): **tool-first — `price_anchor({ productId: <uuid> })`** (or `{ productName: "<name>" }`).
    Returns `anchorAed` (tier-aware: ORDER→CART→CATALOG, real transacted cost beats list), a `band`
    (min/p25/median/p75/max), `tier`+`confidence`, `provenance` (obs / partner counts), and per-partner
    `observations` — the `productPriceBands` rollup wrapped, plus the partner breakdown. Pass `partnerId`

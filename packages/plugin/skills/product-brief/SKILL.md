@@ -56,7 +56,7 @@ encyclopedia knowledge is one line at most, skipped by default.**
    `FULFILLED_BY` grain** (`safe_cypher_sandbox`, or the `Products→OrderItems→OrderItemPartners→Partners`
    SQL) before writing "no proven supplier" — do not treat an empty tool result as ground truth.
 4. **Price band** — `price_truth({ id: <uuid> })` for the **selling** band (p25/median/p75,
-   reliable/committable); if the caller wants **cost**, `price_anchor({ id: <uuid> })` (tier-aware
+   reliable/committable); if the caller wants **cost**, `price_anchor({ productId: <uuid> })` (tier-aware
    partner-cost anchor + band, ORDER-preferred). Label selling vs cost. (`price_truth` blocks generics →
    for a `--…--` subject, the price lives in source 2/5, say so.)
 5. **WhatsApp negotiated detail + setup gotchas** (only on run choice [2]) —
