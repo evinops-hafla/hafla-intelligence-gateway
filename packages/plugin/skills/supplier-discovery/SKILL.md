@@ -1,12 +1,14 @@
 ---
 name: supplier-discovery
 description: >-
-  Find Hafla suppliers/partners for a product, service, or category and rank them by PROVEN
-  fulfilment (real past orders), not a reliability score. Use when the user asks "who can give / who
-  provides / supplier for / top suppliers for X", pastes a terse multi-constraint sourcing request
-  (product + date + city + qty + a denied/already-tried vendor list), or wants the "invisible" supply
-  chain (partners talked to in WhatsApp but never registered). Read-only. Talks to the EvWA
-  Intelligence gateway (mcp.hafla.com) via the connected MCP tools.
+  Who SUPPLIES a product, service, or category — rank Hafla suppliers/partners by PROVEN fulfilment
+  (real past orders), not a reliability score. NOT "who did/worked company X's event" — that is
+  history, route to past-orders. Use when the user asks "who can give / who provides / supplier for /
+  top suppliers for X", wants one supplier's capability dossier (proven vs just-listed products for a
+  named partner), pastes a terse multi-constraint sourcing request (product + date + city + qty
+  + a denied/already-tried vendor list), or wants the "invisible" supply chain (partners talked to in
+  WhatsApp but never registered). Read-only. Talks to the EvWA Intelligence gateway (mcp.hafla.com)
+  via the connected MCP tools.
 ---
 
 # supplier-discovery
@@ -21,6 +23,15 @@ WhatsApp/"invisible" branch, the proven-vs-stated graph cross-check), and the ho
 > offer to render large/shareable results as an **artifact**. The same gateway tools also back M2M and
 > the Maya/HEBA agents, so keep logic thin — the gateway/IDL is the source of truth.
 
+## Guard first — is the term actually a product/category?
+
+**If the extracted term is a company / event / person name — not a product or category noun — do NOT
+scout.** (e.g. "who did the AUS event", "who worked Rixos gala", an org name, a `userEventNumber` /
+`orderNumber`-shaped token, "the <company> event"). `supplier_discovery` does not error on such input —
+it silently returns `delivered: []` **plus a confident "scout the open market" recommendation**, which
+reads as a real finding but is a wrong answer to a history question. Say the question is about who
+*worked/served* a specific event or client — that's history, not sourcing — and route to `past-orders`.
+
 ## Primary tool — `supplier_discovery`
 
 Call it first for any "who supplies / top suppliers for X" question:
@@ -34,9 +45,10 @@ It returns three sections (interpret them precisely — field shapes matter):
 - **`delivered[]`** — partners matched to the product/category, one row per partner. Fields:
   `partner` (tradeName), `products`/`productCount` (matched real variants), `bespokeJobs` (custom
   `--…--` jobs — capability signal, no unit price), **`orders`** (summed `totalOrders` — **can be `0`
-  or `null`**), `costAed` — an **object `{ avg, min, max }` in AED** (**supplier→Hafla cost, never a
+  or `null`**), `costAed` — a **tier-preferred anchor `{ aed, tier, observations, lastObserved }` in
+  AED** (`tier` = ORDER→CART→CATALOG preferred, matching `price_anchor`; **supplier→Hafla cost, never a
   client price**), or `null` for a bespoke-only partner — plus `costBasis` (a words string, e.g. "N
-  observations from confirmed orders"), `lastWorkedWith`, `active`, contacts `phone` / `hasWhatsapp` /
+  observations from real orders"), `lastWorkedWith`, `active`, contacts `phone` / `hasWhatsapp` /
   `email` (already dummy-filtered by the tool) / `contactPerson` (internal use — D-9), and
   `supersededRecord` (**an old VAT-record rename — supplier is fine, that record is retired, never book
   it**). Sorted recency-then-orders; TBA/placeholder filtered.
@@ -110,7 +122,10 @@ per-product cost — call **`supplier_brief({ partnerName: "<name>" })`** (or `p
 candidates to disambiguate a fuzzy name). It gives `capability` (`provenProducts` / `statedOnlyProducts`
 / `bespokeJobs` / `totalOrders` / `lastWorkedWith`), `categoriesProven` / `categoriesStated`,
 `topProducts[]` with `costAed`, and `contact` (already dummy-filtered). This is also the fastest answer
-to **"proven vs just listed?"** for one partner — no Cypher needed.
+to **"proven vs just listed?"** for one partner — no Cypher needed. **`topProducts[].costAed` is a
+tier-preferred anchor** — `{ aed, tier, observations, lastObserved }`, `tier` = ORDER cost preferred
+over CART over CATALOG (same model as `price_anchor` and `supplier_discovery.delivered[].costAed`). Cite
+the `aed` with its `tier` + `observations` count — a firm-ish per-partner anchor, not a range.
 
 Drop to raw SQL only for a field `supplier_brief` omits — chiefly the warehouse **`address` / `cityId`**:
 
@@ -152,7 +167,9 @@ The tool defers the WhatsApp corpus (`quotedInChat`, v2), so this branch is the 
 2. Candidates = enriched `partnerNames[]` ∪ brand parsed from each chat `title`.
 3. Each candidate: `SELECT count(*) FROM "haflaCore"."Partners" WHERE "tradeName" ILIKE '%cand%' OR "legalName" ILIKE '%cand%'`.
 4. Partition **registered** (count>0) vs **★ invisible** (count=0 — talked to, never registered).
-5. Cite chat title + date window; **no fabricated order counts** for invisible suppliers.
+5. Cite chat title + date window (corpus as-of: `waCorpusGeneration.lastSyncAt` via `get_data_freshness`);
+   **no fabricated order counts** for invisible suppliers. Corpus hits are **truncated snippets** — a
+   quoted price can be cut off mid-number; verify it's complete before citing, never complete it.
 
 ### Graph cross-check — proven vs stated (`safe_cypher_sandbox`, on "proven vs just listed?")
 
@@ -172,7 +189,7 @@ RETURN p.tradeName AS partner, count(DISTINCT oi) AS provenItems ORDER BY proven
 ## Output (Claude Desktop)
 
 Every reply: **(1)** scope + FU-3 note + parsed constraints + exclusions → **(2)** ranked table from
-`delivered[]` — `partner`, `orders`, `costAed` as a **range** (e.g. `avg (min–max) AED`, labelled
+`delivered[]` — `partner`, `orders`, `costAed` as **`aed` AED (`tier`)** (e.g. `10 AED (ORDER)`, labelled
 _supplier cost_), `lastWorkedWith` — **proven rows (`orders>0`) first, listed-only (`orders` 0/null)
 below a divider**; flag `supersededRecord` ("retired record — don't book") and bespoke-only partners as
 capability signals → **(3)** relevant `plannerNotes` (competitor quotes / new vendors) → **(4)**
@@ -183,15 +200,42 @@ capability signals → **(3)** relevant `plannerNotes` (competitor quotes / new 
 - Keep it scannable; for a large/shareable shortlist (≳8 rows, or "save/compare/forward"), offer a
   Claude **artifact**.
 
+## Output conventions
+
+<!-- OUTPUT-CONVENTIONS:START — keep byte-identical across all skills; verify-skills.mjs enforces this -->
+Shared formatting for every EvWA answer (skill-specific structure/order is above):
+
+- **Table by default:** ≥3 comparable rows → a markdown table, one entity per row, with the citation
+  key (`orderNumber` / `userEventNumber` / ticket # / partner `tradeName`) as its own column.
+- **Money — label every number, and mind the ÷100 trap:** render as `1,250 AED` with a source label
+  every time — `(supplier cost, ORDER tier)` / `(selling)` / `(delivery)` / `(estimate)`. The fils→AED
+  `÷100` conversion applies **only to raw-SQL money columns** (`Orders.orderTotal`,
+  `productPriceBands.*Fils`); every **tool** output (`anchorAed`, `costAed.aed`, `medianUnitAed`,
+  `feeAed`, `valueAed`) is **already AED — never re-divide it** (÷100 on an AED tool value is a silent
+  100× error).
+- **Bands, not extremes:** quote the tier-preferred anchor / median / p25–p75; **never quote a raw
+  `min` or `max` as a price** — extremes hold bespoke/bundled outliers (a ~10 AED chair has shown a
+  `max` of 1260).
+- **Dates:** `D MMM YYYY` in prose, ISO `YYYY-MM-DD` in tables — one format, never a raw source-casing dump.
+- **Sources footer** — the last line of every substantive answer, mechanising the citation + freshness
+  rules into one predictable place:
+  `Sources: <integer keys> · <corpus/mirror> as-of <get_data_freshness>`
+  (e.g. `Sources: orders #16504 #16621 · event #4821 · WA corpus as-of 2026-09-03`). Never cite a UUID.
+- **Artifact** at ≳8 rows, or on any save / share / compare / forward intent.
+<!-- OUTPUT-CONVENTIONS:END -->
+
 ## Guardrails
 
 - **Read-only.** Never create/book/register. Branch-F only _flags_ invisible suppliers.
 - **No reliability score** — proven-order count + recency is the proxy; state the gap.
 - **No forward availability** — historical fulfilment only.
 - **`costAed` is supplier→Hafla cost, never a client price.** **Corpus = WhatsApp only** (not Slack/ZD).
+- **Cost bands/extremes can contain outliers** (bespoke/bundled line items). Quote the tier-preferred
+  anchor `aed` / median / p25–p75; **never quote a raw `max` as a price.**
 - **Routes out:** product "101" → `product-brief`; price distribution / cheapest-X → `pricing-lookup`;
   **margin / markup → out of scope (wave-2 commercial-intelligence)**, not `pricing-lookup`; host →
-  their past orders → `past-orders`; where/venue evidence for a pax band → `venue-recommendation`.
+  their past orders → `past-orders`; where/venue evidence for a pax band → `venue-recommendation`;
+  "what do I need for a &lt;event&gt;" → `event-needs`.
 
 ## Forward note
 

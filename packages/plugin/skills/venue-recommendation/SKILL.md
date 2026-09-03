@@ -25,9 +25,11 @@ them. Cited by event # / order #."
 State the coverage honestly in the disclosure (verified on prod, 429,870 event-detail rows): only
 **~17.6%** of events carry a **site-type** and only **~4%** a **named address** (`exactAddress`) — most
 events are homes (Villa/Apartment) with neither. So both signals are **partial samples**, and the
-default window is **the last 24 months** (pre-2024 data is near-zero) — apply
-`WHERE ued."createdAt" > now() - interval '24 months'` (confirm the timestamp column via
-`describe_table`) so the evidence reflects current behaviour.
+default window is **the last 24 months of actual event dates** (pre-2024 data is near-zero) — apply
+`WHERE ued."eventDate" > now() - interval '24 months' AND ued."eventDate" <= now()`. Use
+**`eventDate`** (when the event happened), NOT `createdAt` (when the row was inserted — a booking
+entered yesterday for an event 10 months out is not past evidence); the upper bound excludes
+future-dated bookings, since this skill reports what past events **did**.
 
 ## Step 0 — Parse the constraint band
 
@@ -55,6 +57,8 @@ SELECT est."name" AS "siteType", count(*) AS "events"
 FROM "haflaCore"."UserEventDetails" ued
 JOIN "haflaCore"."EventSiteTypes" est ON est.id = ued."eventSiteTypeId"
 WHERE ued."expectedGuestCount" BETWEEN :paxLo AND :paxHi
+  AND ued."eventDate" > now() - interval '24 months'
+  AND ued."eventDate" <= now()          -- past evidence only: exclude future-dated bookings
 GROUP BY est."name"
 ORDER BY "events" DESC;
 ```
@@ -67,6 +71,8 @@ SELECT ued."exactAddress", count(*) AS "events",
 FROM "haflaCore"."UserEventDetails" ued
 JOIN "haflaCore"."UserEvents" ue ON ue.id = ued."userEventId"
 WHERE ued."expectedGuestCount" BETWEEN :paxLo AND :paxHi
+  AND ued."eventDate" > now() - interval '24 months'
+  AND ued."eventDate" <= now()          -- past evidence only: exclude future-dated bookings
   AND ued."exactAddress" IS NOT NULL
 GROUP BY ued."exactAddress"
 HAVING count(*) >= 2
@@ -89,7 +95,32 @@ For the recurring venues, surface the vendors/partners who served events there:
   events' orders) — cite `tradeName`.
 - `search_internal_knowledge({ query: "<venue or area> event vendor catering AV parking" })` — the WA corpus
   (**WhatsApp only**) carries venue mentions + vendor names + alcohol/parking/capacity context that
-  lives nowhere structured. Disclose the corpus date; cite chat title.
+  lives nowhere structured. Disclose the corpus date (`waCorpusGeneration.lastSyncAt` via
+  `get_data_freshness`); cite chat title.
+
+## Output conventions
+
+<!-- OUTPUT-CONVENTIONS:START — keep byte-identical across all skills; verify-skills.mjs enforces this -->
+Shared formatting for every EvWA answer (skill-specific structure/order is above):
+
+- **Table by default:** ≥3 comparable rows → a markdown table, one entity per row, with the citation
+  key (`orderNumber` / `userEventNumber` / ticket # / partner `tradeName`) as its own column.
+- **Money — label every number, and mind the ÷100 trap:** render as `1,250 AED` with a source label
+  every time — `(supplier cost, ORDER tier)` / `(selling)` / `(delivery)` / `(estimate)`. The fils→AED
+  `÷100` conversion applies **only to raw-SQL money columns** (`Orders.orderTotal`,
+  `productPriceBands.*Fils`); every **tool** output (`anchorAed`, `costAed.aed`, `medianUnitAed`,
+  `feeAed`, `valueAed`) is **already AED — never re-divide it** (÷100 on an AED tool value is a silent
+  100× error).
+- **Bands, not extremes:** quote the tier-preferred anchor / median / p25–p75; **never quote a raw
+  `min` or `max` as a price** — extremes hold bespoke/bundled outliers (a ~10 AED chair has shown a
+  `max` of 1260).
+- **Dates:** `D MMM YYYY` in prose, ISO `YYYY-MM-DD` in tables — one format, never a raw source-casing dump.
+- **Sources footer** — the last line of every substantive answer, mechanising the citation + freshness
+  rules into one predictable place:
+  `Sources: <integer keys> · <corpus/mirror> as-of <get_data_freshness>`
+  (e.g. `Sources: orders #16504 #16621 · event #4821 · WA corpus as-of 2026-09-03`). Never cite a UUID.
+- **Artifact** at ≳8 rows, or on any save / share / compare / forward intent.
+<!-- OUTPUT-CONVENTIONS:END -->
 
 ## Guardrails / routes out
 
@@ -101,7 +132,7 @@ For the recurring venues, surface the vendors/partners who served events there:
 - Read-only. Non-filterable constraints (vibe/budget) are echoed, not silently applied.
 - **Routes out:** a specific vendor who can supply X → `supplier-discovery`; what a vendor charges / a
   product's price → `pricing-lookup`; a host's full event history → `past-orders`; a product "101" →
-  `product-brief`.
+  `product-brief`; "what do I need for a &lt;event&gt;" (planning checklist) → `event-needs`.
 
 ## Forward note
 

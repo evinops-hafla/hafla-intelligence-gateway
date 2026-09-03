@@ -1,13 +1,13 @@
 ---
 name: pricing-lookup
 description: >-
-  Look up what Hafla CHARGES or PAID for a product/service — real transacted prices (p25/median/p75)
-  and the negotiated per-unit numbers buried in order notes and WhatsApp. Use for "what does X cost /
-  what did we pay for X / typical or per-unit rate / dry-hire charge for N chairs + M tables". Handles
-  both fully-cataloged SKUs (structured) and generic "--Name--" / dry-hire / F&B items (whose real
-  price lives in notes + chat, not a price column). Read-only, via the EvWA gateway. NOT pricing
-  strategy ("how should we price X") and NOT supplier discovery (route vendor questions to
-  supplier-discovery).
+  What a named PRODUCT/service costs — what Hafla CHARGES or PAID for it: real transacted prices
+  (p25/median/p75) plus negotiated per-unit numbers from order notes and WhatsApp. NOT whole-event
+  cost ("what does a wedding cost" → event-needs). Use for "what does X cost / what did we pay for X /
+  typical or per-unit rate / dry-hire charge for N chairs + M tables". Handles both fully-cataloged
+  SKUs (structured) and generic "--Name--" / dry-hire / F&B items (whose real price lives in notes +
+  chat, not a price column). Read-only, via the EvWA gateway. NOT pricing strategy ("how should we
+  price X") and NOT supplier discovery (route vendor questions to supplier-discovery).
 ---
 
 # pricing-lookup
@@ -34,6 +34,10 @@ Always separate two different numbers and label them:
 
 ## Step 1 — Parse the request
 
+- **Is it a product at all?** A bare event-type/family name (wedding, gala, conference…) is **never a
+  product** — `catalog_search("wedding")` returns 1,000+ wedding-tagged SKUs and a chair's price is not
+  "what a wedding costs". Route whole-event cost questions to `event-needs`; only named products/services
+  stay here.
 - **Identifier?** Order# / Event# / Ticket# → direct lookup (Branch-I).
 - **Terse multi-constraint brief** ("12× chairs, 4× tables, vendor Fern, 4 April, Meadows"): parse
   `items[]=[{qty,name}]`, date, location, pax/duration, and **vendorsTried[]** (`Vendor: X` / "X, Y
@@ -51,11 +55,14 @@ Always separate two different numbers and label them:
    - `CATALOG_PRICE` → list price only (no order history — ~71% of products hit this); label it
      clearly as a list price, not a transacted one.
    - `BLOCKED_GENERIC` → it's a generic; go to Step 3.
-3. **Partner cost** (only if asked "what did we pay"): **tool-first — `price_anchor({ id: <uuid> })`.**
+3. **Partner cost** (only if asked "what did we pay"): **tool-first — `price_anchor({ productId: <uuid> })`** (or `{ productName: "<name>" }`).
    Returns `anchorAed` (tier-aware: ORDER→CART→CATALOG, real transacted cost beats list), a `band`
    (min/p25/median/p75/max), `tier`+`confidence`, `provenance` (obs / partner counts), and per-partner
    `observations` — the `productPriceBands` rollup wrapped, plus the partner breakdown. Pass `partnerId`
    to narrow to one supplier. Lead with `anchorAed` + `tier`. This is **partner cost**, label it so.
+   **Outlier caveat:** `minAed`/`maxAed` are raw extremes and can be wildly non-representative
+   (bespoke/bundled line items, data-entry errors — verified live: a ~10 AED chair with `maxAed: 1260`).
+   Quote `anchorAed` / median and the **p25–p75** band; **NEVER quote the raw `max` as a price.**
    *(Raw fallback only if you need a column the tool omits, or to cross-check a recent-tool result:
    `SELECT "representativeMedianFils"/100.0 AS "repMedianAed", "representativeTier", … FROM
    intelligence."productPriceBands" WHERE "productId" = :uuid;`)*
@@ -82,9 +89,23 @@ Always separate two different numbers and label them:
 
 2. **WhatsApp negotiated quotes** (`search_internal_knowledge`): the corpus often holds the ONLY
    per-unit number ("Banquet Rectangle Table AED 60/pc/day"). Corpus = **WhatsApp only**; disclose the
-   date. Cite chat title + date.
+   date (`waCorpusGeneration.lastSyncAt` via `get_data_freshness`). Cite chat title + date.
+   **Snippet caveat:** the tool returns a truncated snippet, not the full message — a price can be cut
+   off mid-number. Verify a corpus price is complete before quoting; if truncated or ambiguous between
+   variants, say so — never complete the number.
 3. **CATALOG/`ProductPartner` price is a trap for generics** ("fooling the system") — do not present it
    as the negotiated price.
+
+## Optional — total delivered cost (`delivery_fee`)
+
+If the caller wants the **all-in delivered price** (not just the unit/product price), add delivery on top
+of the product subtotal:
+`delivery_fee({ items: [{ category, quantity, name, isService? }], deliveryLocation, venueType?, deliveryTimeHour? })`
+→ `feeAed` (+ `vatAed`, `feeInclVatAed`), a `zone`, `trucks`, and a `breakdown`. It covers **delivery AND
+collection**; mark **people/services** (artist, DJ, chef, photographer…) `isService: true` → they carry no
+fee, and a booking of **only services/venues has no delivery fee at all**. Deterministic published-rate
+lookup — always returns a number. **Label it "delivery"**, separate from product price / partner cost.
+(This is a total-cost add-on, not core pricing — only when asked for delivered/all-in cost.)
 
 ## Confidence & honesty rules
 
@@ -108,11 +129,35 @@ honoured → drill-down offer (all order #s · per-partner · per-month trend ·
 widen to corpus). For a multi-item brief, offer a Claude **artifact** price sheet (one row per item:
 qty, selling median, cost median, tier, n).
 
+## Output conventions
+
+<!-- OUTPUT-CONVENTIONS:START — keep byte-identical across all skills; verify-skills.mjs enforces this -->
+Shared formatting for every EvWA answer (skill-specific structure/order is above):
+
+- **Table by default:** ≥3 comparable rows → a markdown table, one entity per row, with the citation
+  key (`orderNumber` / `userEventNumber` / ticket # / partner `tradeName`) as its own column.
+- **Money — label every number, and mind the ÷100 trap:** render as `1,250 AED` with a source label
+  every time — `(supplier cost, ORDER tier)` / `(selling)` / `(delivery)` / `(estimate)`. The fils→AED
+  `÷100` conversion applies **only to raw-SQL money columns** (`Orders.orderTotal`,
+  `productPriceBands.*Fils`); every **tool** output (`anchorAed`, `costAed.aed`, `medianUnitAed`,
+  `feeAed`, `valueAed`) is **already AED — never re-divide it** (÷100 on an AED tool value is a silent
+  100× error).
+- **Bands, not extremes:** quote the tier-preferred anchor / median / p25–p75; **never quote a raw
+  `min` or `max` as a price** — extremes hold bespoke/bundled outliers (a ~10 AED chair has shown a
+  `max` of 1260).
+- **Dates:** `D MMM YYYY` in prose, ISO `YYYY-MM-DD` in tables — one format, never a raw source-casing dump.
+- **Sources footer** — the last line of every substantive answer, mechanising the citation + freshness
+  rules into one predictable place:
+  `Sources: <integer keys> · <corpus/mirror> as-of <get_data_freshness>`
+  (e.g. `Sources: orders #16504 #16621 · event #4821 · WA corpus as-of 2026-09-03`). Never cite a UUID.
+- **Artifact** at ≳8 rows, or on any save / share / compare / forward intent.
+<!-- OUTPUT-CONVENTIONS:END -->
+
 ## Guardrails / routes out
 
 - Read-only. **Not pricing strategy** ("how should we price X" — out of scope). **Not supplier
   discovery** — "who can supply / who else" → `supplier-discovery`. Product "101" → `product-brief`;
-  where/venue evidence → `venue-recommendation`.
+  where/venue evidence → `venue-recommendation`; "what do I need for a &lt;event&gt;" → `event-needs`.
 - **Margin / markup / profit is OUT OF SCOPE (wave-2 commercial-intelligence).** Selling and cost both
   appear here, so it is a real temptation — do **not** compute or present `selling − cost`, markup %, or
   margin, even when a caller (or `supplier-discovery`) arrives asking for it. Deflect: "margin is wave-2

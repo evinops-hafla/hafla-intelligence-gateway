@@ -22,7 +22,7 @@ Talk about "the MCP Gateway server" when you mean the Cloud Run service; "the In
 | Package                                                                  | Type                                      | Status                  |
 | ------------------------------------------------------------------------ | ----------------------------------------- | ----------------------- |
 | [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge`    | 1.0.7 — live on npm     |
-| [`packages/plugin/`](packages/plugin/)                                   | Claude Code plugin — wave-1 Agent Skills  | 5 skills built ([#12](https://github.com/evinops-hafla/hafla-intelligence-gateway/pull/12)) |
+| [`packages/plugin/`](packages/plugin/)                                   | Claude Code plugin — Agent Skills         | 6 skills (5 wave-1 + `event-needs`), tool-first; verified in CI |
 
 ### `@hafla/intelligence-mcp-bridge`
 
@@ -68,7 +68,7 @@ intelligence-gateway/
 │   │   └── LICENSE                 # MIT (root LICENSE; the package symlinks via npm `files`)
 │   └── plugin/                     # Claude Code plugin — wave-1 Agent Skills
 │       ├── .claude-plugin/plugin.json   # plugin manifest (name: evwa-intelligence)
-│       ├── skills/                 # 5 SKILL.md folders (auto-discovered)
+│       ├── skills/                 # 6 SKILL.md folders (auto-discovered)
 │       └── README.md               # plugin + skills conventions
 ├── package.json                    # npm workspaces root
 ├── .nvmrc                          # 24.15.0
@@ -98,7 +98,7 @@ cd packages/intelligence-mcp-bridge
 echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | node src/index.js
 ```
 
-The first line of stderr is a `Pre-flight OK` log; the response on stdout is a JSON-RPC `tools/list` reply with the 5 tools.
+The first line of stderr is a `Pre-flight OK` log; the response on stdout is a JSON-RPC `tools/list` reply listing the gateway's 23 read-only tools.
 
 ---
 

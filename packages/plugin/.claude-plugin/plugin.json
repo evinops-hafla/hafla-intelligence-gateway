@@ -1,7 +1,7 @@
 {
   "name": "evwa-intelligence",
   "displayName": "EvWA Intelligence",
-  "description": "Wave-1 Agent Skills over the read-only EvWA Intelligence gateway (mcp.hafla.com): supplier-discovery, pricing-lookup, product-brief, past-orders, venue-recommendation. Governed, cited answers for Hafla Sales / CX / supply.",
+  "description": "Agent Skills over the read-only EvWA Intelligence gateway (mcp.hafla.com): supplier-discovery, pricing-lookup, product-brief, past-orders, venue-recommendation, event-needs. Governed, cited answers for Hafla Sales / CX / supply.",
   "version": "0.1.0",
   "author": { "name": "Hafla Intelligence", "email": "sidd@hafla.com" },
   "homepage": "https://github.com/evinops-hafla/hafla-intelligence-gateway",

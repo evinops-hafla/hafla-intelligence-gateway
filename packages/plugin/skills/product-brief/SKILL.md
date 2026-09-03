@@ -1,11 +1,12 @@
 ---
 name: product-brief
 description: >-
-  Build a one-page Hafla-context brief ("101") on any product, service, or concept — catalog match,
+  Build a one-page Hafla-context brief ("101") on ONE product, service, or concept — catalog match,
   what was actually ordered (negotiated spec from order notes), proven suppliers, a price band, recent
-  cited orders, and negotiated/setup detail from WhatsApp. Use for "/101 X", "give me 101 on X", "brief
-  me on X", "what do we know about X". Hafla-context-first (skips generic encyclopedia knowledge).
-  Read-only, via the EvWA gateway.
+  cited orders, and negotiated/setup detail from WhatsApp. NOT a whole-event planning checklist ("what
+  do I need for a wedding" → event-needs). Use for "/101 X", "give me 101 on X", "brief me on X", "what
+  do we know about X". Hafla-context-first (skips generic encyclopedia knowledge). Read-only, via the
+  EvWA gateway.
 ---
 
 # product-brief
@@ -27,7 +28,7 @@ encyclopedia knowledge is one line at most, skipped by default.**
 
 ## The five sources (compose them; cite as you go)
 
-1. **Catalog match** — `product_lookup({ id|slug|productNumber })` if you have an id, else
+1. **Catalog match** — `product_lookup({ id })` (or `{ slug }` / `{ productNumber }` — exactly one) if you have an identifier, else
    `catalog_search({ query: "<subject>" })` to resolve **named** SKU(s). **`catalog_search` EXCLUDES
    generic `--Name--` products** (it filters `btrim(name) NOT LIKE '--%--'`), so to detect/resolve a
    generic run a raw query: `safe_sql_sandbox` → `SELECT id, name FROM "haflaCore"."Products" WHERE name
@@ -56,12 +57,14 @@ encyclopedia knowledge is one line at most, skipped by default.**
    `FULFILLED_BY` grain** (`safe_cypher_sandbox`, or the `Products→OrderItems→OrderItemPartners→Partners`
    SQL) before writing "no proven supplier" — do not treat an empty tool result as ground truth.
 4. **Price band** — `price_truth({ id: <uuid> })` for the **selling** band (p25/median/p75,
-   reliable/committable); if the caller wants **cost**, `price_anchor({ id: <uuid> })` (tier-aware
+   reliable/committable); if the caller wants **cost**, `price_anchor({ productId: <uuid> })` (tier-aware
    partner-cost anchor + band, ORDER-preferred). Label selling vs cost. (`price_truth` blocks generics →
    for a `--…--` subject, the price lives in source 2/5, say so.)
 5. **WhatsApp negotiated detail + setup gotchas** (only on run choice [2]) —
    `search_internal_knowledge({ query: "<subject> setup pricing supplier" })`. Corpus = **WhatsApp only**; disclose
-   the date; cite chat title. Pull recurring setup challenges + partner mentions.
+   the date (`waCorpusGeneration.lastSyncAt` via `get_data_freshness`); cite chat title. Pull recurring
+   setup challenges + partner mentions. **Snippet caveat:** hits are truncated snippets — a price can be
+   cut off mid-number; verify a corpus price is complete before quoting it, never complete a cut-off number.
 
 Optional: `related_products({ id })` for "commonly ordered with" (a useful brief line), and
 `get_ticket_360({ ticket_id: "<n>" })` if the user drills into a cited Zendesk ticket.
@@ -77,6 +80,30 @@ Optional: `related_products({ id })` for "commonly ordered with" (a useful brief
 6. **[if run 2] Negotiated/setup notes** — recurring gotchas + vendor mentions from the corpus.
 7. **Data window + confidence** stated honestly; **scope-widen offer**.
 
+## Output conventions
+
+<!-- OUTPUT-CONVENTIONS:START — keep byte-identical across all skills; verify-skills.mjs enforces this -->
+Shared formatting for every EvWA answer (skill-specific structure/order is above):
+
+- **Table by default:** ≥3 comparable rows → a markdown table, one entity per row, with the citation
+  key (`orderNumber` / `userEventNumber` / ticket # / partner `tradeName`) as its own column.
+- **Money — label every number, and mind the ÷100 trap:** render as `1,250 AED` with a source label
+  every time — `(supplier cost, ORDER tier)` / `(selling)` / `(delivery)` / `(estimate)`. The fils→AED
+  `÷100` conversion applies **only to raw-SQL money columns** (`Orders.orderTotal`,
+  `productPriceBands.*Fils`); every **tool** output (`anchorAed`, `costAed.aed`, `medianUnitAed`,
+  `feeAed`, `valueAed`) is **already AED — never re-divide it** (÷100 on an AED tool value is a silent
+  100× error).
+- **Bands, not extremes:** quote the tier-preferred anchor / median / p25–p75; **never quote a raw
+  `min` or `max` as a price** — extremes hold bespoke/bundled outliers (a ~10 AED chair has shown a
+  `max` of 1260).
+- **Dates:** `D MMM YYYY` in prose, ISO `YYYY-MM-DD` in tables — one format, never a raw source-casing dump.
+- **Sources footer** — the last line of every substantive answer, mechanising the citation + freshness
+  rules into one predictable place:
+  `Sources: <integer keys> · <corpus/mirror> as-of <get_data_freshness>`
+  (e.g. `Sources: orders #16504 #16621 · event #4821 · WA corpus as-of 2026-09-03`). Never cite a UUID.
+- **Artifact** at ≳8 rows, or on any save / share / compare / forward intent.
+<!-- OUTPUT-CONVENTIONS:END -->
+
 ## Guardrails / routes out
 
 - **Hafla-context-first.** Do not pad with generic encyclopedia knowledge (a planner rejected general
@@ -88,7 +115,7 @@ Optional: `related_products({ id })` for "commonly ordered with" (a useful brief
   (Matches `pricing-lookup` / `supplier-discovery` / `venue-recommendation`.)
 - Read-only. Deep host order history → `past-orders`; price distribution deep-dive → `pricing-lookup`;
   "who can supply / who else" → `supplier-discovery`; where/venue evidence for a pax band →
-  `venue-recommendation`.
+  `venue-recommendation`; "what do I need for a &lt;event&gt;" (planning checklist) → `event-needs`.
 - State the real data window and confidence; don't imply completeness the sources don't have.
 
 ## Forward note

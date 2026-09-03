@@ -30,10 +30,12 @@ Full rationale: `hafla-intelligence/mcp-gateway/specs/history-and-future/history
 | 3   | `product-brief`        | **built (tool-first orchestrator)** |
 | 4   | `past-orders`          | **built (tool-first)**              |
 | 5   | `venue-recommendation` | **built (evidence-only)**           |
+| 6   | `event-needs`          | **built (wave-1.5 — planning bill-of-needs)** |
 
 Design specs live in the sibling repo:
 `hafla-intelligence/mcp-gateway/specs/history-and-future/history/research/intelligence-gateway/skills-wave-1/`
-(`00-shared-context.md` + one `proposal-<skill>.md` each).
+(`00-shared-context.md` + one `proposal-<skill>.md` per **wave-1** skill; `event-needs` is wave-1.5 and
+has no proposal doc).
 
 ## Layout
 
@@ -46,6 +48,22 @@ packages/plugin/
     product-brief/SKILL.md               # the 5-source "101" (orchestrator)
     past-orders/SKILL.md                 # history for a host/partner/order/event
     venue-recommendation/SKILL.md        # evidence-only venue lookup
+    event-needs/SKILL.md                 # "what do I need for a <event>?" (ideal vs actual)
+  scripts/
+    pack-skills.sh                       # zip each skill for Claude Desktop upload (verifies first)
+    verify-skills.mjs                    # static integrity checks (params/frontmatter/routing/conventions) — CI gate
+    tool-schemas.json                    # gateway tool-param snapshot (source of truth for verify)
+    doctor.sh                            # Claude Code preflight (node/gcloud/token/bridge tools/list)
+  eval/                                  # answer-quality evals (routing + trajectory) — see eval/README.md
+    golden-routing.json                  # Tier-1: question -> expected skill (67 cases)
+    run-routing-eval.mjs                 # Tier-1 runner (--check credential-free; real run needs a key)
+    assertions.mjs                       # Tier-2 shape/grounding checks (+ --self-test)
+    golden-trajectory.json               # Tier-2: 16 stratified cases (shape assertions)
+    run-trajectory-eval.mjs              # Tier-2 runner (--check; --score a recorded run — credential-free)
+    samples/                             # real recorded trajectory fixtures (score green)
+  SKILLS-GUIDE.md                        # user-facing "which skill do I use?" + quickstart router
+  AUTHORING.md                           # how to add/change a skill (verification discipline)
+  DESKTOP-SETUP.md                       # Desktop connector + skill-install runbook (draft)
 ```
 
 Each skill is a portable `SKILL.md` (YAML frontmatter `name` + `description`, then instructions). The
@@ -57,14 +75,33 @@ Each skill is a portable `SKILL.md` (YAML frontmatter `name` + `description`, th
   ticket #, partner `tradeName`. **Never surface product/partner UUIDs.**
 - **Source-honesty** — semantic conversation search (`search_internal_knowledge`) is **WhatsApp only**;
   never claim to semantically search Slack/Zendesk. Disclose the data/corpus window.
+- **Freshness** — when disclosing that window, cite the real watermark from `get_data_freshness`
+  (`waCorpusGeneration.lastSyncAt` = the WhatsApp corpus; `haflaCoreMirror.lastSyncAt` = the ~4h
+  order/history mirror) instead of a hardcoded date.
 - **Read-only** — no create/book/register (the gateway exposes no write tools).
 - **Money labels** — partner `costAed` (supplier→Hafla) is never a client price; selling price is never
   a cost. Label which one a number is.
 - **Route out** — supply → `supplier-discovery`, price → `pricing-lookup`, 101 → `product-brief`,
-  history → `past-orders`, venue evidence → `venue-recommendation`; pricing _strategy_ and _margin_ are
-  out of scope (wave-2 commercial intelligence).
+  history → `past-orders`, venue evidence → `venue-recommendation`, "what do I need for a &lt;event&gt;" →
+  `event-needs`; pricing _strategy_ and _margin_ are out of scope (wave-2 commercial intelligence).
+
+**Output format** (the enforced copy is the byte-identical `OUTPUT-CONVENTIONS` block embedded in every
+`SKILL.md` — a Desktop zip ships only its own SKILL.md, so a README-only rule would be invisible at
+answer time; `verify-skills.mjs` asserts the 6 copies match):
+
+- **Table** by default for ≥3 comparable rows, citation key as its own column.
+- **Money** — always labelled (`supplier cost` / `selling` / `delivery` / `estimate`); the fils→AED
+  `÷100` applies **only to raw-SQL money columns** — every tool output (`anchorAed`, `costAed.aed`,
+  `medianUnitAed`, `feeAed`, `valueAed`) is already AED, so re-dividing it is a silent 100× error.
+- **Bands, not extremes** — quote anchor / median / p25–p75, never a raw `min`/`max`.
+- **Dates** — `D MMM YYYY` in prose, ISO in tables.
+- **Sources footer** — a `Sources: <keys> · <corpus/mirror> as-of <get_data_freshness>` last line.
+- **Artifact** at ≳8 rows or on save/share/compare intent.
 
 ## Install
+
+> **Not sure where you run this?** Start with the persona × surface quickstart + first-success query at
+> the top of [`SKILLS-GUIDE.md`](SKILLS-GUIDE.md). The canonical commands are below.
 
 **Claude Code (works today):**
 
@@ -73,7 +110,7 @@ Each skill is a portable `SKILL.md` (YAML frontmatter `name` + `description`, th
 /plugin install evwa-intelligence@hafla-intelligence-gateway
 ```
 
-Installing wires the 5 skills **and** the gateway connector (`hafla-evwa-idl-gateway`, via
+Installing wires the skills **and** the gateway connector (`hafla-evwa-idl-gateway`, via
 `npx @hafla/intelligence-mcp-bridge`) together. Prerequisite: `gcloud` installed + `gcloud auth login`
 with your `@hafla.com` account — the bridge mints a Google ID token and cannot bundle auth (see the
 bridge README for full onboarding).
@@ -99,13 +136,13 @@ so Claude Code is the working surface today.
   as an OAuth 2.1 resource server → **OAuth Stage 2 (deferred).** Blocked until then.
 - **No org-wide custom-Skill distribution exists on any plan** (incl. Enterprise) — skills are per-user
   zip upload; only the remote **connector** is org-deployable by an owner.
-- Tool migration **DONE** (PR #314/#316/#317/#319/#320, 2026-08-14): all 5 skills are tool-first where a
+- Tool migration **DONE** (PR #314/#316/#317/#319/#320, 2026-08-14): all skills are tool-first where a
   tool exists; remaining raw-SQL grains (generic `--Name--` price, per-host order enumeration, venue
   evidence) have no tool yet — noted in each SKILL.md's forward note.
 
 ## Status
 
-Wave-1 is **built** (all 5 skills), **reviewed + live-tested** against the deployed gateway (20+
+Wave-1 is **built** (5 skills) + wave-1.5 `event-needs`, **reviewed + live-tested** against the deployed gateway (23
 read-only tools; the tool surface grows — skills are tool-first where a tool exists, incl.
 `price_anchor` (cost) + `supplier_brief` (partner dossier), and fall back to raw SQL otherwise), and
 **packaged** as a Claude Code plugin
@@ -116,8 +153,13 @@ issues (named-param shapes, `describe_table` needing `schema`, `catalog_search` 
 ~4%-`exactAddress` / ~17.6%-site-type coverage). Every tool call and SQL query is verified against the
 live contracts/schema.
 
-**Remaining:** a hands-on `/plugin install` + one-query run on a gcloud-authed machine, then merge
-([#12](https://github.com/evinops-hafla/hafla-intelligence-gateway/pull/12)); the claude.ai/Desktop
-surface awaits OAuth Stage 2. **Maturity:** the underlying R1/pricing/supplier tools are recent
-first-cuts (some flagged pre-alpha) — richer IDL-processed versions are planned, so treat tool outputs
-as improving, not final.
+**Shipped:** the wave-1 skills merged via
+[#12](https://github.com/evinops-hafla/hafla-intelligence-gateway/pull/12) (2026-08-23) and the
+hands-on `/plugin install` + one-query run is done — Claude Code is the working surface today.
+**On the current launch-hardening branch (one PR pending):** an embedded, harness-enforced output-
+conventions block in every skill; a starter-prompt library + persona×surface quickstart in
+`SKILLS-GUIDE.md`; description front-loading; the [`eval/`](eval/) answer-quality harness (Tier-1 routing
+over 67 golden cases + Tier-2 shape/grounding assertions with real fixtures, both carrying the shipped-
+bug regressions); and `scripts/doctor.sh`. **Remaining after that:** the claude.ai/Desktop surface awaits
+OAuth Stage 2. **Maturity:** the underlying R1/pricing/supplier tools are recent first-cuts (some flagged
+pre-alpha) — richer IDL-processed versions are planned, so treat tool outputs as improving, not final.

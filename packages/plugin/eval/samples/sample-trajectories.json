@@ -1,0 +1,30 @@
+[
+  {
+    "_note": "Real fixture — hand-recorded from a live price_anchor(productId: White Chiavari) call on 2026-09-03 (anchorAed 10, tier ORDER, band min4/p25 8/median 10/p75 10/MAX 1260, 2348 obs, 36 partners). Demonstrates the Finding-8 regression guard: a correct answer quotes the anchor/band, never the 1260 outlier.",
+    "question": "What did we pay suppliers for a white chiavari chair?",
+    "skill": "pricing-lookup",
+    "trace": [
+      { "tool": "price_anchor", "args": { "productId": "6a86604d-7c5a-4852-8444-1e4b063f49c3" } }
+    ],
+    "answer": "Partner cost for a White Chiavari Chair: anchor 10 AED (supplier cost, ORDER tier), from 2,348 observations across 36 partners. The p25–p75 band is 8–10 AED (this is cost, not a client selling price). I'm not quoting the raw band max — it's a bespoke/bundled outlier, not a representative price. haflaCore mirror as-of 2026-09-01."
+  },
+  {
+    "_note": "Real fixture — hand-recorded from live event_playbook(family: 'Wedding and Engagement') + event_need_profile('Wedding') calls on 2026-09-03. Demonstrates the Finding-1 regression guard: event_playbook is called with the EXACT family enum, never the bareword 'Wedding'.",
+    "question": "What do I need for a wedding?",
+    "skill": "event-needs",
+    "trace": [
+      { "tool": "event_playbook", "args": { "family": "Wedding and Engagement" } },
+      { "tool": "event_need_profile", "args": { "eventFamily": "Wedding" } }
+    ],
+    "answer": "For a wedding (mapped to the 'Wedding and Engagement' family): core needs include Venue/Ballroom, Catering at scale (halal), Ceremony stage/mandap, Photography, Florals & decor, and Coordinator/staffing. ★ Often-forgotten: alcohol licensing, AV/mic count, bridal green room, day-of timeline. What Hafla actually books for weddings (from 609 real orders): Chairs at 21.3% attach, median 13 AED (selling); Event Decor at 16.1%, median 2,700 AED (selling); Dining Tables at 9.5%, median 60 AED (selling). These are selling prices, not cost, and no margin is implied. Data window: haflaCore mirror as-of 2026-09-03."
+  },
+  {
+    "_note": "Real fixture — hand-recorded from a live safe_sql_sandbox lookup on 2026-09-03 (order #28487 = 4 line items, partner Sabir Events).",
+    "question": "What was on order #28487?",
+    "skill": "past-orders",
+    "trace": [
+      { "tool": "safe_sql_sandbox", "args": { "sql": "SELECT ... WHERE o.\"orderNumber\" = 28487" } }
+    ],
+    "answer": "Order #28487 had 4 line items, fulfilled in part by Sabir Events. Cited by order number; the per-item partner breakdown is available on request. haflaCore mirror as-of 2026-09-03."
+  }
+]
