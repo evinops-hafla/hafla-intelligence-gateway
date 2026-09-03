@@ -199,6 +199,30 @@ capability signals → **(3)** relevant `plannerNotes` (competitor quotes / new 
 - Keep it scannable; for a large/shareable shortlist (≳8 rows, or "save/compare/forward"), offer a
   Claude **artifact**.
 
+## Output conventions
+
+<!-- OUTPUT-CONVENTIONS:START — keep byte-identical across all skills; verify-skills.mjs enforces this -->
+Shared formatting for every EvWA answer (skill-specific structure/order is above):
+
+- **Table by default:** ≥3 comparable rows → a markdown table, one entity per row, with the citation
+  key (`orderNumber` / `userEventNumber` / ticket # / partner `tradeName`) as its own column.
+- **Money — label every number, and mind the ÷100 trap:** render as `1,250 AED` with a source label
+  every time — `(supplier cost, ORDER tier)` / `(selling)` / `(delivery)` / `(estimate)`. The fils→AED
+  `÷100` conversion applies **only to raw-SQL money columns** (`Orders.orderTotal`,
+  `productPriceBands.*Fils`); every **tool** output (`anchorAed`, `costAed.aed`, `medianUnitAed`,
+  `feeAed`, `valueAed`) is **already AED — never re-divide it** (÷100 on an AED tool value is a silent
+  100× error).
+- **Bands, not extremes:** quote the tier-preferred anchor / median / p25–p75; **never quote a raw
+  `min` or `max` as a price** — extremes hold bespoke/bundled outliers (a ~10 AED chair has shown a
+  `max` of 1260).
+- **Dates:** `D MMM YYYY` in prose, ISO `YYYY-MM-DD` in tables — one format, never a raw source-casing dump.
+- **Sources footer** — the last line of every substantive answer, mechanising the citation + freshness
+  rules into one predictable place:
+  `Sources: <integer keys> · <corpus/mirror> as-of <get_data_freshness>`
+  (e.g. `Sources: orders #16504 #16621 · event #4821 · WA corpus as-of 2026-09-03`). Never cite a UUID.
+- **Artifact** at ≳8 rows, or on any save / share / compare / forward intent.
+<!-- OUTPUT-CONVENTIONS:END -->
+
 ## Guardrails
 
 - **Read-only.** Never create/book/register. Branch-F only _flags_ invisible suppliers.

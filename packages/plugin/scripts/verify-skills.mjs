@@ -32,6 +32,23 @@ const schema = JSON.parse(readFileSync(join(HERE, 'tool-schemas.json'), 'utf8'))
 const TOOLS = schema.tools;
 const TOOL_NAMES = Object.keys(TOOLS);
 
+// Shared output-conventions block: fenced by these markers, must be byte-identical across all skills
+// (a Desktop zip ships only its own SKILL.md, so the block has to live inside each — a README copy is
+// invisible at answer time). The cross-skill identity check below is what prevents the 6 copies drifting.
+const CONV_START = '<!-- OUTPUT-CONVENTIONS:START';
+const CONV_END = 'OUTPUT-CONVENTIONS:END -->';
+
+// Description front-loading: the first ~200 chars are all the claude.ai UI reliably shows, so each
+// skill's disambiguating trigger must live there. At least one phrase per skill must appear in slice(0,200).
+const TRIGGER_PHRASES = {
+  'supplier-discovery': ['supplies', 'supplier'],
+  'pricing-lookup': ['cost'],
+  'product-brief': ['brief', '101'],
+  'past-orders': ['before', 'history'],
+  'venue-recommendation': ['venue'],
+  'event-needs': ['need']
+};
+
 // --- helpers ---------------------------------------------------------------
 
 function parseFrontmatter(text) {
@@ -108,6 +125,7 @@ const skillNames = new Set(skillDirs);
 const routesOut = new Map(skillDirs.map((s) => [s, new Set()]));
 let sqlCount = 0, cypherCount = 0;
 const queryReport = [];
+const conventionBlocks = new Map(); // skill -> extracted output-conventions block (for the identity check)
 
 for (const skill of skillDirs) {
   const file = join(SKILLS_DIR, skill, 'SKILL.md');
@@ -129,7 +147,21 @@ for (const skill of skillDirs) {
     else {
       if (fm.description.length > 1024) err(skill, `description ${fm.description.length} chars > 1024 (platform max)`);
       else if (fm.description.length > 200) warn(skill, `description ${fm.description.length} chars > 200 (claude.ai UI may truncate)`);
+      // front-loading: the disambiguating trigger must land in the first ~200 chars (all the UI shows)
+      const head = fm.description.slice(0, 200).toLowerCase();
+      const phrases = TRIGGER_PHRASES[skill];
+      if (!phrases) warn(skill, `no TRIGGER_PHRASES entry — add one so front-loading is enforced`);
+      else if (!phrases.some((p) => head.includes(p.toLowerCase())))
+        err(skill, `description first 200 chars lack a core trigger (one of: ${phrases.join(' | ')}) — front-load it`);
     }
+  }
+
+  // 1b. shared output-conventions block — must be present, and byte-identical across all skills
+  {
+    const s = text.indexOf(CONV_START);
+    const e = text.indexOf(CONV_END);
+    if (s === -1 || e === -1 || e < s) err(skill, `missing/malformed output-conventions block (${CONV_START} … ${CONV_END})`);
+    else conventionBlocks.set(skill, text.slice(s, e + CONV_END.length));
   }
 
   // 2. tool-call param validation
@@ -196,6 +228,18 @@ for (const [, outs] of routesOut) for (const o of outs) routedTo.add(o);
 for (const skill of skillDirs) {
   if (routesOut.get(skill).size === 0) err(skill, 'routes to no sibling skill (dead-end)');
   if (!routedTo.has(skill)) err(skill, 'no sibling skill routes to it (orphan)');
+}
+
+// 1c. output-conventions blocks must all be byte-identical (no drift across the 6 copies).
+//     Reference = the first skill (alphabetical) that has a block; every other must match it exactly.
+{
+  const present = [...conventionBlocks.entries()];
+  if (present.length > 1) {
+    const [refSkill, refBlock] = present[0];
+    for (const [skill, block] of present.slice(1)) {
+      if (block !== refBlock) err(skill, `output-conventions block differs from ${refSkill}'s — the 6 copies must be byte-identical (re-sync it)`);
+    }
+  }
 }
 
 // --- report ----------------------------------------------------------------

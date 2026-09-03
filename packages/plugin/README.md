@@ -76,6 +76,19 @@ Each skill is a portable `SKILL.md` (YAML frontmatter `name` + `description`, th
   history → `past-orders`, venue evidence → `venue-recommendation`, "what do I need for a &lt;event&gt;" →
   `event-needs`; pricing _strategy_ and _margin_ are out of scope (wave-2 commercial intelligence).
 
+**Output format** (the enforced copy is the byte-identical `OUTPUT-CONVENTIONS` block embedded in every
+`SKILL.md` — a Desktop zip ships only its own SKILL.md, so a README-only rule would be invisible at
+answer time; `verify-skills.mjs` asserts the 6 copies match):
+
+- **Table** by default for ≥3 comparable rows, citation key as its own column.
+- **Money** — always labelled (`supplier cost` / `selling` / `delivery` / `estimate`); the fils→AED
+  `÷100` applies **only to raw-SQL money columns** — every tool output (`anchorAed`, `costAed.aed`,
+  `medianUnitAed`, `feeAed`, `valueAed`) is already AED, so re-dividing it is a silent 100× error.
+- **Bands, not extremes** — quote anchor / median / p25–p75, never a raw `min`/`max`.
+- **Dates** — `D MMM YYYY` in prose, ISO in tables.
+- **Sources footer** — a `Sources: <keys> · <corpus/mirror> as-of <get_data_freshness>` last line.
+- **Artifact** at ≳8 rows or on save/share/compare intent.
+
 ## Install
 
 **Claude Code (works today):**
