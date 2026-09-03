@@ -155,7 +155,10 @@ live contracts/schema.
 **Shipped:** the wave-1 skills merged via
 [#12](https://github.com/evinops-hafla/hafla-intelligence-gateway/pull/12) (2026-08-23) and the
 hands-on `/plugin install` + one-query run is done — Claude Code is the working surface today.
-**Remaining:** the current branch's launch-hardening PR; the claude.ai/Desktop surface awaits OAuth
-Stage 2. **Maturity:** the underlying R1/pricing/supplier tools are recent
-first-cuts (some flagged pre-alpha) — richer IDL-processed versions are planned, so treat tool outputs
-as improving, not final.
+**On the current launch-hardening branch (one PR pending):** an embedded, harness-enforced output-
+conventions block in every skill; a starter-prompt library + persona×surface quickstart in
+`SKILLS-GUIDE.md`; description front-loading; the [`eval/`](eval/) answer-quality harness (Tier-1 routing
+over 67 golden cases + Tier-2 shape/grounding assertions with real fixtures, both carrying the shipped-
+bug regressions); and `scripts/doctor.sh`. **Remaining after that:** the claude.ai/Desktop surface awaits
+OAuth Stage 2. **Maturity:** the underlying R1/pricing/supplier tools are recent first-cuts (some flagged
+pre-alpha) — richer IDL-processed versions are planned, so treat tool outputs as improving, not final.
