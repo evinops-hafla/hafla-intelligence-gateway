@@ -6,7 +6,9 @@ real order / event / ticket numbers**.
 
 ## Quickstart — where do I run this?
 
-Find your row, do the one thing in it, then paste the first-success query below.
+Find your row, do the one thing in it, then paste the first-success query below. (Prefer a guided
+setup? Paste [`SETUP-PROMPT.md`](SETUP-PROMPT.md) into Claude Code — it configures **and verifies** the
+gateway for you, including the gcloud-auth gotcha.)
 
 | You are… | On… | Do this |
 | -------- | --- | ------- |

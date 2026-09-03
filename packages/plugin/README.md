@@ -66,6 +66,7 @@ packages/plugin/
     run-trajectory-eval.mjs              # Tier-2 runner (--check; --score a recorded run — credential-free)
     samples/                             # real recorded trajectory fixtures (score green)
   SKILLS-GUIDE.md                        # user-facing "which skill do I use?" + quickstart router
+  SETUP-PROMPT.md                        # paste-into-Claude-Code prompt to set up + verify the gateway
   AUTHORING.md                           # how to add/change a skill (verification discipline)
   DESKTOP-SETUP.md                       # Desktop connector + skill-install runbook (draft)
 ```
@@ -105,7 +106,9 @@ answer time; `verify-skills.mjs` asserts the 6 copies match):
 ## Install
 
 > **Not sure where you run this?** Start with the persona × surface quickstart + first-success query at
-> the top of [`SKILLS-GUIDE.md`](SKILLS-GUIDE.md). The canonical commands are below.
+> the top of [`SKILLS-GUIDE.md`](SKILLS-GUIDE.md). The canonical commands are below. To have Claude Code
+> set up **and verify** the gateway connection for you (incl. the gcloud-auth gotcha), paste
+> [`SETUP-PROMPT.md`](SETUP-PROMPT.md).
 
 **Claude Code (works today):**
 
