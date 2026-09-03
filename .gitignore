@@ -4,6 +4,7 @@ node_modules/
 # Build / test output
 coverage/
 *.tgz
+packages/plugin/dist/   # pack-skills.sh output (skill zips — build artifacts, SKILL.md is source)
 
 # OS / IDE
 .DS_Store
