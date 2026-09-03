@@ -48,7 +48,12 @@ packages/plugin/
     past-orders/SKILL.md                 # history for a host/partner/order/event
     venue-recommendation/SKILL.md        # evidence-only venue lookup
     event-needs/SKILL.md                 # "what do I need for a <event>?" (ideal vs actual)
-  scripts/pack-skills.sh                 # zip each skill for Claude Desktop upload
+  scripts/
+    pack-skills.sh                       # zip each skill for Claude Desktop upload (verifies first)
+    verify-skills.mjs                    # static integrity checks (params/frontmatter/routing) — CI gate
+    tool-schemas.json                    # gateway tool-param snapshot (source of truth for verify)
+  SKILLS-GUIDE.md                        # user-facing "which skill do I use?"
+  AUTHORING.md                           # how to add/change a skill (verification discipline)
   DESKTOP-SETUP.md                       # Desktop connector + skill-install runbook (draft)
 ```
 

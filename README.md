@@ -22,7 +22,7 @@ Talk about "the MCP Gateway server" when you mean the Cloud Run service; "the In
 | Package                                                                  | Type                                      | Status                  |
 | ------------------------------------------------------------------------ | ----------------------------------------- | ----------------------- |
 | [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge`    | 1.0.7 — live on npm     |
-| [`packages/plugin/`](packages/plugin/)                                   | Claude Code plugin — wave-1 Agent Skills  | 5 skills built ([#12](https://github.com/evinops-hafla/hafla-intelligence-gateway/pull/12)) |
+| [`packages/plugin/`](packages/plugin/)                                   | Claude Code plugin — Agent Skills         | 6 skills (5 wave-1 + `event-needs`), tool-first; verified in CI |
 
 ### `@hafla/intelligence-mcp-bridge`
 
