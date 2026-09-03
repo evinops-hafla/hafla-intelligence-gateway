@@ -64,7 +64,7 @@ else
   RESP=$(printf '%s' '{"jsonrpc":"2.0","method":"tools/list","id":1}' | npx -y @hafla/intelligence-mcp-bridge 2>/dev/null | head -c 8000 || true)
   if printf '%s' "$RESP" | grep -q '"tools"'; then
     pass "gateway reachable — tools/list returned a tool list"
-  elif printf '%s' "$RESP" | grep -q '403'; then
+  elif printf '%s' "$RESP" | grep -qE 'Gateway returned 403|\b403\b'; then
     # A JSON-RPC response came back (bridge + token OK), but the gateway forbade this identity.
     fail "gateway returned 403 (token minted + reached, but this identity is not authorized)" \
       "confirm your @hafla.com account is in the team@hafla.com Workspace group with isEmployeeActive=true (see the bridge README) — the plugin uses this same bridge path"

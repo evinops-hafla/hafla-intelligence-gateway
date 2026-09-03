@@ -75,6 +75,7 @@ const scoredQs = new Set();
 for (const rec of records) {
   const c = byQ.get(norm(rec.question || ''));
   if (!c) { console.log(`   ? recorded question has no golden case: "${rec.question}"`); continue; }
+  if (scoredQs.has(norm(rec.question))) { console.log(`   (skipping duplicate record for "${rec.question}")`); continue; }
   scoredQs.add(norm(rec.question));
   casesScored++;
   const results = c.assertions.map((name) => runAssertion(name, rec, c));
@@ -85,7 +86,9 @@ for (const rec of records) {
 }
 
 const uncovered = cases.filter((c) => !scoredQs.has(norm(c.question)));
-console.log(`\nscored ${casesPassed}/${casesScored} cases green; ${uncovered.length} golden case(s) had no recorded trajectory${uncovered.length ? ` (${uncovered.map((c) => `"${c.question}"`).slice(0, 3).join(', ')}${uncovered.length > 3 ? '…' : ''})` : ''}.`);
+console.log(`\nscored ${casesPassed}/${casesScored} unique case(s) green; ${uncovered.length} of ${cases.length} golden cases had no recorded trajectory${uncovered.length ? ` (${uncovered.map((c) => `"${c.question}"`).slice(0, 3).join(', ')}${uncovered.length > 3 ? '…' : ''})` : ''}.`);
 if (casesScored === 0) { console.log('✗ FAIL — no recorded question matched a golden case'); process.exit(1); }
 if (casesPassed < casesScored) { console.log('\n✗ FAIL — one or more scored cases failed a shape assertion'); process.exit(1); }
-console.log('\n✓ PASS — every recorded trajectory satisfied its shape assertions');
+// Coverage is partial by design — recording a trajectory is the manual/keyed step. PASS means every
+// trajectory that WAS recorded satisfied its assertions; it does not assert full golden coverage.
+console.log('\n✓ PASS — every recorded trajectory satisfied its shape assertions (coverage is partial by design)');

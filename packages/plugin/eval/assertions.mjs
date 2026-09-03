@@ -21,7 +21,12 @@ const ok = (name, pass, detail = '') => ({ name, pass, detail });
 
 // --- answer-only assertions -----------------------------------------------------------------------
 export function hasIntegerCitation(answer) {
-  const pass = /#\d{2,}/.test(answer) || /\b(order|event|ticket)s?\b[^.\n]{0,24}?\b\d{2,}\b/i.test(answer);
+  // A #-prefixed key, OR "order/event/ticket [no.|number|#] <int>" with the number RIGHT AFTER the
+  // keyword. The number must immediately follow (not up to N chars later) so a bare year near the word
+  // — "the event was rescheduled to 2026" — does NOT count as a citation.
+  const hashKey = /#\d{2,}/.test(answer);
+  const prose = /\b(order|event|ticket)s?\b\s*(?:no\.?|number|#)?\s*#?\d{2,}/i.test(answer);
+  const pass = hashKey || prose;
   return ok('hasIntegerCitation', pass, pass ? '' : 'no #<int> / "order|event|ticket <int>" citation found');
 }
 
@@ -35,16 +40,20 @@ export function moneyLabelled(answer) {
   if (!figures.length) return ok('moneyLabelled', true, 'no money figures in answer');
   for (const f of figures) {
     const i = f.index;
-    const window = answer.slice(Math.max(0, i - 45), i + f[0].length + 45);
+    // Tight ±30-char window: a label attaches adjacently ("cost: X AED" / "X AED (selling)"); a wider
+    // window would let one figure's label bleed onto an adjacent unlabelled figure.
+    const window = answer.slice(Math.max(0, i - 30), i + f[0].length + 30);
     if (!LABEL_RE.test(window)) return ok('moneyLabelled', false, `unlabelled money figure: "${f[0].trim()}"`);
   }
   return ok('moneyLabelled', true, `${figures.length} figure(s), all labelled`);
 }
 
 export function freshnessShown(answer) {
+  // Require a genuine data-freshness signal. A bare "window" is dropped — it false-passes on an event
+  // date window ("event window opens 2026-09-15"), which is scheduling, not data freshness.
   const pass = /as[-\s]of/i.test(answer)
     || /freshness/i.test(answer)
-    || /(corpus|mirror|data window|window)[^.\n]{0,30}\b20\d\d\b/i.test(answer);
+    || /(corpus|mirror|data window|last sync(?:ed)?|synced)[^.\n]{0,30}\b20\d\d\b/i.test(answer);
   return ok('freshnessShown', pass, pass ? '' : 'no as-of / corpus / mirror freshness signal');
 }
 
@@ -53,8 +62,13 @@ export function noRawMaxQuoted(answer, forbiddenValues = []) {
   for (const v of forbiddenValues) {
     const n = String(v);
     const withComma = n.length > 3 ? n.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : n;
-    const re = new RegExp(`(?:AED\\s*(?:${n}|${withComma})\\b)|(?:\\b(?:${n}|${withComma})\\s*AED)`, 'i');
-    if (re.test(answer)) return ok('noRawMaxQuoted', false, `quoted a forbidden band-extreme as a price: ${v}`);
+    const adjAed = new RegExp(`(?:AED\\s*(?:${n}|${withComma})\\b)|(?:\\b(?:${n}|${withComma})\\s*AED)`, 'i');
+    // Also catch the bare number (AED may be established earlier in the paragraph: "a rare max around 1260").
+    // Guarded to values >= 100 — a curated band-extreme is an outlier, unlikely to be a coincidental count;
+    // small values (e.g. a 10 AED anchor) would false-fire, so they are only matched when AED-adjacent.
+    const bare = v >= 100 ? new RegExp(`\\b(?:${n}|${withComma})\\b`) : null;
+    if (adjAed.test(answer) || (bare && bare.test(answer)))
+      return ok('noRawMaxQuoted', false, `quoted a forbidden band-extreme as a price: ${v}`);
   }
   return ok('noRawMaxQuoted', true, forbiddenValues.length ? `avoided ${forbiddenValues.join(', ')}` : 'no forbidden values configured');
 }
@@ -105,11 +119,13 @@ export const ASSERTION_NAMES = [
 // --- self-test (credential-free proof the assertions behave) ---------------------------------------
 function selfTest() {
   const fails = [];
-  const expect = (label, cond) => { if (!cond) fails.push(label); };
+  let total = 0;
+  const expect = (label, cond) => { total++; if (!cond) fails.push(label); };
 
   expect('hasIntegerCitation +', hasIntegerCitation('see order #16504').pass);
   expect('hasIntegerCitation +prose', hasIntegerCitation('cited by event 4821 above').pass);
   expect('hasIntegerCitation -', !hasIntegerCitation('no numbers with a hash here').pass);
+  expect('hasIntegerCitation -year', !hasIntegerCitation('The event was rescheduled to 2026 due to weather.').pass);
 
   expect('noUuid +', noUuid('partner Al Jefoon, order #123').pass);
   expect('noUuid -', !noUuid('id 6a86604d-7c5a-4852-8444-1e4b063f49c3').pass);
@@ -117,14 +133,18 @@ function selfTest() {
   expect('moneyLabelled +', moneyLabelled('10 AED (supplier cost, ORDER tier)').pass);
   expect('moneyLabelled +none', moneyLabelled('no prices here').pass);
   expect('moneyLabelled -', !moneyLabelled('it was 1,250 AED for the lot, delivered next week and set up nicely with extra flourish and decorative touches all around the hall').pass);
+  expect('moneyLabelled -bleed', !moneyLabelled(`the cost was 100 AED ${'x'.repeat(20)} 5000 AED for something else entirely`).pass);
 
   expect('freshnessShown +asof', freshnessShown('WA corpus as-of 2026-09-03').pass);
   expect('freshnessShown +mirror', freshnessShown('haflaCore mirror last synced 2026-09-03').pass);
   expect('freshnessShown -', !freshnessShown('here are the results').pass);
+  expect('freshnessShown -eventwindow', !freshnessShown('Your event window opens on 2026-09-15 and closes shortly after.').pass);
 
   expect('noRawMaxQuoted +', noRawMaxQuoted('anchor 10 AED, band 8-10 AED', [1260]).pass);
   expect('noRawMaxQuoted -plain', !noRawMaxQuoted('up to 1260 AED', [1260]).pass);
   expect('noRawMaxQuoted -comma', !noRawMaxQuoted('up to AED 1,260', [1260]).pass);
+  expect('noRawMaxQuoted -bareNoAed', !noRawMaxQuoted('the max was around 1260, an outlier', [1260]).pass);
+  expect('noRawMaxQuoted +smallBareSafe', noRawMaxQuoted('we had 10 chairs', [10]).pass);
 
   expect('usedExpectedSkill +', usedExpectedSkill({ skill: 'pricing-lookup' }, 'pricing-lookup').pass);
   expect('usedExpectedSkill -', !usedExpectedSkill({ skill: 'supplier-discovery' }, 'pricing-lookup').pass);
@@ -141,7 +161,7 @@ function selfTest() {
     for (const f of fails) console.log(`   - ${f}`);
     process.exit(1);
   }
-  console.log('✓ assertions self-test PASS — all 24 synthetic pass/fail cases behave.');
+  console.log(`✓ assertions self-test PASS — all ${total} synthetic pass/fail cases behave.`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}` && process.argv.includes('--self-test')) selfTest();

@@ -36,6 +36,20 @@ jobs:
       - name: verify skills
         run: node packages/plugin/scripts/verify-skills.mjs
 
+      # Answer-quality eval gates — all credential-free (no gateway/model needed):
+      #  - assertions self-test proves the Tier-2 shape checks behave;
+      #  - routing --check validates golden-routing.json structure;
+      #  - trajectory --check validates golden-trajectory.json + scores the recorded
+      #    sample fixtures (catches a regression that re-introduces the 1260 band
+      #    outlier or a bareword event_playbook family). The model-backed routing run
+      #    and live trajectory recording stay manual (they need a key/gateway).
+      - name: eval — credential-free gates
+        run: |
+          node packages/plugin/eval/assertions.mjs --self-test
+          node packages/plugin/eval/run-routing-eval.mjs --check
+          node packages/plugin/eval/run-trajectory-eval.mjs --check
+          node packages/plugin/eval/run-trajectory-eval.mjs --score packages/plugin/eval/samples/sample-trajectories.json
+
       # F-1 smoke (BS-8 symlink-class regression catch).
       # `scripts/smoke.mjs --mode=symlink` runs: npm pack → npm install -g →
       # spawn `npx -y @hafla/intelligence-mcp-bridge` from os.tmpdir() →
