@@ -48,7 +48,7 @@ discipline** around them.
 - `scripts/pack-skills.sh` → one `dist/<skill>.zip` per skill (the claude.ai upload format). Run
   `verify-skills.mjs` first — don't zip a skill that fails.
 - Claude Code: the plugin/marketplace (see README). Claude Desktop: per-user zip upload +
-  the org connector — see [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md) (pending OAuth Stage 2).
+  the org connector — see [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md) (built; dark until the operator enables it).
 - **Preflight (Claude Code path):** `bash scripts/doctor.sh` — checks Node≥24 (+ the version-manager/GUI
   path trap), the active gcloud account is `@hafla.com`, the identity token mints, and a real `tools/list`
   round-trips through the bridge. `--skip-live` skips the last (network) check. macOS/Linux only.

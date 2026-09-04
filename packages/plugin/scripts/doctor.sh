@@ -2,8 +2,8 @@
 # doctor.sh — preflight for the EvWA Intelligence plugin on the CLAUDE CODE path (macOS/Linux only).
 #
 # Serves the Claude Code / raw-MCP audience (the two-person dev team + technical users). Desktop users
-# never run shell scripts, and at OAuth Stage 2 the connector auth is browser OAuth, not gcloud — so this
-# is intentionally Code-only. Each check prints a one-line fix; exit 1 if any fails.
+# never run shell scripts, and the Desktop OAuth connector uses browser OAuth (WorkOS AuthKit), not
+# gcloud — so this is intentionally Code-only. Each check prints a one-line fix; exit 1 if any fails.
 #
 # It is a THIN wrapper over what the bridge already does at startup (gcloud installed + active account on
 # hafla.com — see intelligence-mcp-bridge/src/index.js §Pre-flight). The truth test is a real tools/list

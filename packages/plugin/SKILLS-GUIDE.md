@@ -12,7 +12,7 @@ gateway for you, including the gcloud-auth gotcha.)
 
 | You are… | On… | Do this |
 | -------- | --- | ------- |
-| **Sales / CX** | **Claude Desktop / claude.ai** | **Not live yet** — needs OAuth Stage 2. For now, ask an engineer on the team to run your question in Claude Code (below), or wait for the Desktop rollout. |
+| **Sales / CX** | **Claude Desktop / claude.ai** | **Built, not switched on yet** — the OAuth connector is ready but the operator hasn't enabled it. For now, ask an engineer on the team to run your question in Claude Code (below); the Desktop rollout is announced once it's enabled. |
 | **Sales / CX** | via a teammate | Send your question to anyone set up with Claude Code — the answer is the same. |
 | **Engineer** | **Claude Code** | ① `gcloud auth login` with your `@hafla.com` account · ② `/plugin marketplace add evinops-hafla/hafla-intelligence-gateway` · ③ `/plugin install evwa-intelligence@hafla-intelligence-gateway`. Then just ask. |
 | **Engineer** | raw MCP client (Cursor / Gemini CLI) | Wire the bridge directly — see the [bridge README](../intelligence-mcp-bridge/README.md). |
@@ -113,7 +113,7 @@ deliberately *hard* one that exercises an honesty rule.
 - **Claude Code:** ship inside the `evwa-intelligence` plugin, which also connects the gateway for you —
   invoke with `/evwa-intelligence:<skill>` or just ask.
 - **Claude Desktop:** per-user skill install + the EvWA connector — see
-  [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md) (rolling out with OAuth Stage 2).
+  [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md) (built; dark until the operator enables it).
 
 Needs the EvWA gateway connected (automatic with the Claude Code plugin; a separate connector on
 Desktop). Questions → your team channel.

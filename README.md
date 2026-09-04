@@ -30,6 +30,11 @@ stdio↔HTTPS shim that mints Google ID tokens via the user's own `gcloud` and f
 
 **Install + configure:** [packages/intelligence-mcp-bridge/README.md](packages/intelligence-mcp-bridge/README.md) §§ "Prerequisites" and "3. Add this MCP server block to your client config". The package README is the canonical install reference — it covers the launchd-subprocess constraint (macOS GUI apps don't see your shell's `nvm`-managed binaries, so the MCP config requires two explicit absolute paths) and the per-version-manager path table (`nvm` / `fnm` / Volta / `nvm-windows`).
 
+### Two ways an employee connects
+
+- **Bridge (today, every client):** Claude Code, Cursor, Gemini CLI, Antigravity, and Claude Desktop's developer MCP config use the bridge above — your own `gcloud` Google identity, stdio↔HTTPS.
+- **OAuth Web connector (built, not yet enabled):** on claude.ai / Claude Desktop / Claude Code you can add `https://mcp.hafla.com/mcp` as a connector and sign in with Google — no `gcloud`, auto-refresh. It is **built + tested but dark** until an operator flips the gateway's `OAUTH_PATH_ENABLED` at go-live. The bridge is **not** being retired — it stays canonical for non-OAuth clients + automation. Setup: [`packages/plugin/DESKTOP-SETUP.md`](packages/plugin/DESKTOP-SETUP.md).
+
 ---
 
 ## Prerequisites

@@ -6,6 +6,8 @@ A small stdio↔HTTPS shim that lets **Claude Code, Claude Desktop, Cursor, Gemi
 
 The bridge mints a fresh 60-minute Google ID token via your own `gcloud` session, caches it, refreshes it ~55 minutes before expiry, and forwards every JSON-RPC request to the gateway with a `Bearer` header. No shared secret, no per-user token to issue or rotate — authorisation is your Google Workspace identity.
 
+> **Coexists with the OAuth Web connector.** The gateway now also has a browser-OAuth "Web connector" (WorkOS AuthKit) for claude.ai / Claude Desktop / Claude Code — built + tested but not yet enabled (see the plugin's `DESKTOP-SETUP.md`). It is **not** a replacement: this bridge stays the canonical path for Cursor / Gemini CLI / Antigravity / automation and for anyone using their `gcloud` identity. Nothing here changes when the connector goes live.
+
 ---
 
 ## TL;DR

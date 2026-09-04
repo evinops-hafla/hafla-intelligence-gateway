@@ -1,10 +1,12 @@
 # EvWA Intelligence on Claude Desktop / claude.ai — setup guide
 
-> **⚠ DRAFT — pending OAuth Stage 2.** The Desktop/claude.ai path is **not live yet**: the remote
-> connector is called from Anthropic's cloud and needs the gateway to speak **OAuth 2.1** (Stage 2,
-> unbuilt). This is the launch runbook — steps are grounded in current Anthropic docs, but the bits
-> marked **TBD** depend on the chosen Auth Server (WorkOS vs Clerk) and must be confirmed hands-on at
-> go-live. **Works today instead:** Claude **Code** (see [`README.md`](README.md) § Install).
+> **⚠ BUILT — DARK until enabled. Do not connect until it's announced live.** The Desktop/claude.ai
+> OAuth connector is now **built and tested** on the gateway (WorkOS AuthKit + RFC 9728 discovery), but
+> it ships **dark** behind the gateway's `OAUTH_PATH_ENABLED` flag: an operator flips it on a gateway
+> deploy, and it currently points at the WorkOS **staging** environment (production is a follow-on). Until
+> the operator enables it and announces it, connecting will not work. **Works today instead:** Claude
+> **Code** (see [`README.md`](README.md) § Install). The steps below are the go-live runbook — the two
+> items still marked TBD are UI labels + a real-teammate end-to-end, confirmed hands-on at go-live.
 
 ## What this enables
 
@@ -20,41 +22,46 @@ EvWA skills over our own data (`mcp.hafla.com`): `supplier-discovery`, `pricing-
 
 Two independent pieces — **you can push one, not the other**:
 
-| Piece | Who installs it | Org-wide push? |
-| ----- | --------------- | -------------- |
-| **The gateway connector** (remote MCP) | Owner adds it org-wide; each member connects once | ✅ Owner-deployable |
-| **The six skills** | **Each member uploads the zips themselves** | ❌ **No org-wide skill push exists on ANY plan** (Team or Enterprise) |
+| Piece                                  | Who installs it                                   | Org-wide push?                                                        |
+| -------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------- |
+| **The gateway connector** (remote MCP) | Owner adds it org-wide; each member connects once | ✅ Owner-deployable                                                   |
+| **The six skills**                     | **Each member uploads the zips themselves**       | ❌ **No org-wide skill push exists on ANY plan** (Team or Enterprise) |
 
 So the rollout is: **owner deploys the connector once → each teammate connects it + uploads the skill
 zips.** Distribute the zips via this repo + this guide.
 
-## Prerequisites (must be true before the steps below work)
+## Prerequisites (built; enabled by the operator at go-live)
 
-- **[TBD — Stage 2]** The gateway (`mcp.hafla.com`) is an OAuth 2.1 **resource server** (serves RFC 9728
-  Protected Resource Metadata, returns `401`+`WWW-Authenticate`, validates a resource-bound `aud`).
-- **[TBD — vendor]** A hosted **Auth Server** is configured (WorkOS AuthKit is the current pick; Clerk is
-  the #2, conditional on external-`aud` support) — it federates Google login for `@hafla.com` and mints
-  tokens with `aud=https://mcp.hafla.com/mcp`. You will have an **OAuth Client ID + Client Secret** from it.
-- Reachability: `mcp.hafla.com` (already public) must be reachable from Anthropic's cloud egress — it is.
+- ✅ **Gateway is an OAuth resource server.** `mcp.hafla.com` serves RFC 9728 Protected Resource Metadata
+  at `/.well-known/oauth-protected-resource/mcp`, returns `401` + `WWW-Authenticate`, and validates a
+  resource-bound `aud=https://mcp.hafla.com/mcp`. Built + tested; goes live when the operator flips
+  `OAUTH_PATH_ENABLED` on a gateway deploy.
+- ✅ **Auth Server = WorkOS AuthKit** (decision made). It federates Google login for `@hafla.com` and mints
+  the resource-bound tokens. **Dynamic Client Registration (DCR) is enabled**, so an MCP client registers
+  itself from the connector URL — **you do NOT paste a Client ID or Secret.** (Staging environment today;
+  a production WorkOS environment is a follow-on before a team-wide GA.)
+- Reachability: `mcp.hafla.com` (already public) is reachable from Anthropic's cloud egress.
 
 ## Part 1 — Owner: add the org connector (one-time)
 
 1. **Organization settings → Connectors → Add**.
 2. Hover **Custom → select "Web"**.
 3. **Remote MCP server URL:** `https://mcp.hafla.com/mcp`.
-4. **Advanced settings →** paste the **OAuth Client ID** and **Client Secret** from the Auth Server **[TBD — vendor]**.
-5. **Add.** The connector now appears (labeled "Custom") for all members to connect.
+4. **Add.** Because the Auth Server uses **DCR**, adding by URL is all that's needed — there is **no**
+   Client ID/Secret to paste. The connector then appears (labeled "Custom") for all members to connect.
 
 > Only Owners can add connectors on Team/Enterprise. Verify the exact menu labels in your admin console —
-> Anthropic's UI has been relabeled and docs trail it.
+> Anthropic's UI has been relabeled and docs trail it. **Open item:** if the org-wide connector flow still
+> asks for credentials under Advanced settings, confirm at go-live whether DCR covers it (per-user
+> add-by-URL definitely needs none).
 
 ## Part 2 — Each teammate (self-serve, ~3 min)
 
 1. **Enable code execution** (Settings/Features) — skills won't appear without it.
 2. **Customize → Connectors →** find **EvWA Intelligence** (Custom) **→ Connect** → sign in with your
    `@hafla.com` Google account (per-user OAuth; Claude only sees what you can).
-3. **Customize → Skills → Add →** upload each skill **zip** (produced below). *(Confirm the exact menu
-   label — "Customize → Skills" vs "Settings → Features" — in your workspace; docs disagree.)*
+3. **Customize → Skills → Add →** upload each skill **zip** (produced below). _(Confirm the exact menu
+   label — "Customize → Skills" vs "Settings → Features" — in your workspace; docs disagree.)_
 
 ## Packaging the skill zips
 
@@ -78,12 +85,20 @@ re-uploads. (Maintain the `SKILL.md` folders in Git as the source of truth.)
 - Skills instruct Claude to call the connector's tools by name — they do **not** reach the gateway from a
   sandbox script (the correct claude.ai pattern).
 
-## Open TBDs to confirm at go-live
+## Open items to confirm at go-live
 
-- [ ] Stage 2 gateway RS live + Auth Server (WorkOS/Clerk) minting `aud=https://mcp.hafla.com/mcp`.
+- [ ] **THE GATE:** operator has flipped `OAUTH_PATH_ENABLED` on the gateway deploy and announced it —
+      do not connect before this.
+- [ ] Launch on the WorkOS **staging** env (pilot) vs waiting for the **production** env — a team-wide GA
+      should wait for production.
 - [ ] Exact Desktop menu labels (Connectors path; Skills-upload path).
-- [ ] Whether Google `hd` claim reaches the token, or we rely on the AS domain-allowlist for `@hafla.com`.
+- [ ] Org-connector Advanced-settings: DCR fully covers add-by-URL, or does the org flow still want
+      credentials? (per-user add-by-URL needs none.)
 - [ ] End-to-end: connect connector → invoke a skill → real gateway query, on a real teammate's Desktop.
 
-Full internal design (incl. the Auth Server vendor decision support): private
+> Identity note: a WorkOS access token carries no Google `hd` claim; access is restricted to `@hafla.com`
+> at the Auth Server, and the gateway independently re-checks the token's email domain + active-employee
+> status. No `hd`-propagation step is needed.
+
+Full internal design: private
 `mcp-gateway/specs/history-and-future/research/2026-08-web-connector-oauth/`.

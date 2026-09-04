@@ -123,9 +123,10 @@ with your `@hafla.com` account — the bridge mints a Google ID token and cannot
 bridge README for full onboarding).
 
 **Claude Desktop / claude.ai (Chat / Cowork):** per-user — upload each skill folder as a **zip**
-(Customize → Skills → Add; code-execution enabled) and connect the gateway. **Not live yet:** the
-claude.ai remote-connector surface needs the gateway to speak OAuth 2.1 (OAuth "Stage 2", not built),
-so Claude Code is the working surface today.
+(Customize → Skills → Add; code-execution enabled) and connect the gateway. **Built, not yet enabled:**
+the claude.ai remote-connector uses the gateway's OAuth (WorkOS AuthKit) — built + tested but **dark**
+behind the gateway's `OAUTH_PATH_ENABLED` flag until the operator enables it at go-live. Claude Code is
+the working surface today; Desktop setup is in [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md).
 
 ## Prerequisites (to run a skill)
 
@@ -139,8 +140,9 @@ so Claude Code is the working surface today.
 
 - **Claude Code** — installable now via the plugin/marketplace above; connector auth = bridge + Google
   token (stdio).
-- **claude.ai Chat / Cowork** — the remote connector calls from Anthropic's cloud and needs the gateway
-  as an OAuth 2.1 resource server → **OAuth Stage 2 (deferred).** Blocked until then.
+- **claude.ai Chat / Cowork** — the remote connector calls from Anthropic's cloud via the gateway's OAuth
+  resource server + WorkOS AuthKit → **built + tested, dark until the operator enables it** (add-by-URL,
+  DCR — no client ID/secret). See [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md).
 - **No org-wide custom-Skill distribution exists on any plan** (incl. Enterprise) — skills are per-user
   zip upload; only the remote **connector** is org-deployable by an owner.
 - Tool migration **DONE** (PR #314/#316/#317/#319/#320, 2026-08-14): all skills are tool-first where a
@@ -168,6 +170,5 @@ hands-on `/plugin install` + one-query run is done — Claude Code is the workin
 conventions block in every skill; a starter-prompt library + persona×surface quickstart in
 `SKILLS-GUIDE.md`; description front-loading; the [`eval/`](eval/) answer-quality harness (Tier-1 routing
 over 67 golden cases + Tier-2 shape/grounding assertions with real fixtures, both carrying the shipped-
-bug regressions); and `scripts/doctor.sh`. **Remaining after that:** the claude.ai/Desktop surface awaits
-OAuth Stage 2. **Maturity:** the underlying R1/pricing/supplier tools are recent first-cuts (some flagged
+bug regressions); and `scripts/doctor.sh`. **Remaining after that:** enabling the claude.ai/Desktop OAuth connector in production — the connector is **built + tested** (WorkOS AuthKit; dark behind the gateway's `OAUTH_PATH_ENABLED`), pending the operator's go-live flip and a production WorkOS environment. **Maturity:** the underlying R1/pricing/supplier tools are recent first-cuts (some flagged
 pre-alpha) — richer IDL-processed versions are planned, so treat tool outputs as improving, not final.
