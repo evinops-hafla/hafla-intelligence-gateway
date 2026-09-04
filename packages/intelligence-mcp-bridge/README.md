@@ -31,7 +31,7 @@ Add this to your MCP client config (Gemini CLI / Claude Code / Cursor / Antigrav
 }
 ```
 
-`"trust": true` suppresses the per-tool-call confirmation prompt that Gemini CLI / Antigravity CLI raise on every invocation (23 tools × many calls per session — unusable without it). Claude Code / Claude Desktop / Cursor ignore the unknown field; no harm to add.
+`"trust": true` suppresses the per-tool-call confirmation prompt that Gemini CLI / Antigravity CLI raise on every invocation (24 tools × many calls per session — unusable without it). Claude Code / Claude Desktop / Cursor ignore the unknown field; no harm to add.
 
 Restart your MCP client. Done.
 
@@ -347,7 +347,7 @@ A row count comes back, you're done. The first request takes ~1–2 s longer whi
 
 ## What tools you get
 
-**23 read-only tools**, all backed by Hafla's data lakes + identity layer (live at `mcp.hafla.com`).
+**24 read-only tools**, all backed by Hafla's data lakes + identity layer (live at `mcp.hafla.com`).
 They fall into seven groups. (Your MCP client sees the authoritative list — and each tool's full
 schema — from `tools/list` at connect; this table is the human overview.)
 
@@ -367,6 +367,7 @@ schema — from `tools/list` at connect; this table is the human overview.)
 | `analyze_identity_graph` | 1-degree identity subgraph around a phone/email across WhatsApp, Zendesk, and Hafla Core              |
 | `customer_360`           | Lifetime transactional profile for one host — spend, cadence, budget tier, segment, taste categories  |
 | `get_org_events`         | Event history for a corporate buyer, keyed by email `orgDomain` (domain = org identity)               |
+| `top_orgs`               | Corporate-buyer leaderboard by deduped event count — same `orgDomain` backing as `get_org_events`      |
 
 ### Support & conversations
 
@@ -409,7 +410,7 @@ schema — from `tools/list` at connect; this table is the human overview.)
 | `lead_pipeline_health` | Fleet-wide stuck-lead / pipeline-health check against live Hafla Core                               |
 | `get_data_freshness`   | Last completed run + sync watermark per pipeline — the canonical "as-of" source                    |
 
-All 23 are read-only at the database layer — the bridge cannot write.
+All 24 are read-only at the database layer — the bridge cannot write.
 
 ---
 
