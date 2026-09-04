@@ -1,12 +1,12 @@
 # EvWA Intelligence on Claude Desktop / claude.ai — setup guide
 
-> **⚠ BUILT — DARK until enabled. Do not connect until it's announced live.** The Desktop/claude.ai
-> OAuth connector is now **built and tested** on the gateway (WorkOS AuthKit + RFC 9728 discovery), but
-> it ships **dark** behind the gateway's `OAUTH_PATH_ENABLED` flag: an operator flips it on a gateway
-> deploy, and it currently points at the WorkOS **staging** environment (production is a follow-on). Until
-> the operator enables it and announces it, connecting will not work. **Works today instead:** Claude
-> **Code** (see [`README.md`](README.md) § Install). The steps below are the go-live runbook — the two
-> items still marked TBD are UI labels + a real-teammate end-to-end, confirmed hands-on at go-live.
+> **✅ LIVE (staging pilot) — verified end-to-end 2026-09-05.** The Desktop/claude.ai OAuth connector is
+> built, **enabled, and verified working**: a real `@hafla.com` Google sign-in through claude.ai reached the
+> gateway (`authMethod=oauth_user`). It runs on the WorkOS **staging** environment as a controlled pilot; a
+> **production** WorkOS environment is the final step before the team-wide announcement — **hold broad
+> rollout until GA is announced.** Claude **Code** also works (see [`README.md`](README.md) § Install). The
+> steps below are the connect runbook; remaining pre-GA items are the production flip + a real-teammate
+> end-to-end + exact UI labels.
 
 ## What this enables
 
@@ -30,12 +30,12 @@ Two independent pieces — **you can push one, not the other**:
 So the rollout is: **owner deploys the connector once → each teammate connects it + uploads the skill
 zips.** Distribute the zips via this repo + this guide.
 
-## Prerequisites (built; enabled by the operator at go-live)
+## Prerequisites (built + enabled on staging; production env at GA)
 
 - ✅ **Gateway is an OAuth resource server.** `mcp.hafla.com` serves RFC 9728 Protected Resource Metadata
   at `/.well-known/oauth-protected-resource/mcp`, returns `401` + `WWW-Authenticate`, and validates a
-  resource-bound `aud=https://mcp.hafla.com/mcp`. Built + tested; goes live when the operator flips
-  `OAUTH_PATH_ENABLED` on a gateway deploy.
+  resource-bound `aud=https://mcp.hafla.com/mcp`. Built + tested + **live on staging** — the operator
+  flipped `OAUTH_PATH_ENABLED` (2026-09-05, verified); a production flip is the GA step.
 - ✅ **Auth Server = WorkOS AuthKit** (decision made). It federates Google login for `@hafla.com` and mints
   the resource-bound tokens. **The MCP client self-registers** from the connector URL — **you do NOT paste
   a Client ID or Secret.** (WorkOS has both DCR and CIMD enabled — claude.ai/Desktop use DCR, Claude Code
@@ -89,14 +89,12 @@ re-uploads. (Maintain the `SKILL.md` folders in Git as the source of truth.)
 
 ## Open items to confirm at go-live
 
-- [ ] **THE GATE:** operator has flipped `OAUTH_PATH_ENABLED` on the gateway deploy and announced it —
-      do not connect before this.
-- [ ] Launch on the WorkOS **staging** env (pilot) vs waiting for the **production** env — a team-wide GA
-      should wait for production.
+- [x] **THE GATE:** operator flipped `OAUTH_PATH_ENABLED` on staging 2026-09-05 + verified a live connect.
+- [x] Staging pilot LIVE. **Team-wide GA still waits for the production WorkOS env** (the remaining step).
 - [ ] Exact Desktop menu labels (Connectors path; Skills-upload path).
 - [ ] Org-connector Advanced-settings: DCR fully covers add-by-URL, or does the org flow still want
       credentials? (per-user add-by-URL needs none.)
-- [ ] End-to-end: connect connector → invoke a skill → real gateway query, on a real teammate's Desktop.
+- [ ] End-to-end on a real *teammate* (operator end-to-end done 2026-09-05): connect → skill → real gateway query.
 
 > Identity note: a WorkOS access token carries no Google `hd` claim; access is restricted to `@hafla.com`
 > at the Auth Server, and the gateway independently re-checks the token's email domain + active-employee
