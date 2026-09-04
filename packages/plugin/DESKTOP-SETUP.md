@@ -37,9 +37,10 @@ zips.** Distribute the zips via this repo + this guide.
   resource-bound `aud=https://mcp.hafla.com/mcp`. Built + tested; goes live when the operator flips
   `OAUTH_PATH_ENABLED` on a gateway deploy.
 - ✅ **Auth Server = WorkOS AuthKit** (decision made). It federates Google login for `@hafla.com` and mints
-  the resource-bound tokens. **Dynamic Client Registration (DCR) is enabled**, so an MCP client registers
-  itself from the connector URL — **you do NOT paste a Client ID or Secret.** (Staging environment today;
-  a production WorkOS environment is a follow-on before a team-wide GA.)
+  the resource-bound tokens. **The MCP client self-registers** from the connector URL — **you do NOT paste
+  a Client ID or Secret.** (WorkOS has both DCR and CIMD enabled — claude.ai/Desktop use DCR, Claude Code
+  uses CIMD; neither needs a secret. Staging environment today; a production WorkOS environment is a
+  follow-on before a team-wide GA.)
 - Reachability: `mcp.hafla.com` (already public) is reachable from Anthropic's cloud egress.
 
 ## Part 1 — Owner: add the org connector (one-time)
@@ -47,8 +48,9 @@ zips.** Distribute the zips via this repo + this guide.
 1. **Organization settings → Connectors → Add**.
 2. Hover **Custom → select "Web"**.
 3. **Remote MCP server URL:** `https://mcp.hafla.com/mcp`.
-4. **Add.** Because the Auth Server uses **DCR**, adding by URL is all that's needed — there is **no**
-   Client ID/Secret to paste. The connector then appears (labeled "Custom") for all members to connect.
+4. **Add.** Because the client **self-registers** (DCR on this surface), adding by URL is all that's
+   needed — there is **no** Client ID/Secret to paste. The connector then appears (labeled "Custom") for
+   all members to connect.
 
 > Only Owners can add connectors on Team/Enterprise. Verify the exact menu labels in your admin console —
 > Anthropic's UI has been relabeled and docs trail it. **Open item:** if the org-wide connector flow still

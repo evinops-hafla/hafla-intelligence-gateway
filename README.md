@@ -33,7 +33,7 @@ stdio↔HTTPS shim that mints Google ID tokens via the user's own `gcloud` and f
 ### Two ways an employee connects
 
 - **Bridge (today, every client):** Claude Code, Cursor, Gemini CLI, Antigravity, and Claude Desktop's developer MCP config use the bridge above — your own `gcloud` Google identity, stdio↔HTTPS.
-- **OAuth Web connector (built, not yet enabled):** on claude.ai / Claude Desktop / Claude Code you can add `https://mcp.hafla.com/mcp` as a connector and sign in with Google — no `gcloud`, auto-refresh. It is **built + tested but dark** until an operator flips the gateway's `OAUTH_PATH_ENABLED` at go-live. The bridge is **not** being retired — it stays canonical for non-OAuth clients + automation. Setup: [`packages/plugin/DESKTOP-SETUP.md`](packages/plugin/DESKTOP-SETUP.md).
+- **OAuth Web connector (built, not yet enabled):** on claude.ai / Claude Desktop / Claude Code you can add `https://mcp.hafla.com/mcp` as a connector and sign in with Google — no `gcloud`, auto-refresh. It is **built + tested but dark** until an operator flips the gateway's `OAUTH_PATH_ENABLED` at go-live (the live connect-through-Claude check happens then). The bridge is **not** being retired — it stays canonical for non-OAuth clients + automation. Setup: [`packages/plugin/DESKTOP-SETUP.md`](packages/plugin/DESKTOP-SETUP.md).
 
 ---
 
