@@ -1,12 +1,11 @@
 # EvWA Intelligence on Claude Desktop / claude.ai — setup guide
 
-> **✅ LIVE (staging pilot) — verified end-to-end 2026-09-05.** The Desktop/claude.ai OAuth connector is
-> built, **enabled, and verified working**: a real `@hafla.com` Google sign-in through claude.ai reached the
-> gateway (`authMethod=oauth_user`). It runs on the WorkOS **staging** environment as a controlled pilot; a
-> **production** WorkOS environment is the final step before the team-wide announcement — **hold broad
-> rollout until GA is announced.** Claude **Code** also works (see [`README.md`](README.md) § Install). The
-> steps below are the connect runbook; remaining pre-GA items are the production flip + a real-teammate
-> end-to-end + exact UI labels.
+> **✅ LIVE — production GA, verified end-to-end 2026-09-05.** The Desktop/claude.ai OAuth connector is
+> built, **enabled, and verified working in production**: a real `@hafla.com` Google sign-in through claude.ai
+> reached the gateway (`authMethod=oauth_user`) on the **production** WorkOS environment (prod issuer
+> `secure-grace-01.authkit.app`). Claude **Code** also works (see [`README.md`](README.md) § Install). The
+> steps below are the connect runbook; the only remaining polish items are a second-teammate end-to-end +
+> confirming exact Desktop UI labels.
 
 ## What this enables
 
@@ -54,7 +53,7 @@ zips.** Distribute the zips via this repo + this guide.
 
 > Only Owners can add connectors on Team/Enterprise. Verify the exact menu labels in your admin console —
 > Anthropic's UI has been relabeled and docs trail it. **Open item:** if the org-wide connector flow still
-> asks for credentials under Advanced settings, confirm at go-live whether DCR covers it (per-user
+> asks for credentials under Advanced settings, confirm whether DCR covers it (per-user
 > add-by-URL definitely needs none).
 
 ## Part 2 — Each teammate (self-serve, ~3 min)
@@ -87,10 +86,10 @@ re-uploads. (Maintain the `SKILL.md` folders in Git as the source of truth.)
 - Skills instruct Claude to call the connector's tools by name — they do **not** reach the gateway from a
   sandbox script (the correct claude.ai pattern).
 
-## Open items to confirm at go-live
+## Open items (post-GA polish)
 
 - [x] **THE GATE:** operator flipped `OAUTH_PATH_ENABLED` on staging 2026-09-05 + verified a live connect.
-- [x] Staging pilot LIVE. **Team-wide GA still waits for the production WorkOS env** (the remaining step).
+- [x] **Production GA LIVE 2026-09-05** — prod WorkOS env cut over (issuer `secure-grace-01.authkit.app`), real `@hafla.com` connect verified (`authMethod=oauth_user`).
 - [ ] Exact Desktop menu labels (Connectors path; Skills-upload path).
 - [ ] Org-connector Advanced-settings: DCR fully covers add-by-URL, or does the org flow still want
       credentials? (per-user add-by-URL needs none.)
