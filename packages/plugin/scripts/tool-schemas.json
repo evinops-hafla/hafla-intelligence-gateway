@@ -1,7 +1,7 @@
 {
   "_meta": {
     "purpose": "Snapshot of EvWA gateway tool input params — the source of truth for verify-skills.mjs param checks. Credential-free: lets CI catch skill tool-call param drift (e.g. price_anchor takes productId, not id) without hitting the gateway.",
-    "capturedAt": "2026-09-03",
+    "capturedAt": "2026-09-05",
     "capturedFrom": "live mcp.hafla.com tool inputSchemas (via -token gateway)",
     "refreshWhen": "the gateway adds/renames a tool param — re-capture from the tool inputSchema and bump capturedAt.",
     "paramShape": "params = all accepted keys. requiredOneOf = list of groups; within a group >=1 key must be present (OR), and multiple groups are ANDed (each satisfied) — 'both required' is encoded as singleton groups e.g. [[\"schema\"],[\"table\"]]. exactlyOneOf = list of groups; within a group EXACTLY one key is allowed (the tool errors on 0 or >1, e.g. product_lookup / get_lead_context)."
@@ -19,6 +19,7 @@
     "analyze_identity_graph":   { "params": ["phone_or_email"], "requiredOneOf": [["phone_or_email"]] },
     "get_ticket_360":           { "params": ["ticket_id"], "requiredOneOf": [["ticket_id"]] },
     "get_org_events":           { "params": ["orgDomain"], "requiredOneOf": [["orgDomain"]] },
+    "top_orgs":                 { "params": ["limit"], "requiredOneOf": [] },
     "search_internal_knowledge":{ "params": ["query"], "requiredOneOf": [["query"]] },
     "get_data_freshness":       { "params": [], "requiredOneOf": [] },
     "lead_pipeline_health":     { "params": ["stalePendingHours", "queueGraceHours"], "requiredOneOf": [] },
