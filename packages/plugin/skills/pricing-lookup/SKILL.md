@@ -51,7 +51,9 @@ Always separate two different numbers and label them:
 2. **Selling price:** `price_truth({ id: <uuid> })`. Read `source`:
    - `ORDER_HISTORY` → p25/median/p75 AED with the order count. If **`reliable`** (≥3 orders) state the
      p25–p75 range; if **`committable`** (a Quote/RFQ product with a tight, well-sampled spread) you may
-     quote the **median as a firm price** — otherwise give the range, not a point.
+     quote the **median as a firm price** — otherwise give the range, not a point. **Check
+     `lastOrderedAt`:** a stale last order (say >6–12 mo) is a caution *even when* `reliable`/`committable`
+     — flag a price that rests on old transactions rather than presenting it as current.
    - `CATALOG_PRICE` → list price only (no order history — ~71% of products hit this); label it
      clearly as a list price, not a transacted one.
    - `BLOCKED_GENERIC` → it's a generic; go to Step 3.
