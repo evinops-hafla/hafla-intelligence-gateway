@@ -1,5 +1,7 @@
 # Hafla Intelligence Gateway
 
+> **Production** — bridge `@hafla/intelligence-mcp-bridge` 1.0.7 on npm · plugin `evwa-intelligence` 0.2.0 (6 skills) · 24 read-only tools · OAuth Web connector GA 2026-09-05
+
 Public client packages for the Hafla MCP Gateway at `mcp.hafla.com`.
 
 This repo is the public side of the Hafla intelligence stack: small, audit-friendly packages that let Claude Code, Claude Desktop, Cursor, Gemini CLI, Antigravity CLI, and Antigravity 2.0 reach the gateway. The gateway server itself (data lakes, identity resolution, etc.) lives in a private monorepo.
