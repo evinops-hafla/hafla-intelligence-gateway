@@ -12,7 +12,7 @@ gateway for you, including the gcloud-auth gotcha.)
 
 | You are… | On… | Do this |
 | -------- | --- | ------- |
-| **Sales / CX** | **Claude Desktop / claude.ai** | **Built, not switched on yet** — the OAuth connector is ready but the operator hasn't enabled it. For now, ask an engineer on the team to run your question in Claude Code (below); the Desktop rollout is announced once it's enabled. |
+| **Sales / CX** | **Claude Desktop / claude.ai** | **Live — production GA (2026-09-05).** Add a connector with URL `https://mcp.hafla.com/mcp` (it self-registers — no client ID/secret), sign in with Google `@hafla.com`, then upload the skill zips (Customize → Skills). Full steps: [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md). |
 | **Sales / CX** | via a teammate | Send your question to anyone set up with Claude Code — the answer is the same. |
 | **Engineer** | **Claude Code** | ① `gcloud auth login` with your `@hafla.com` account · ② `/plugin marketplace add evinops-hafla/hafla-intelligence-gateway` · ③ `/plugin install evwa-intelligence@hafla-intelligence-gateway`. Then just ask. |
 | **Engineer** | raw MCP client (Cursor / Gemini CLI) | Wire the bridge directly — see the [bridge README](../intelligence-mcp-bridge/README.md). |

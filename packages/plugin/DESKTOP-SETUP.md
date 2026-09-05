@@ -29,17 +29,18 @@ Two independent pieces — **you can push one, not the other**:
 So the rollout is: **owner deploys the connector once → each teammate connects it + uploads the skill
 zips.** Distribute the zips via this repo + this guide.
 
-## Prerequisites (built + enabled on staging; production env at GA)
+## Prerequisites (production GA — live 2026-09-05)
 
 - ✅ **Gateway is an OAuth resource server.** `mcp.hafla.com` serves RFC 9728 Protected Resource Metadata
   at `/.well-known/oauth-protected-resource/mcp`, returns `401` + `WWW-Authenticate`, and validates a
-  resource-bound `aud=https://mcp.hafla.com/mcp`. Built + tested + **live on staging** — the operator
-  flipped `OAUTH_PATH_ENABLED` (2026-09-05, verified); a production flip is the GA step.
+  resource-bound `aud=https://mcp.hafla.com/mcp`. Built + tested + **live in production** — the operator
+  flipped `OAUTH_PATH_ENABLED` on the prod WorkOS env (2026-09-05, verified); prod issuer
+  `secure-grace-01.authkit.app`.
 - ✅ **Auth Server = WorkOS AuthKit** (decision made). It federates Google login for `@hafla.com` and mints
   the resource-bound tokens. **The MCP client self-registers** from the connector URL — **you do NOT paste
   a Client ID or Secret.** (WorkOS has both DCR and CIMD enabled — claude.ai/Desktop use DCR, Claude Code
-  uses CIMD; neither needs a secret. Staging environment today; a production WorkOS environment is a
-  follow-on before a team-wide GA.)
+  uses CIMD; neither needs a secret. The production WorkOS environment is live — prod issuer
+  `secure-grace-01.authkit.app`.)
 - Reachability: `mcp.hafla.com` (already public) is reachable from Anthropic's cloud egress.
 
 ## Part 1 — Owner: add the org connector (one-time)
