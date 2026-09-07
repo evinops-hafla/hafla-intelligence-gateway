@@ -66,7 +66,8 @@ packages/plugin/
     run-trajectory-eval.mjs              # Tier-2 runner (--check; --score a recorded run — credential-free)
     samples/                             # real recorded trajectory fixtures (score green)
   SKILLS-GUIDE.md                        # user-facing "which skill do I use?" + quickstart router
-  SETUP-PROMPT.md                        # paste-into-Claude-Code prompt to set up + verify the gateway
+  SETUP-PROMPT.md                        # paste-into-Claude-Code prompt: bridge/gcloud setup + verify
+  CLAUDE-CODE-OAUTH.md                   # paste-into-Claude-Code prompt: OAuth connect (no gcloud)
   AUTHORING.md                           # how to add/change a skill (verification discipline)
   DESKTOP-SETUP.md                       # Desktop connector + skill-install runbook (draft)
 ```
@@ -105,6 +106,19 @@ answer time; `verify-skills.mjs` asserts the 6 copies match):
 
 ## Install
 
+### Connection profiles — which route for which client
+
+| Client | Auth route | How to connect | Server name |
+| --- | --- | --- | --- |
+| **Claude Code** | OAuth (CIMD), simplest · or bridge | OAuth → [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md) · bridge → plugin install below | `hafla-evwa-idl-gateway` |
+| **Claude Desktop** | OAuth (DCR) connector · or bridge | [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md) | connector URL · `hafla-evwa-idl-gateway` |
+| **claude.ai Chat + Cowork** | OAuth (DCR) connector | [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md) | connector URL (server-side) |
+| **Cursor / Gemini CLI / Antigravity** | bridge (`gcloud`) | [bridge README](../intelligence-mcp-bridge/README.md) | `hafla-evwa-idl-gateway` |
+
+All routes reach the same gateway and the same read-only tools — end users pick
+one, and the server name is always `hafla-evwa-idl-gateway` (the suffixes are
+only for running several routes on one machine).
+
 > **Not sure where you run this?** Start with the persona × surface quickstart + first-success query at
 > the top of [`SKILLS-GUIDE.md`](SKILLS-GUIDE.md). The canonical commands are below. To have Claude Code
 > set up **and verify** the gateway connection for you (incl. the gcloud-auth gotcha), paste
@@ -125,7 +139,7 @@ bridge README for full onboarding).
 **Claude Desktop / claude.ai (Chat / Cowork):** per-user — upload each skill folder as a **zip**
 (Customize → Skills → Add; code-execution enabled) and connect the gateway. **LIVE (production GA, verified 2026-09-05):**
 the claude.ai remote-connector uses the gateway's OAuth (WorkOS AuthKit) — built + **enabled + production-verified live**
-(2026-09-05, prod issuer `secure-grace-01.authkit.app`). Claude Code also works; Desktop setup is in [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md).
+(2026-09-05, prod issuer `secure-grace-01.authkit.app`). Claude Code also works over OAuth — see [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md) (CIMD, verified 2026-09-07); Desktop setup is in [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md).
 
 ## Prerequisites (to run a skill)
 
