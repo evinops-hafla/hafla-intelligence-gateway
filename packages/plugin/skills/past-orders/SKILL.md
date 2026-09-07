@@ -4,7 +4,7 @@ description: >-
   "What did we do for X before?" — enumerate every event, order, ticket, and fulfilling partner linked
   to a host, client, partner, event #, order #, ticket #, or a specific product (which orders used it),
   cited by human-readable integer key (orderNumber / userEventNumber / ticket #), newest first. Use for history lookups on a specific
-  entity. Identity-federation-first for phone/email/name. Read-only, via the EvWA gateway.
+  entity, or the top corporate buyers leaderboard (biggest clients / top orgs / who books us most). Identity-federation-first for phone/email/name. Read-only, via the EvWA gateway.
 ---
 
 # past-orders
@@ -24,10 +24,11 @@ pre-2023). I cite `orderNumber` / `userEventNumber` / ticket #, never UUIDs." Th
 failure mode (coverage push-back). For the exact as-of, `get_data_freshness` → `haflaCoreMirror.lastSyncAt`
 (the ~4h order mirror these reads run against).
 
-## Step 1 — Identify the input (8 shapes) and resolve it
+## Step 1 — Identify the input (9 shapes) and resolve it
 
 | Input                    | Resolve with                                                                                                                                                                                                |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **no specific entity — top corporate buyers** ("biggest clients / top orgs / who books us most") | `top_orgs({ limit: 20 })` → leaderboard of org email-domains ranked by deduped `eventCount` (verified live 2026-09-07: `aus.edu` 129, `pepsidrc.ae` 125, `alfurjanclub.com` 112, …). Then drill into any with `get_org_events({ orgDomain })` (row below). **Ranked by event count, not value** — `totalValueAed` is a sparse (~25% of events) pre-sale estimate, additive context only, never realized spend. Same non-exhaustive consumer/placeholder/`hafla.com` domain block-list as `get_org_events`. |
 | **host phone / email**   | `analyze_identity_graph({ phone_or_email: "<value>" })` → canonical identity unifying WA/ZD/HC. Also `customer_360({ mobile: "<value>" })` / `customer_360({ email: "<value>" })` for the lifetime summary. |
 | **Zendesk ticket #**     | `get_ticket_360({ ticket_id: "<n>" })` (bundled context — preferred; `ticket_id` is a string).                                                                                                              |
 | **event # / host #**     | `get_lead_context({ userEventNumber })` / `get_lead_context({ hostNumber })`.                                                                                                                               |

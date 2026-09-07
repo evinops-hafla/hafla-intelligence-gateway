@@ -58,6 +58,8 @@
     { "question": "Events we did for Rixos RAK", "expectedSkill": "past-orders" },
     { "question": "Which past orders included eggs painting?", "expectedSkill": "past-orders" },
     { "question": "Past events for emcee Punit Lalwani", "expectedSkill": "past-orders" },
+    { "question": "Who are our top corporate clients?", "expectedSkill": "past-orders" },
+    { "question": "Which organisations book us the most?", "expectedSkill": "past-orders" },
 
     { "question": "Where do 200-pax outdoor events happen?", "expectedSkill": "venue-recommendation" },
     { "question": "What venues do corporate galas of about 150 guests use?", "expectedSkill": "venue-recommendation" },

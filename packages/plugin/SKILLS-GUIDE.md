@@ -78,6 +78,9 @@ deliberately *hard* one that exercises an honesty rule.
 
 - `Past events for AUS` → a corporate buyer's full event history (~129 events), deduped, newest first,
   with every AED value labelled a pre-sale estimate.
+- `Who are our top corporate clients?` → a leaderboard of org email-domains by event count (`aus.edu`,
+  `pepsidrc.ae`, `alfurjanclub.com`…), each drillable into its full history — value shown as a pre-sale
+  estimate, not realized spend.
 - `What was on order #28487?` → that order's line items, quantities, and fulfilling partners.
 - `Which orders did Al Jefoon fulfil recently?` → a partner's recent fulfilled orders, cited by order #.
 
