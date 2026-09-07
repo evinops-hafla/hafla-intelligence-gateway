@@ -1,6 +1,6 @@
 # Hafla Intelligence Gateway
 
-> **Production** — bridge `@hafla/intelligence-mcp-bridge` 1.0.7 on npm · plugin `evwa-intelligence` 0.2.0 (6 skills) · 24 read-only tools · OAuth Web connector GA 2026-09-05
+> **Production** — bridge `@hafla/intelligence-mcp-bridge` 1.0.7 on npm · plugin `evwa-intelligence` 0.2.0 (6 skills) · 24 read-only tools · OAuth: claude.ai/Desktop connector GA 2026-09-05 (DCR) · Claude Code 2026-09-07 (CIMD)
 
 Public client packages for the Hafla MCP Gateway at `mcp.hafla.com`.
 
