@@ -43,8 +43,11 @@ Two "gateways", one convention — do not conflate them:
   `userEventNumber` / ticket #), **never UUIDs**.
 - **Auth paths:** (1) static shared-secret bearer; (2) the gcloud bridge — mints a
   Google ID token, subject to a 403 audience-mismatch gotcha (fix: vanilla
-  `gcloud auth login`); (3) OAuth via WorkOS AuthKit — claude.ai / Desktop use
-  **DCR**, Claude Code uses **CIMD** (resource-bound `aud`, so it cannot 403).
+  `gcloud auth login`; but a resident IDE — Cloud Code / Antigravity / Gemini
+  Code Assist — can hijack the login and re-mint a branded client that still
+  403s, so OAuth is preferred — see the bridge README troubleshooting);
+  (3) OAuth via WorkOS AuthKit — claude.ai / Desktop use **DCR**, Claude Code
+  uses **CIMD** (resource-bound `aud`, so it cannot 403).
 - **End users use the bare connector name `hafla-evwa-idl-gateway`.** Suffixes
   (`-oauth` / `-token` / `-local` / `-bridge`) are dev-bench only.
 

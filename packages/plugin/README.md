@@ -59,7 +59,7 @@ packages/plugin/
     tool-schemas.json                    # gateway tool-param snapshot (source of truth for verify)
     doctor.sh                            # Claude Code preflight (node/gcloud/token/bridge tools/list)
   eval/                                  # answer-quality evals (routing + trajectory) — see eval/README.md
-    golden-routing.json                  # Tier-1: question -> expected skill (67 cases)
+    golden-routing.json                  # Tier-1: question -> expected skill (69 cases)
     run-routing-eval.mjs                 # Tier-1 runner (--check credential-free; real run needs a key)
     assertions.mjs                       # Tier-2 shape/grounding checks (+ --self-test)
     golden-trajectory.json               # Tier-2: 16 stratified cases (shape assertions)
@@ -151,8 +151,9 @@ the claude.ai remote-connector uses the gateway's OAuth (WorkOS AuthKit) — bui
 
 ## Distribution (researched 2026-08-23 vs current Anthropic docs)
 
-- **Claude Code** — installable now via the plugin/marketplace above; connector auth = bridge + Google
-  token (stdio).
+- **Claude Code** — installable now via the plugin/marketplace above; connects over **OAuth (CIMD) by
+  default**, bridge = fallback (the plugin auto-wires the bridge connector — override it with a same-named
+  OAuth server; see the Connection profiles table above).
 - **claude.ai Chat / Cowork** — the remote connector calls from Anthropic's cloud via the gateway's OAuth
   resource server + WorkOS AuthKit → **built + enabled + production GA verified live** (add-by-URL,
   DCR — no client ID/secret). See [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md).
@@ -182,6 +183,6 @@ hands-on `/plugin install` + one-query run is done — Claude Code is the workin
 **On the current launch-hardening branch (one PR pending):** an embedded, harness-enforced output-
 conventions block in every skill; a starter-prompt library + persona×surface quickstart in
 `SKILLS-GUIDE.md`; description front-loading; the [`eval/`](eval/) answer-quality harness (Tier-1 routing
-over 67 golden cases + Tier-2 shape/grounding assertions with real fixtures, both carrying the shipped-
+over 69 golden cases + Tier-2 shape/grounding assertions with real fixtures, both carrying the shipped-
 bug regressions); and `scripts/doctor.sh`. The claude.ai/Desktop OAuth connector reached **production GA** 2026-09-05 — **built + enabled + production-verified live** (WorkOS AuthKit; real `@hafla.com` connect logged `authMethod=oauth_user` on the prod env). **Maturity:** the underlying R1/pricing/supplier tools are recent first-cuts (some flagged
 pre-alpha) — richer IDL-processed versions are planned, so treat tool outputs as improving, not final.
