@@ -4,7 +4,7 @@ description: >-
   Build a one-page Hafla-context brief ("101") on ONE product, service, or concept — catalog match,
   what was actually ordered (negotiated spec from order notes), proven suppliers, a price band, recent
   cited orders, and negotiated/setup detail from WhatsApp. NOT a whole-event planning checklist ("what
-  do I need for a wedding" → event-needs). Use for "/101 X", "give me 101 on X", "brief me on X", "what
+  do I need for a wedding" → event-needs), and NOT product support/ticket escalations (out of scope). Use for "/101 X", "give me 101 on X", "brief me on X", "what
   do we know about X". Hafla-context-first (skips generic encyclopedia knowledge). Read-only, via the
   EvWA gateway.
 ---
@@ -118,6 +118,9 @@ Shared formatting for every EvWA answer (skill-specific structure/order is above
   (`price_truth`) and cost (`price_anchor`) on one page, so it's a real temptation — do **not** compute
   or present `selling − cost`, markup %, or margin. Deflect: "margin is wave-2 commercial-intelligence."
   (Matches `pricing-lookup` / `supplier-discovery` / `venue-recommendation`.)
+- **Support / ticket escalations for a product are OUT OF SCOPE** — no support-analytics skill yet
+  (a dedicated escalations skill / pre-derived per-product escalations data is planned). Deflect; don't
+  improvise trends from tickets.
 - Read-only. Deep host order history → `past-orders`; price distribution deep-dive → `pricing-lookup`;
   "who can supply / who else" → `supplier-discovery`; where/venue evidence for a pax band →
   `venue-recommendation`; "what do I need for a &lt;event&gt;" (planning checklist) → `event-needs`.
