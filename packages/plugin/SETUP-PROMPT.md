@@ -5,6 +5,16 @@ Hafla's EvWA Intelligence MCP (`mcp.hafla.com`) on this machine, lists the live
 tools, and refreshes any stale local notes. It confirms before changing any
 config file.
 
+## Two ways to connect — pick one
+
+- **A — OAuth (simplest, no `gcloud`):** add the gateway as a remote connector
+  and sign in with Google — no `gcloud`, no bridge, and the 403 audience gotcha
+  cannot happen. Verified live 2026-09-07. Steps:
+  [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md).
+- **B — Bridge over `gcloud` (this prompt):** your own `gcloud` Google identity
+  via the stdio bridge — canonical for automation and non-OAuth clients.
+  Continue below.
+
 ---
 
 You're setting up and verifying my access to Hafla's EvWA Intelligence MCP (the
@@ -47,10 +57,11 @@ at the end.
    If it returns a 403, apply the vanilla-gcloud fix from step 1 and retry. Then
    list the tools you got and the count.
 
-5. **Refresh memory** — find every memory/note on this machine about the EvWA MCP
-   and its tools. Compare against the live tool list (step 4) and the docs above;
-   update anything stale (tool names, tool count, the auth model) and delete
-   anything wrong.
+5. **Refresh memory** — find every memory/note on this machine about the EvWA
+   MCP and its tools. Compare against the live tool list (step 4) and the docs
+   above; update anything stale (tool names, tool count, the auth model) and
+   delete anything wrong. **OAuth and the bridge are both valid** — don't flag
+   an OAuth note as wrong.
 
 Report back: what was already correct, what you fixed, what still needs my
 action, and the final working tool count.
