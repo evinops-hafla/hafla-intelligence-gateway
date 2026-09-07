@@ -91,7 +91,7 @@ re-uploads. (Maintain the `SKILL.md` folders in Git as the source of truth.)
 
 ## Open items (post-GA polish)
 
-- [x] **THE GATE:** operator flipped `OAUTH_PATH_ENABLED` on staging 2026-09-05 + verified a live connect.
+- [x] **THE GATE:** `OAUTH_PATH_ENABLED` flipped — staging pilot first, then the prod cutover below (both 2026-09-05), each with a verified live connect.
 - [x] **Production GA LIVE 2026-09-05** — prod WorkOS env cut over (issuer `secure-grace-01.authkit.app`), real `@hafla.com` connect verified (`authMethod=oauth_user`).
 - [ ] Exact Desktop menu labels (Connectors path; Skills-upload path).
 - [ ] Org-connector Advanced-settings: DCR fully covers add-by-URL, or does the org flow still want
