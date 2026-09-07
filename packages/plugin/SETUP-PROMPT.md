@@ -30,9 +30,14 @@ at the end.
    **Critical auth gotcha:** I must be logged in with the STANDARD gcloud CLI via
    `gcloud auth login`. If my gcloud was set up through a branded installer
    (Gemini Code Assist / Cloud Code), the identity token's audience is rejected
-   by the gateway with HTTP 403. Verify `gcloud config get-value account` ends in
-   `@hafla.com` and `gcloud auth print-identity-token` succeeds. Flag any gap
-   with the exact fix.
+   by the gateway with HTTP 403. And if `gcloud auth login` does NOT clear that
+   403, a resident IDE (Cloud Code / Antigravity / Gemini Code Assist) may be
+   hijacking the localhost OAuth callback and re-minting the credential under
+   its branded client on every login — switch to Option A (OAuth,
+   [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md)), which is `gcloud`-free and
+   immune to this. Verify `gcloud config get-value account` ends in `@hafla.com`
+   and `gcloud auth print-identity-token` succeeds. Flag any gap with the exact
+   fix.
 
 2. **Bridge config** — read
    [the bridge README](https://github.com/evinops-hafla/hafla-intelligence-gateway/blob/main/packages/intelligence-mcp-bridge/README.md)

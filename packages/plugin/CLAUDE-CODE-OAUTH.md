@@ -99,6 +99,12 @@ action, and the final working tool count.
 
 ## Notes
 
+- **Why this over the `gcloud` bridge on some machines:** if the bridge keeps
+  returning 403 even after `gcloud auth login`, a resident IDE (Cloud Code /
+  Antigravity / Gemini Code Assist) is likely hijacking the `localhost` OAuth
+  callback and re-minting your `gcloud` credential under its branded client,
+  whose audience the gateway rejects. This OAuth path is `gcloud`-free and
+  resource-bound to the gateway, so it cannot hit that 403.
 - Access requires an active `@hafla.com` identity — the gateway re-checks the
   email domain, so a personal Google account will not work.
 - This is the Claude Code (CIMD) connection profile. For Claude Desktop and
