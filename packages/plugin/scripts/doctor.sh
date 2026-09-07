@@ -75,7 +75,7 @@ else
       [ -n "$TOK" ] && DETAIL=$(curl -s -X POST "$GATEWAY_URL/mcp" \
         -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" \
         -H "Accept: application/json, text/event-stream" \
-        -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' 2>/dev/null | head -c 400 || true)
+        -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' 2>/dev/null | head -c 8000 || true)
     fi
     case "$DETAIL" in
       *"token verification failed"*|*"Invalid token"*)
