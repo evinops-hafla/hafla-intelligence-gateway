@@ -22,6 +22,18 @@ EvWA skills over our own data (`mcp.hafla.com`): `supplier-discovery`, `pricing-
 > URL and sign in once — here, the EvWA gateway at `mcp.hafla.com`. It's the same gateway the Claude Code
 > and bridge paths reach; "connector" is just the Desktop / claude.ai term for it.
 
+> **Why the connector — not the `claude_desktop_config.json` bridge — on Desktop.** A **local stdio** MCP
+> server (the bridge, configured in `claude_desktop_config.json`) works in Desktop **Chat** but is **not
+> available in Cowork or Code sessions** — a known Claude Desktop limitation (anthropics/claude-code
+> [#42453](https://github.com/anthropics/claude-code/issues/42453),
+> [#35511](https://github.com/anthropics/claude-code/issues/35511)). It surfaces as a recurring **"MCP
+> hafla-evwa-idl-gateway: Couldn't start for Cowork and Code sessions"** popup on every launch (fires
+> independent of gcloud/auth — even when the bridge is otherwise healthy). **Remote connectors work
+> everywhere — Chat, Cowork, and Code** — so the OAuth connector below is the only way to reach the gateway
+> in Cowork/Code, and moving to it (and removing the bridge from `claude_desktop_config.json`) stops the
+> popup. Custom connectors live in the app's own state, not the config file, so an empty `"mcpServers": {}`
+> there is normal once you've switched.
+
 ## How Desktop distribution actually works (from current Anthropic docs)
 
 Two independent pieces — **you can push one, not the other**:
