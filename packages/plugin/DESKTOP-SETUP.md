@@ -40,7 +40,9 @@ zips.** Distribute the zips via this repo + this guide.
   the resource-bound tokens. **The MCP client self-registers** from the connector URL — **you do NOT paste
   a Client ID or Secret.** (WorkOS has both DCR and CIMD enabled — claude.ai/Desktop use DCR, Claude Code
   uses CIMD; neither needs a secret. The production WorkOS environment is live — prod issuer
-  `secure-grace-01.authkit.app`.)
+  `secure-grace-01.authkit.app`.) **For the Claude Code (CIMD) runbook** see
+  [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md) (verified 2026-09-07); this doc is the
+  claude.ai + Claude Desktop (DCR) connector path.
 - Reachability: `mcp.hafla.com` (already public) is reachable from Anthropic's cloud egress.
 
 ## Part 1 — Owner: add the org connector (one-time)
