@@ -15,35 +15,26 @@
 //                      production router is Claude) or GEMINI_API_KEY / GOOGLE_API_KEY (Google AI
 //                      Studio, a cross-model proxy). For each golden question it gives a model ONLY the
 //                      6 name+description pairs, asks for the single skill that should trigger, then
-//                      scores against golden-routing.json.
+//                      scores against golden-routing.json. Model invocation lives in ./providers/.
 //
 // Deliberately NOT wired into ci.yml — the model call needs a credential and costs tokens; the
 // credential-free gate (verify-skills.mjs) stays the CI net. Run this by hand after any description edit.
 //
 // Usage:  node packages/plugin/eval/run-routing-eval.mjs [--check] [--verbose]
-// Env:    a model key (ANTHROPIC_API_KEY | GEMINI_API_KEY | GOOGLE_API_KEY); EVAL_MODEL overrides the
-//         per-provider default (claude-haiku-4-5-20251001 / gemini-2.5-pro).
+// Env:    a model key (ANTHROPIC_API_KEY | GEMINI_API_KEY | GOOGLE_API_KEY); EVAL_PROVIDER forces one
+//         when several keys are set; EVAL_MODEL overrides the per-provider default. See ./providers/.
 // Exit:   0 = pass (structural clean / accuracy >= threshold), 1 = fail.
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { selectProvider } from './providers/index.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PLUGIN = join(HERE, '..');
 const SKILLS_DIR = join(PLUGIN, 'skills');
 const checkOnly = process.argv.includes('--check');
 const verbose = process.argv.includes('--verbose');
-// Provider is auto-detected from whichever key is set. Anthropic is canonical (production routes with
-// Claude); Gemini / Google AI Studio is a cross-model proxy (a caveat is printed at run time).
-const PROVIDER = process.env.ANTHROPIC_API_KEY
-  ? 'anthropic'
-  : process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
-    ? 'gemini'
-    : null;
-const MODEL =
-  process.env.EVAL_MODEL ||
-  (PROVIDER === 'gemini' ? 'gemini-2.5-pro' : 'claude-haiku-4-5-20251001');
 const THRESHOLD = 0.95; // Tier-1 acceptance: >=95% routing accuracy (a miss is a description bug OR a golden-label bug — both worth finding)
 
 const OUT_OF_SCOPE = 'out-of-scope';
@@ -123,8 +114,15 @@ console.log(
 );
 if (checkOnly) process.exit(0);
 
-// --- real routing eval (needs a credential) --------------------------------------------------------
-if (!PROVIDER) {
+// --- pick a provider (model invocation lives in ./providers/) --------------------------------------
+let provider;
+try {
+  provider = selectProvider();
+} catch (e) {
+  console.error(`✗ ${e.message}`);
+  process.exit(1);
+}
+if (!provider) {
   console.log(
     '\nⓘ  --check passed. To run the actual routing eval, set a model key and re-run without --check:'
   );
@@ -136,12 +134,12 @@ if (!PROVIDER) {
   );
   process.exit(0);
 }
-if (PROVIDER !== 'anthropic') {
+if (!provider.canonical) {
   console.log(
-    `\n⚠  Cross-model proxy: routing with ${MODEL}, not a Claude model. This checks that the`
+    `\n⚠  Cross-model proxy: routing with ${provider.model}, not a Claude model. This checks that`
   );
   console.log(
-    '   descriptions are DISCRIMINATIVE; production routing is Claude, so a stronger or just'
+    '   the descriptions are DISCRIMINATIVE; production routing is Claude, so a stronger or just'
   );
   console.log(
     '   different router can mask a description a Claude host would misroute. A Claude run'
@@ -161,41 +159,7 @@ const clean = (t) =>
     .replace(/[^a-z-]/g, '');
 
 async function route(question) {
-  if (PROVIDER === 'gemini') {
-    const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${key}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ text: question }] }],
-        // Generous cap so a "thinking" model still emits the one-token answer; temp 0 for determinism.
-        generationConfig: { maxOutputTokens: 512, temperature: 0 }
-      })
-    });
-    if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-    const parts = data.candidates?.[0]?.content?.parts || [];
-    return clean(parts.map((p) => p.text || '').join(''));
-  }
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 16,
-      system,
-      messages: [{ role: 'user', content: question }]
-    })
-  });
-  if (!res.ok) throw new Error(`Anthropic ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return clean(data.content?.[0]?.text);
+  return clean(await provider.complete({ system, user: question }));
 }
 
 let pass = 0;
@@ -225,7 +189,7 @@ for (const c of cases) {
 
 const acc = pass / cases.length;
 console.log(
-  `\nrouting accuracy: ${pass}/${cases.length} = ${(acc * 100).toFixed(1)}%  (model: ${MODEL})`
+  `\nrouting accuracy: ${pass}/${cases.length} = ${(acc * 100).toFixed(1)}%  (model: ${provider.model})`
 );
 if (misses.length) {
   console.log(
