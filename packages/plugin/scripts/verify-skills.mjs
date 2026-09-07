@@ -31,6 +31,7 @@ const warn = (skill, msg) => warnings.push(`  ! [${skill}] ${msg}`);
 const schema = JSON.parse(readFileSync(join(HERE, 'tool-schemas.json'), 'utf8'));
 const TOOLS = schema.tools;
 const TOOL_NAMES = Object.keys(TOOLS);
+const referencedTools = new Set(); // coverage FYI (not a gate): snapshot tools mentioned by >=1 skill
 
 // Shared output-conventions block: fenced by these markers, must be byte-identical across all skills
 // (a Desktop zip ships only its own SKILL.md, so the block has to live inside each — a README copy is
@@ -133,6 +134,7 @@ for (const skill of skillDirs) {
   // Normalize CRLF→LF: the \n-anchored frontmatter/SQL regexes below must not depend on the
   // checkout's line endings (Windows CI checks out CRLF by default). Belt to .gitattributes' braces.
   const text = readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+  for (const t of TOOL_NAMES) if (text.includes(t)) referencedTools.add(t);
 
   // 1. frontmatter
   const fm = parseFrontmatter(text);
@@ -247,6 +249,8 @@ for (const skill of skillDirs) {
 // --- report ----------------------------------------------------------------
 
 console.log(`verify-skills: ${skillDirs.length} skills · ${TOOL_NAMES.length} known tools · ${sqlCount} SQL + ${cypherCount} Cypher blocks`);
+const unwired = TOOL_NAMES.filter((t) => !referencedTools.has(t));
+console.log(`tool coverage: ${referencedTools.size}/${TOOL_NAMES.length} referenced by a skill${unwired.length ? ` · documented-but-unwired (gateway/ops tools, not a defect): ${unwired.join(', ')}` : ''}`);
 if (listQueries && queryReport.length) console.log('\nEmbedded queries (run live via the gateway to fully verify):\n' + queryReport.join('\n'));
 if (warnings.length) console.log('\nWARNINGS:\n' + warnings.join('\n'));
 if (errors.length) { console.log('\nERRORS:\n' + errors.join('\n')); console.log(`\n✗ FAIL — ${errors.length} error(s)`); process.exit(1); }
