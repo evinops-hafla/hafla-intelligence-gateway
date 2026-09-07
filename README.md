@@ -37,26 +37,15 @@ stdio↔HTTPS shim that mints Google ID tokens via the user's own `gcloud` and f
 ### Two ways an employee connects
 
 - **Bridge (`gcloud`, non-OAuth clients):** Cursor, Gemini CLI, Antigravity, and Claude Desktop's developer MCP config use the bridge above — your own `gcloud` Google identity, stdio↔HTTPS. Also the **fallback** for Claude Code (automation / M2M, or when OAuth can't be used).
-- **OAuth Web connector (LIVE — production GA, verified 2026-09-05) — the default for Claude Code + claude.ai:** on claude.ai / Claude Desktop / Claude Code add `https://mcp.hafla.com/mcp` as a connector and sign in with Google — no `gcloud`, auto-refresh, and immune to the bridge's branded-client 403. **Enabled + verified in production** (a real `@hafla.com` connect through claude.ai reached the gateway; `authMethod=oauth_user` on the prod WorkOS env). The bridge is **not** being retired — it stays canonical for non-OAuth clients + automation. Setup: Claude Code → [`packages/plugin/CLAUDE-CODE-OAUTH.md`](packages/plugin/CLAUDE-CODE-OAUTH.md) (CIMD, verified 2026-09-07); claude.ai / Claude Desktop → [`packages/plugin/DESKTOP-SETUP.md`](packages/plugin/DESKTOP-SETUP.md).
+- **OAuth Web connector — the default for Claude Code + claude.ai (production GA, verified 2026-09-05):** add `https://mcp.hafla.com/mcp` as a connector and sign in with Google — no `gcloud`, auto-refresh, immune to the bridge's branded-client 403. Setup: Claude Code → [`packages/plugin/CLAUDE-CODE-OAUTH.md`](packages/plugin/CLAUDE-CODE-OAUTH.md); claude.ai / Claude Desktop → [`packages/plugin/DESKTOP-SETUP.md`](packages/plugin/DESKTOP-SETUP.md). Per-client detail: the **Connection profiles** table in [`packages/plugin/README.md`](packages/plugin/README.md).
 
 ---
 
 ## Prerequisites
 
-This bridge requires **Node 24 LTS** (currently `24.15.0` or any newer patch in the 24.x line).
+**Connecting over OAuth — the default for Claude Code, Claude Desktop, and claude.ai? Nothing to install.** Add the connector (`https://mcp.hafla.com/mcp`) and sign in with your `@hafla.com` Google account.
 
-We strongly recommend installing Node via a version manager rather than the OS installer.
-
-- **macOS / Linux:** [`nvm`](https://github.com/nvm-sh/nvm) (recommended) or [`fnm`](https://github.com/Schniz/fnm)
-- **Windows:** [`fnm`](https://github.com/Schniz/fnm) (recommended) or [`nvm-windows`](https://github.com/coreybutler/nvm-windows)
-
-Once your manager is installed, the `.nvmrc` in this repo pins the right version automatically:
-
-```bash
-nvm install  # or: fnm install
-nvm use      # or: fnm use
-node -v      # should print v24.15.x
-```
+The **bridge / automation** path requires **Node 24 LTS** and `gcloud`. Its full setup — version managers, `gcloud auth login`, and per-client config — is the canonical reference in [`packages/intelligence-mcp-bridge/PREREQUISITES.md`](packages/intelligence-mcp-bridge/PREREQUISITES.md).
 
 ---
 

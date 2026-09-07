@@ -98,11 +98,10 @@ re-uploads. (Maintain the `SKILL.md` folders in Git as the source of truth.)
 
 ## What you get / honesty rules (same as Claude Code)
 
-- **Read-only.** No create/book/register.
-- Answers **cite real integer keys** (`orderNumber` / event # / ticket #), never UUIDs.
-- **Semantic conversation search is WhatsApp-only** — Zendesk/Slack are keyword/structured, never
-  claimed as semantic.
-- Money labels: supplier **cost** ≠ client **sell** price; each number is labeled.
+Read-only; answers cite real integer keys (never UUIDs); supplier **cost** vs client **sell** price is
+always labeled; semantic conversation search is WhatsApp-only. The full set is the single source of truth
+in [`SKILLS-GUIDE.md`](SKILLS-GUIDE.md) § "Good to know (the honesty rules)". One Desktop-specific note:
+
 - Skills instruct Claude to call the connector's tools by name — they do **not** reach the gateway from a
   sandbox script (the correct claude.ai pattern).
 
