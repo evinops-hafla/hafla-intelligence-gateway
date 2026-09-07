@@ -63,7 +63,8 @@ description edit**, run the credential-free structural check:
 
 ```bash
 node eval/run-routing-eval.mjs --check      # golden-set structure (CI-safe, no key)
-node eval/run-routing-eval.mjs              # the real routing eval (needs ANTHROPIC_API_KEY)
+node eval/run-routing-eval.mjs              # the real eval — needs a model key: ANTHROPIC_API_KEY
+                                            # (canonical), or GEMINI_API_KEY / GOOGLE_API_KEY (AI Studio)
 ```
 
 ## CI

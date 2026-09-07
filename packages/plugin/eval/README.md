@@ -28,14 +28,26 @@ ever shortening or re-wording a description.
 # structural check — credential-free, safe anywhere (CI could run this half if desired):
 node run-routing-eval.mjs --check
 
-# the real eval — needs a key; NOT in CI (costs tokens, needs a credential):
+# the real eval — needs a model key; NOT in CI (costs tokens, needs a credential).
+# Canonical — production routes with Claude:
 ANTHROPIC_API_KEY=sk-... node run-routing-eval.mjs [--verbose]
+
+# Or Google AI Studio / Gemini — a cross-model PROXY (see the caveat below):
+GEMINI_API_KEY=... node run-routing-eval.mjs [--verbose]                    # GOOGLE_API_KEY also works
+EVAL_MODEL=gemini-2.5-flash GEMINI_API_KEY=... node run-routing-eval.mjs    # pick the model
 ```
 
 The runner gives a model **only** the 6 `name: description` pairs and asks which single skill each
 golden question should trigger, then scores against `golden-routing.json` (threshold ≥95%). A miss is
-either a **description bug** or a **golden-label bug** — investigate both. `EVAL_MODEL` overrides the
-default (`claude-haiku-4-5-20251001`).
+either a **description bug** or a **golden-label bug** — investigate both. The provider is auto-detected
+from whichever key is set; `EVAL_MODEL` overrides the per-provider default (`claude-haiku-4-5-20251001` /
+`gemini-2.5-pro`).
+
+> **Fidelity caveat.** Production routing is done by **Claude** (the Claude Code / Desktop host picks the
+> skill), so a Claude run is the canonical Tier-1 measure. A Gemini run tells you whether the descriptions
+> are _discriminative_ — useful, and enough when that's the only key you have — but a stronger or just
+> different router can pass a description a Claude host would misroute. Prefer a Claude run before shipping
+> a description change; use Gemini as a cheap proxy in between.
 
 ## Running Tier 2
 
