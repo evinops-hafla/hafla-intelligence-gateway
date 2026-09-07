@@ -339,7 +339,7 @@ Both prompts are expected Gemini CLI behaviors, not bridge errors.
 
 Then ask the client:
 
-> Run `safe_sql_sandbox` with `SELECT COUNT(*) FROM "haflaCore"."OpsUsers"`.
+> Run `safe_sql_sandbox` with `SELECT 1`.
 
 A row count comes back, you're done. The first request takes ~1–2 s longer while the bridge mints your first Google ID token; subsequent calls reuse the cached token.
 

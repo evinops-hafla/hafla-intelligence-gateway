@@ -1,6 +1,6 @@
 # EvWA Intelligence on Claude Desktop / claude.ai — setup guide
 
-> **✅ LIVE — production GA, verified end-to-end 2026-09-05.** The Desktop/claude.ai OAuth connector is
+> **✅ LIVE — production GA, operator-verified 2026-09-05 (teammate end-to-end pending).** The Desktop/claude.ai OAuth connector is
 > built, **enabled, and verified working in production**: a real `@hafla.com` Google sign-in through claude.ai
 > reached the gateway (`authMethod=oauth_user`) on the **production** WorkOS environment (prod issuer
 > `secure-grace-01.authkit.app`). Claude **Code** also works (see [`README.md`](README.md) § Install). The
@@ -66,12 +66,12 @@ zips.** Distribute the zips via this repo + this guide.
 
 1. **Organization settings → Connectors → Add**.
 2. Hover **Custom → select "Web"**.
-3. **Remote MCP server URL:** `https://mcp.hafla.com/mcp`.
+3. **Name:** `EvWA Intelligence` · **Remote MCP server URL:** `https://mcp.hafla.com/mcp`. (The name is the label teammates look for in Part 2.)
 4. **Add.** Because the client **self-registers** (DCR on this surface), adding by URL is all that's
    needed — there is **no** Client ID/Secret to paste. The connector then appears (labeled "Custom") for
    all members to connect.
 
-> Only Owners can add connectors on Team/Enterprise. Verify the exact menu labels in your admin console —
+> On Team/Enterprise, custom connectors are usually **owner-added org-wide** (Part 1); members then just **Connect** (Part 2). Only if your workspace permits members to add their own connectors can a teammate add the URL directly. Verify the exact menu labels in your admin console —
 > Anthropic's UI has been relabeled and docs trail it. **Open item:** if the org-wide connector flow still
 > asks for credentials under Advanced settings, confirm whether DCR covers it (per-user
 > add-by-URL definitely needs none).
@@ -104,6 +104,18 @@ in [`SKILLS-GUIDE.md`](SKILLS-GUIDE.md) § "Good to know (the honesty rules)". O
 
 - Skills instruct Claude to call the connector's tools by name — they do **not** reach the gateway from a
   sandbox script (the correct claude.ai pattern).
+
+## Troubleshooting (OAuth connector)
+
+- **Sign-in fails or the browser hangs** — cancel and click **Connect** again; make sure you pick your
+  `@hafla.com` Google account (a personal account is rejected at the Auth Server).
+- **Connected but tools error / repeated 401** — disconnect the connector (Settings → Connectors → the
+  EvWA connector → Disconnect) and Connect again to re-run OAuth.
+- **`employee_inactive` / access denied after a clean sign-in** — you reached the gateway but it gates
+  your identity; ask Ops to set `isEmployeeActive=true` for your `@hafla.com` account. That is an
+  authorization issue, not a setup one.
+- **Cowork/Code can't see the tools but Chat can** — you're likely on the local stdio bridge, not the
+  connector; the bridge doesn't run in Cowork/Code (see the top of this doc). Use the connector.
 
 ## Open items (post-GA polish)
 
