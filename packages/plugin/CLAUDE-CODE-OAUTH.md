@@ -11,7 +11,9 @@ and sidesteps the `gcloud` 403 audience-mismatch gotcha entirely; the bridge
 stays canonical for automation and non-OAuth clients. First verified 2026-09-07
 on one machine (a second-machine / teammate confirm is the natural next check);
 CIMD self-registration works, and the token is resource-bound to the gateway
-audience, so this path structurally cannot 403.
+audience, so this path cannot hit the bridge's audience-mismatch 403 (an
+authorization 403 — inactive employee / non-allowlisted domain — can still
+occur; that's a different diagnosis).
 
 ---
 
@@ -37,8 +39,10 @@ the end.
    Show me the change before writing config. Use the bare name
    `hafla-evwa-idl-gateway` (no suffix) — I have only one gateway connection.
    If a server with that name already exists (e.g. the plugin's `gcloud`
-   bridge), tell me: I either remove it first, or — only if I want both auth
-   routes at once — add this one as `hafla-evwa-idl-gateway-oauth` instead.
+   bridge), tell me: I either remove it first (simplest — then use the bare
+   name in every step below), or — only if I want both auth routes at once —
+   add this one as `hafla-evwa-idl-gateway-oauth` and use THAT name in every
+   command below (login, verify, logout, remove) in place of the bare name.
 
 3. **Authenticate** — sign in through the browser:
 
