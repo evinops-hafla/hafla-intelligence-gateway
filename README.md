@@ -6,6 +6,8 @@ Public client packages for the Hafla MCP Gateway at `mcp.hafla.com`.
 
 This repo is the public side of the Hafla intelligence stack: small, audit-friendly packages that let Claude Code, Claude Desktop, Cursor, Gemini CLI, Antigravity CLI, and Antigravity 2.0 reach the gateway. The gateway server itself (data lakes, identity resolution, etc.) lives in a private monorepo.
 
+**Working in this repo with an AI agent?** See [`AGENTS.md`](AGENTS.md) — the operating contract (the three layers, the read-only tool surface, and the invariants an agent must hold). Claude Code loads it (and `CLAUDE.md`, a symlink to it) automatically.
+
 ---
 
 ## Two "gateways" — one convention to keep them straight
