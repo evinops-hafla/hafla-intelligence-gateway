@@ -30,8 +30,9 @@ the end.
    needs **no Node, no `gcloud`, and no bridge** — that is the whole point of
    OAuth. Confirm `claude --version` runs, and flag anything missing.
 
-2. **Add the connector** — register the gateway as a remote HTTP MCP server
-   under the canonical name, at user scope so it works from every directory:
+2. **Add the connector** (a "connector" is just Claude's term for a remote MCP
+   server it talks to) — register the gateway as a remote HTTP MCP server under
+   the canonical name, at user scope so it works from every directory:
 
    ```bash
    claude mcp add --transport http hafla-evwa-idl-gateway \
@@ -40,11 +41,21 @@ the end.
 
    Show me the change before writing config. Use the bare name
    `hafla-evwa-idl-gateway` (no suffix) — I have only one gateway connection.
-   If a server with that name already exists (e.g. the plugin's `gcloud`
-   bridge), tell me: I either remove it first (simplest — then use the bare
-   name in every step below), or — only if I want both auth routes at once —
-   add this one as `hafla-evwa-idl-gateway-oauth` and use THAT name in every
-   command below (login, verify, logout, remove) in place of the bare name.
+   If a server with that name already exists, check which kind it is first
+   (`claude mcp list`):
+   - **Plugin-provided** (the `evwa-intelligence` plugin's `gcloud` bridge — it
+     runs the `intelligence-mcp-bridge` package): do NOT `claude mcp remove` it
+     (that does not work on plugin servers). Just add this OAuth server at user
+     scope under the same bare name — a user-scope server takes precedence and
+     shadows the plugin's bridge, and the plugin's skills keep working. I can
+     also toggle the plugin's server off in `/mcp`.
+   - **Manually added** (via `claude mcp add` or a `.mcp.json`): remove it
+     first — `claude mcp remove hafla-evwa-idl-gateway -s <its scope>` — then
+     use the bare name below.
+
+   Only if I want BOTH auth routes at once, add this as
+   `hafla-evwa-idl-gateway-oauth` and use THAT name in every command below
+   (login, verify, logout, remove) in place of the bare name.
 
 3. **Authenticate** — sign in through the browser:
 

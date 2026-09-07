@@ -17,6 +17,11 @@ EvWA skills over our own data (`mcp.hafla.com`): `supplier-discovery`, `pricing-
 > prompts are in [`SKILLS-GUIDE.md`](SKILLS-GUIDE.md) — hand teammates that page. This file is the
 > connector/skill **install** runbook.
 
+> **What's a "connector"?** It's Claude's word for a **remote MCP server you attach to Claude** so it can
+> use that server's tools. On Claude Desktop / claude.ai you add one under **Settings → Connectors** by
+> URL and sign in once — here, the EvWA gateway at `mcp.hafla.com`. It's the same gateway the Claude Code
+> and bridge paths reach; "connector" is just the Desktop / claude.ai term for it.
+
 ## How Desktop distribution actually works (from current Anthropic docs)
 
 Two independent pieces — **you can push one, not the other**:
@@ -96,7 +101,7 @@ re-uploads. (Maintain the `SKILL.md` folders in Git as the source of truth.)
 - [ ] Exact Desktop menu labels (Connectors path; Skills-upload path).
 - [ ] Org-connector Advanced-settings: DCR fully covers add-by-URL, or does the org flow still want
       credentials? (per-user add-by-URL needs none.)
-- [ ] End-to-end on a real *teammate* (operator end-to-end done 2026-09-05): connect → skill → real gateway query.
+- [ ] End-to-end on a real _teammate_ (operator end-to-end done 2026-09-05): connect → skill → real gateway query.
 
 > Identity note: a WorkOS access token carries no Google `hd` claim; access is restricted to `@hafla.com`
 > at the Auth Server, and the gateway independently re-checks the token's email domain + active-employee
