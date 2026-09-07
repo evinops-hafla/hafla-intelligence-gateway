@@ -1,5 +1,7 @@
 # Prerequisites for `@hafla/intelligence-mcp-bridge`
 
+> **On Claude Code, Claude Desktop, or claude.ai? You don't need any of this.** Those connect over **OAuth** — no Node, no `gcloud`, no bridge. Add the connector and sign in: Claude Code → [`../plugin/CLAUDE-CODE-OAUTH.md`](../plugin/CLAUDE-CODE-OAUTH.md); Claude Desktop / claude.ai → [`../plugin/DESKTOP-SETUP.md`](../plugin/DESKTOP-SETUP.md). This file is only for the **bridge** path (Cursor / Gemini CLI / Antigravity / automation, or Claude Code's `gcloud` fallback).
+
 One-time machine setup. Gets you to the state where the bridge install instructions in [README.md](./README.md) can run.
 
 **Supported platforms:** Windows + macOS. Each section below is self-contained — follow only the one matching your operating system.
@@ -12,16 +14,16 @@ One-time machine setup. Gets you to the state where the bridge install instructi
 
 These checks define "prerequisites met." If all pass on the machine, skip to [README.md](./README.md) — you're done here.
 
-| Check                                                                 | Command                                  | Expected output                                                                                                                  |
-| --------------------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Node 24 LTS is the active Node                                        | `node -v`                                | `v24.15.0` or newer `v24.x.y`                                                                                                    |
-| npm is recent                                                         | `npm -v`                                 | `11.x` or newer                                                                                                                  |
-| Version manager present (Windows)                                     | `nvm version`                            | A version string (e.g. `1.1.12`)                                                                                                 |
-| Version manager present (macOS)                                       | `command -v nvm`                         | `nvm` (a shell function)                                                                                                         |
-| Node-managed MCP client installed against Node 24 (Gemini CLI / Claude Code) | `gemini --version` or `claude --version` | Version string with **no `EBADENGINE` warning in stderr**                                                                  |
-| Antigravity CLI (if using)                                            | `agy --version`                          | Version string. `agy` is not Node-managed; no `EBADENGINE` possible.                                                             |
-| gcloud SDK installed                                                  | `gcloud --version`                       | Prints SDK version                                                                                                               |
-| `@hafla.com` account active in gcloud                                 | `gcloud auth list`                       | An ACTIVE row matching your `@hafla.com` email                                                                                   |
+| Check                                                                        | Command                                  | Expected output                                                      |
+| ---------------------------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------- |
+| Node 24 LTS is the active Node                                               | `node -v`                                | `v24.15.0` or newer `v24.x.y`                                        |
+| npm is recent                                                                | `npm -v`                                 | `11.x` or newer                                                      |
+| Version manager present (Windows)                                            | `nvm version`                            | A version string (e.g. `1.1.12`)                                     |
+| Version manager present (macOS)                                              | `command -v nvm`                         | `nvm` (a shell function)                                             |
+| Node-managed MCP client installed against Node 24 (Gemini CLI / Claude Code) | `gemini --version` or `claude --version` | Version string with **no `EBADENGINE` warning in stderr**            |
+| Antigravity CLI (if using)                                                   | `agy --version`                          | Version string. `agy` is not Node-managed; no `EBADENGINE` possible. |
+| gcloud SDK installed                                                         | `gcloud --version`                       | Prints SDK version                                                   |
+| `@hafla.com` account active in gcloud                                        | `gcloud auth list`                       | An ACTIVE row matching your `@hafla.com` email                       |
 
 If any check fails, follow the per-OS playbook below to reach this state. If the per-OS playbook doesn't fit the machine (corporate lockdown, pre-existing tooling, etc.), the goal is still these checks — get the machine there however you can.
 
@@ -86,8 +88,8 @@ One-time. The nvm-windows installer is the only step on Windows that explicitly 
 
    ```powershell
    $env:PATH = [Environment]::ExpandEnvironmentVariables(
-  [Environment]::GetEnvironmentVariable("PATH","Machine") + ";" +
-  [Environment]::GetEnvironmentVariable("PATH","User") + ";" + $env:PATH)
+   [Environment]::GetEnvironmentVariable("PATH","Machine") + ";" +
+   [Environment]::GetEnvironmentVariable("PATH","User") + ";" + $env:PATH)
    ```
 
 Verify:
