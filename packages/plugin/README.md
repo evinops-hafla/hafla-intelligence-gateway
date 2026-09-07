@@ -70,7 +70,7 @@ packages/plugin/
   SETUP-PROMPT.md                        # paste-into-Claude-Code prompt: bridge/gcloud setup + verify
   CLAUDE-CODE-OAUTH.md                   # paste-into-Claude-Code prompt: OAuth connect (no gcloud)
   AUTHORING.md                           # how to add/change a skill (verification discipline)
-  DESKTOP-SETUP.md                       # Desktop connector + skill-install runbook (draft)
+  DESKTOP-SETUP.md                       # Desktop connector + skill-install runbook
 ```
 
 Each skill is a portable `SKILL.md` (YAML frontmatter `name` + `description`, then instructions). The
@@ -112,7 +112,7 @@ answer time; `verify-skills.mjs` asserts the 6 copies match):
 | Client                                | Auth route                                     | How to connect                                                                                         | Server name                              |
 | ------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
 | **Claude Code**                       | **OAuth (CIMD) — default** · bridge = fallback | OAuth → [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md) · bridge → [`SETUP-PROMPT.md`](SETUP-PROMPT.md) | `hafla-evwa-idl-gateway`                 |
-| **Claude Desktop**                    | OAuth (DCR) connector · or bridge              | [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md)                                                                 | connector URL · `hafla-evwa-idl-gateway` |
+| **Claude Desktop**                    | OAuth (DCR) connector · bridge = Chat only     | [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md)                                                                 | connector URL · `hafla-evwa-idl-gateway` |
 | **claude.ai Chat + Cowork**           | OAuth (DCR) connector                          | [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md)                                                                 | connector URL (server-side)              |
 | **Cursor / Gemini CLI / Antigravity** | bridge (`gcloud`)                              | [bridge README](../intelligence-mcp-bridge/README.md)                                                  | `hafla-evwa-idl-gateway`                 |
 
@@ -153,7 +153,7 @@ the claude.ai remote-connector uses the gateway's OAuth (WorkOS AuthKit) — bui
    available.
 2. The skill installed on the surface (Claude Code plugin, or Claude Desktop skill zip).
 
-## Distribution (researched 2026-08-23 vs current Anthropic docs)
+## Distribution (per current Anthropic docs)
 
 - **Claude Code** — skills installable now via the plugin/marketplace above; the gateway connects
   **separately over OAuth (CIMD) by default**, bridge = fallback (the plugin wires no transport — see the

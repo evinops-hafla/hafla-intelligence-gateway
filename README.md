@@ -1,6 +1,6 @@
 # Hafla Intelligence Gateway
 
-> **Production** — bridge `@hafla/intelligence-mcp-bridge` 1.0.7 on npm · plugin `evwa-intelligence` 0.2.0 (6 skills) · 24 read-only tools · OAuth: claude.ai/Desktop connector GA 2026-09-05 (DCR) · Claude Code 2026-09-07 (CIMD)
+> **Production** — bridge `@hafla/intelligence-mcp-bridge` 1.0.7 on npm · plugin `evwa-intelligence` 0.2.0 (6 skills) · 24 read-only tools · OAuth: claude.ai/Desktop connector GA 2026-09-05 (DCR) · Claude Code 2026-09-07 (CIMD, 1 machine)
 
 Public client packages for the Hafla MCP Gateway at `mcp.hafla.com`.
 
@@ -12,10 +12,10 @@ This repo is the public side of the Hafla intelligence stack: small, audit-frien
 
 ## Two "gateways" — one convention to keep them straight
 
-| Term                              | What                                                                                                                                    | Where                   |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| **MCP Gateway** (server)          | Cloud Run service at `https://mcp.hafla.com` — IAM-gated HTTP MCP endpoint, AlloyDB + Neo4j + Vertex AI Search                          | private — separate repo |
-| **Intelligence Gateway** (client) | The bridge (npm), the Claude Code plugin, and the 6 skills it bundles — everything an employee installs to reach the MCP Gateway server | this repo               |
+| Term                              | What                                                                                                                                                        | Where                   |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| **MCP Gateway** (server)          | Cloud Run service at `https://mcp.hafla.com` — app-authenticated HTTP MCP endpoint (OAuth / bearer; publicly reachable), AlloyDB + Neo4j + Vertex AI Search | private — separate repo |
+| **Intelligence Gateway** (client) | The bridge (npm), the Claude Code plugin, and the 6 skills it bundles — everything an employee installs to reach the MCP Gateway server                     | this repo               |
 
 Talk about "the MCP Gateway server" when you mean the Cloud Run service; "the Intelligence Gateway" when you mean this repo or the user-facing pieces in it.
 
@@ -32,12 +32,12 @@ Talk about "the MCP Gateway server" when you mean the Cloud Run service; "the In
 
 stdio↔HTTPS shim that mints Google ID tokens via the user's own `gcloud` and forwards JSON-RPC to `mcp.hafla.com`. Zero runtime dependencies.
 
-**Install + configure:** [packages/intelligence-mcp-bridge/README.md](packages/intelligence-mcp-bridge/README.md) §§ "Prerequisites" and "3. Add this MCP server block to your client config". The package README is the canonical install reference — it covers the launchd-subprocess constraint (macOS GUI apps don't see your shell's `nvm`-managed binaries, so the MCP config requires two explicit absolute paths) and the per-version-manager path table (`nvm` / `fnm` / Volta / `nvm-windows`).
+**Install + configure:** [packages/intelligence-mcp-bridge/README.md](packages/intelligence-mcp-bridge/README.md) §§ "Prerequisites" and "3. Add this MCP server block to your client config". The package README is the canonical install reference — it covers the launchd-subprocess constraint (macOS GUI apps don't see your shell's `nvm`-managed binaries, so the MCP config requires explicit absolute paths — plus an `env.PATH` covering `gcloud` on Form B) and the per-version-manager path table (`nvm` / `fnm` / Volta / `nvm-windows`).
 
 ### Two ways an employee connects
 
 - **Bridge (`gcloud`, non-OAuth clients):** Cursor, Gemini CLI, Antigravity, and Claude Desktop's developer MCP config use the bridge above — your own `gcloud` Google identity, stdio↔HTTPS. Also the **fallback** for Claude Code (automation / M2M, or when OAuth can't be used).
-- **OAuth Web connector — the default for Claude Code + claude.ai (production GA, verified 2026-09-05):** add `https://mcp.hafla.com/mcp` as a connector and sign in with Google — no `gcloud`, auto-refresh, immune to the bridge's branded-client 403. Setup: Claude Code → [`packages/plugin/CLAUDE-CODE-OAUTH.md`](packages/plugin/CLAUDE-CODE-OAUTH.md); claude.ai / Claude Desktop → [`packages/plugin/DESKTOP-SETUP.md`](packages/plugin/DESKTOP-SETUP.md). Per-client detail: the **Connection profiles** table in [`packages/plugin/README.md`](packages/plugin/README.md).
+- **OAuth Web connector — the default for Claude Code + claude.ai (claude.ai/Desktop GA 2026-09-05; Claude Code CIMD verified 1 machine 2026-09-07, teammate confirm pending):** add `https://mcp.hafla.com/mcp` as a connector and sign in with Google — no `gcloud`, auto-refresh, immune to the bridge's branded-client 403. Setup: Claude Code → [`packages/plugin/CLAUDE-CODE-OAUTH.md`](packages/plugin/CLAUDE-CODE-OAUTH.md); claude.ai / Claude Desktop → [`packages/plugin/DESKTOP-SETUP.md`](packages/plugin/DESKTOP-SETUP.md). Per-client detail: the **Connection profiles** table in [`packages/plugin/README.md`](packages/plugin/README.md).
 
 ---
 

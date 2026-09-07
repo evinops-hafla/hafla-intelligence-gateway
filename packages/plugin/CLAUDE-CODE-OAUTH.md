@@ -41,17 +41,17 @@ the end.
 
    Show me the change before writing config. Use the bare name
    `hafla-evwa-idl-gateway` (no suffix) — I have only one gateway connection.
-   If a server with that name already exists, check which kind it is first
-   (`claude mcp list`):
-   - **Plugin-provided** (the `evwa-intelligence` plugin's `gcloud` bridge — it
-     runs the `intelligence-mcp-bridge` package): do NOT `claude mcp remove` it
-     (that does not work on plugin servers). Just add this OAuth server at user
-     scope under the same bare name — a user-scope server takes precedence and
-     shadows the plugin's bridge, and the plugin's skills keep working. I can
-     also toggle the plugin's server off in `/mcp`.
+   The current `evwa-intelligence` plugin is skills-only, so there is usually
+   nothing to collide with. If a server with that name already exists — a
+   manually added one, or the old (≤0.1.0) plugin that auto-wired a bridge —
+   check it with `claude mcp list`:
    - **Manually added** (via `claude mcp add` or a `.mcp.json`): remove it
      first — `claude mcp remove hafla-evwa-idl-gateway -s <its scope>` — then
      use the bare name below.
+   - **Plugin-provided** (old plugin): a user-scope server with the same bare
+     name takes precedence and shadows the plugin's, and the plugin's skills
+     keep working — just add this one at user scope (or toggle the plugin's
+     server off in `/mcp`).
 
    Only if I want BOTH auth routes at once, add this as
    `hafla-evwa-idl-gateway-oauth` and use THAT name in every command below
