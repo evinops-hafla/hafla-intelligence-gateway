@@ -1,22 +1,22 @@
 # EvWA skills — answer-quality eval
 
-The static harness (`../scripts/verify-skills.mjs`) proves a skill is *well-formed* — params exist,
+The static harness (`../scripts/verify-skills.mjs`) proves a skill is _well-formed_ — params exist,
 frontmatter is legal, the routing graph is connected, the output-conventions block hasn't drifted. It
-says nothing about whether an answer is *right*. These evals cover the behaviour static analysis can't:
+says nothing about whether an answer is _right_. These evals cover the behaviour static analysis can't:
 
 **Why static is not enough — the class that shipped.** `event_playbook({ family: "Wedding" })` is a
 legal param with a legal string type: every static gate passes. It fails live because `family` has a
-*value-level* contract (8 exact enum strings). Same shape: `supplier_discovery({ product: "AUS event" })`
+_value-level_ contract (8 exact enum strings). Same shape: `supplier_discovery({ product: "AUS event" })`
 returns a confident empty; a description that quietly grabs the wrong question. No param-name check sees
 these — only routing/trajectory evals do.
 
 ## Tiers
 
-| Tier | What it checks | Cost | Where | Status |
-| ---- | -------------- | ---- | ----- | ------ |
-| **1 — routing** | Given only the 6 descriptions, does a question hit the right skill? | ~cheap single calls | `run-routing-eval.mjs` + `golden-routing.json` | **built** (seed set) |
-| **2 — sampled trajectory** | 16 stratified questions; assert shape/grounding (right skill, right tools, ≥1 integer citation, no UUID, money labelled, freshness shown, no first-call enum error, no raw `max` quoted) | moderate (recording); free (scoring) | `run-trajectory-eval.mjs` + `assertions.mjs` + `golden-trajectory.json` | **built** (scorer + assertions credential-free; recording is the keyed step) |
-| **3 — full answer-quality grading** | LLM-judge scoring of the whole ~106-question set | high | (deferred) | on trigger only |
+| Tier                                | What it checks                                                                                                                                                                           | Cost                                 | Where                                                                   | Status                                                                       |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **1 — routing**                     | Given only the 6 descriptions, does a question hit the right skill?                                                                                                                      | ~cheap single calls                  | `run-routing-eval.mjs` + `golden-routing.json`                          | **built** (seed set)                                                         |
+| **2 — sampled trajectory**          | 16 stratified questions; assert shape/grounding (right skill, right tools, ≥1 integer citation, no UUID, money labelled, freshness shown, no first-call enum error, no raw `max` quoted) | moderate (recording); free (scoring) | `run-trajectory-eval.mjs` + `assertions.mjs` + `golden-trajectory.json` | **built** (scorer + assertions credential-free; recording is the keyed step) |
+| **3 — full answer-quality grading** | LLM-judge scoring of the whole ~106-question set                                                                                                                                         | high                                 | (deferred)                                                              | on trigger only                                                              |
 
 Tier 1 is the safety net for the frontmatter **descriptions** — the one thing no other check covers, and
 the exact place the >200-char truncation / front-loading tension lives. It is the regression guard for
@@ -34,14 +34,15 @@ ANTHROPIC_API_KEY=sk-... node run-routing-eval.mjs [--verbose]
 
 # Or Google AI Studio / Gemini — a cross-model PROXY (see the caveat below):
 GEMINI_API_KEY=... node run-routing-eval.mjs [--verbose]                    # GOOGLE_API_KEY also works
-EVAL_MODEL=gemini-2.5-flash GEMINI_API_KEY=... node run-routing-eval.mjs    # pick the model
+EVAL_MODEL=gemini-2.5-pro GEMINI_API_KEY=... node run-routing-eval.mjs      # override the model (strongest)
 ```
 
 The runner gives a model **only** the 6 `name: description` pairs and asks which single skill each
 golden question should trigger, then scores against `golden-routing.json` (threshold ≥95%). A miss is
 either a **description bug** or a **golden-label bug** — investigate both. The provider is auto-detected
-from whichever key is set; `EVAL_MODEL` overrides the per-provider default (`claude-haiku-4-5-20251001` /
-`gemini-2.5-pro`).
+from whichever key is set (or `EVAL_PROVIDER` forces one); `EVAL_MODEL` overrides the per-provider
+default (`claude-haiku-4-5-20251001` / `gemini-flash-latest`). Gemini auth uses the `x-goog-api-key`
+header, so the key never lands in the request URL.
 
 > **Fidelity caveat.** Production routing is done by **Claude** (the Claude Code / Desktop host picks the
 > skill), so a Claude run is the canonical Tier-1 measure. A Gemini run tells you whether the descriptions
@@ -71,7 +72,7 @@ today, anywhere**; only fresh trajectory capture needs the gateway.
 
 ## The golden set
 
-`golden-routing.json` has **67 cases**, extracted from the `#ask-evwa` taxonomy (categories A–I in the
+`golden-routing.json` has **69 cases**, extracted from the `#ask-evwa` taxonomy (categories A–I in the
 private `mcp-gateway/.../2026-05-23-evwa-v0-analysis.md`) and weighted toward real demand, covering all
 6 skills. Three cases are tagged `"negative": true` — the hiccups-hunt collisions where a sibling skill
 plausibly grabs the question but must not ("what does a wedding cost" → event-needs, not pricing-lookup;
@@ -84,5 +85,5 @@ the rest were too vendor/entity-specific to phrase as clean routing cases.
 skill.
 
 > This eval already earned its keep: routing the set flagged that `supplier-discovery`'s description
-> never mentioned its single-partner *dossier* capability, so "dossier on supplier X" was ambiguous
+> never mentioned its single-partner _dossier_ capability, so "dossier on supplier X" was ambiguous
 > against `past-orders`. The description was fixed before the set shipped.
