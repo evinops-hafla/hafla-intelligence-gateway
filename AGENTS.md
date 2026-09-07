@@ -66,9 +66,11 @@ Two "gateways", one convention — do not conflate them:
   `release.yml`, which publishes the **bridge** to npm. The plugin ships by git
   merge only — no version tag. Only a deliberate bridge release is tagged (the
   root README documents the review-first release flow).
-- **Commits:** follow `/custom-commit` (Why / What changed / Battle scars /
-  Caution / Verification / Depends on) with a Conventional-Commits prefix, and
-  **never** add a `Co-Authored-By` trailer — the commit-msg hook rejects it.
+- **Commits:** use a Conventional-Commits prefix (`type(scope): summary`) and a
+  structured body — Why / What changed / Verification, plus Battle scars /
+  Caution / Depends on when relevant — and **never** add a `Co-Authored-By`
+  trailer. This is a repo convention held by author/agent discipline: no
+  commit-msg hook or CI check enforces it here, so keep to it deliberately.
 - **CI** (`.github/workflows/ci.yml`) runs the tests, `verify-skills`, the
   credential-free eval gates, and the bridge symlink smoke on ubuntu / macOS /
   windows (Node 24.15.0). Keep them green. Skill tooling is CRLF-safe
