@@ -7,15 +7,16 @@ real order / event / ticket numbers**.
 ## Quickstart — where do I run this?
 
 Find your row, do the one thing in it, then paste the first-success query below. (Prefer a guided
-setup? Paste [`SETUP-PROMPT.md`](SETUP-PROMPT.md) into Claude Code — it configures **and verifies** the
-gateway for you, including the gcloud-auth gotcha.)
+setup? Paste [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md) into Claude Code — it configures **and
+verifies** the gateway for you over OAuth, the default (no `gcloud`). For the bridge / `gcloud` path use
+[`SETUP-PROMPT.md`](SETUP-PROMPT.md) instead.)
 
-| You are… | On… | Do this |
-| -------- | --- | ------- |
-| **Sales / CX** | **Claude Desktop / claude.ai** | **Live — production GA (2026-09-05).** Add a connector with URL `https://mcp.hafla.com/mcp` (it self-registers — no client ID/secret), sign in with Google `@hafla.com`, then upload the skill zips (Customize → Skills). Full steps: [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md). |
-| **Sales / CX** | via a teammate | Send your question to anyone set up with Claude Code — the answer is the same. |
-| **Engineer** | **Claude Code** | ① `gcloud auth login` with your `@hafla.com` account · ② `/plugin marketplace add evinops-hafla/hafla-intelligence-gateway` · ③ `/plugin install evwa-intelligence@hafla-intelligence-gateway`. Then just ask. **No gcloud? Connect via OAuth instead** (CIMD, no bridge): [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md). |
-| **Engineer** | raw MCP client (Cursor / Gemini CLI) | Wire the bridge directly — see the [bridge README](../intelligence-mcp-bridge/README.md). |
+| You are…       | On…                                  | Do this                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Sales / CX** | **Claude Desktop / claude.ai**       | **Live — production GA (2026-09-05).** Add a connector with URL `https://mcp.hafla.com/mcp` (it self-registers — no client ID/secret), sign in with Google `@hafla.com`, then upload the skill zips (Customize → Skills). Full steps: [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md).                                                                                                |
+| **Sales / CX** | via a teammate                       | Send your question to anyone set up with Claude Code — the answer is the same.                                                                                                                                                                                                                                                                                               |
+| **Engineer**   | **Claude Code**                      | **Default — OAuth (no `gcloud`):** connect per [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md), then `/plugin marketplace add evinops-hafla/hafla-intelligence-gateway` + `/plugin install evwa-intelligence@hafla-intelligence-gateway` for the skills. **Bridge fallback** (automation / non-OAuth): `gcloud auth login` first — the plugin then wires the gateway for you. |
+| **Engineer**   | raw MCP client (Cursor / Gemini CLI) | Wire the bridge directly — see the [bridge README](../intelligence-mcp-bridge/README.md).                                                                                                                                                                                                                                                                                    |
 
 **First-success query** (once connected, paste this):
 
@@ -30,25 +31,28 @@ troubleshooting.
 > **Getting a 403 / "token verification failed"?** Your gcloud may have been set up via a non-standard
 > OAuth client (e.g. Gemini Code Assist / Cloud Code / a branded installer), whose token audience the
 > gateway doesn't accept. Fix: re-authenticate with the **vanilla** CLI — `gcloud auth login` — then
-> retry. `scripts/doctor.sh` confirms the exact cause.
+> retry. If that does **not** clear it, a resident IDE (Cloud Code / Antigravity / Gemini Code Assist)
+> is hijacking the login and re-minting the branded client on every attempt — switch to OAuth
+> ([`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md)), which is `gcloud`-free and immune.
+> `scripts/doctor.sh` confirms the exact cause.
 
 ## Pick by what you're asking
 
-| If you're asking… | Skill | Example |
-| ----------------- | ----- | ------- |
-| **Who can supply / provide X?** (rank vendors by proven orders) | `supplier-discovery` | "Who supplies chiavari chairs?" · "Top partners for LED walls, not [vendor we tried]" |
-| **What does X cost / what did we pay?** (real prices, per-unit, delivered) | `pricing-lookup` | "What do we charge for a banquet chair?" · "Dry-hire cost for 100 chairs + 20 tables delivered to Business Bay" |
-| **Give me a 101 / brief on X** (one product/service, all angles) | `product-brief` | "Brief me on misters" · "101 on arabic calligraphy" |
-| **What did we do for X before?** (a host, company, event, order, ticket) | `past-orders` | "Past events for AUS" · "History for +9715…" · "What was on order #16504?" |
-| **Where do events like this happen?** (venue *evidence*, not a recommender) | `venue-recommendation` | "Where do 200-pax outdoor events happen?" |
-| **What do I need for a [event]?** (planning checklist + typical spend) | `event-needs` | "What do I need for a wedding?" (the skill maps everyday words to the playbook's family names — e.g. wedding → "Wedding and Engagement") · "Checklist for an industry conference" |
+| If you're asking…                                                           | Skill                  | Example                                                                                                                                                                           |
+| --------------------------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Who can supply / provide X?** (rank vendors by proven orders)             | `supplier-discovery`   | "Who supplies chiavari chairs?" · "Top partners for LED walls, not [vendor we tried]"                                                                                             |
+| **What does X cost / what did we pay?** (real prices, per-unit, delivered)  | `pricing-lookup`       | "What do we charge for a banquet chair?" · "Dry-hire cost for 100 chairs + 20 tables delivered to Business Bay"                                                                   |
+| **Give me a 101 / brief on X** (one product/service, all angles)            | `product-brief`        | "Brief me on misters" · "101 on arabic calligraphy"                                                                                                                               |
+| **What did we do for X before?** (a host, company, event, order, ticket)    | `past-orders`          | "Past events for AUS" · "History for +9715…" · "What was on order #16504?"                                                                                                        |
+| **Where do events like this happen?** (venue _evidence_, not a recommender) | `venue-recommendation` | "Where do 200-pax outdoor events happen?"                                                                                                                                         |
+| **What do I need for a [event]?** (planning checklist + typical spend)      | `event-needs`          | "What do I need for a wedding?" (the skill maps everyday words to the playbook's family names — e.g. wedding → "Wedding and Engagement") · "Checklist for an industry conference" |
 
 ## Starter prompts (copy-paste)
 
 Real questions to try, grouped by skill and roughly ordered by how often the team asks them. Just paste
 one — Claude picks the skill and cites real order / event / partner numbers. Every prompt here was run
 live against the gateway and returns a cited, non-empty answer (last verified 3 Sep 2026); a ⚠ marks a
-deliberately *hard* one that exercises an honesty rule.
+deliberately _hard_ one that exercises an honesty rule.
 
 **`supplier-discovery` — "who can supply X?"**
 
@@ -69,7 +73,7 @@ deliberately *hard* one that exercises an honesty rule.
 **`pricing-lookup` — "what does X cost / what did we pay?"**
 
 - `What did we pay suppliers for a White Chiavari Chair?` → partner-cost anchor (~10 AED, ORDER tier) with
-  the p25–p75 band — and it will *not* quote the raw 1,260 AED outlier as a price.
+  the p25–p75 band — and it will _not_ quote the raw 1,260 AED outlier as a price.
 - `What do we charge clients for a banquet chair?` → the selling-price side (kept separate from cost).
 - ⚠ `Dry-hire cost for 100 chairs + 20 tables delivered to Business Bay` → a generic/dry-hire brief:
   the per-unit numbers come from order notes + chat (not a price column), plus an optional delivery total.
@@ -108,7 +112,7 @@ deliberately *hard* one that exercises an honesty rule.
 - **Proven vs stated:** suppliers are ranked by **real past orders**, not a reliability score (none
   exists) — listed-but-never-delivered vendors are labelled as such.
 - **Estimates are labelled.** Some figures (e.g. a company's per-event `valueAed`) are pre-sale
-  *estimates*, not realized totals — the answer says so.
+  _estimates_, not realized totals — the answer says so.
 - **What it won't do:** book/create/register anything (read-only); quote a margin/markup (out of scope);
   invent numbers it doesn't have.
 

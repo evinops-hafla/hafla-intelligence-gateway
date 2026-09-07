@@ -5,15 +5,20 @@ Hafla's EvWA Intelligence MCP (`mcp.hafla.com`) on this machine, lists the live
 tools, and refreshes any stale local notes. It confirms before changing any
 config file.
 
-## Two ways to connect — pick one
+## OAuth is the default — this is the bridge fallback
 
-- **A — OAuth (simplest, no `gcloud`):** add the gateway as a remote connector
-  and sign in with Google — no `gcloud`, no bridge, and the 403 audience gotcha
-  cannot happen. First verified 2026-09-07 (one machine). Steps:
-  [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md).
-- **B — Bridge over `gcloud` (this prompt):** your own `gcloud` Google identity
-  via the stdio bridge — canonical for automation and non-OAuth clients.
-  Continue below.
+**Most end users should connect over OAuth, not with this prompt.** It adds the
+gateway as a remote connector and signs in with Google — no `gcloud`, no
+bridge, and the branded-client 403 cannot happen (OAuth is immune to the
+callback-hijack that breaks the bridge on machines with Cloud Code /
+Antigravity / Gemini Code Assist installed). Steps:
+[`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md). First verified 2026-09-07 (one
+machine).
+
+Use this **bridge** prompt only for automation / M2M, non-OAuth clients (Cursor,
+Gemini CLI, Antigravity), or when you specifically need the `gcloud`-identity
+path. It uses your own `gcloud` Google identity via the stdio bridge — continue
+below.
 
 ---
 

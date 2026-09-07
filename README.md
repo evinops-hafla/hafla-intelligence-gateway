@@ -12,9 +12,9 @@ This repo is the public side of the Hafla intelligence stack: small, audit-frien
 
 ## Two "gateways" — one convention to keep them straight
 
-| Term                              | What                                                                                                           | Where                   |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| **MCP Gateway** (server)          | Cloud Run service at `https://mcp.hafla.com` — IAM-gated HTTP MCP endpoint, AlloyDB + Neo4j + Vertex AI Search | private — separate repo |
+| Term                              | What                                                                                                                                    | Where                   |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| **MCP Gateway** (server)          | Cloud Run service at `https://mcp.hafla.com` — IAM-gated HTTP MCP endpoint, AlloyDB + Neo4j + Vertex AI Search                          | private — separate repo |
 | **Intelligence Gateway** (client) | The bridge (npm), the Claude Code plugin, and the 6 skills it bundles — everything an employee installs to reach the MCP Gateway server | this repo               |
 
 Talk about "the MCP Gateway server" when you mean the Cloud Run service; "the Intelligence Gateway" when you mean this repo or the user-facing pieces in it.
@@ -23,9 +23,9 @@ Talk about "the MCP Gateway server" when you mean the Cloud Run service; "the In
 
 ## Packages
 
-| Package                                                                  | Type                                      | Status                  |
-| ------------------------------------------------------------------------ | ----------------------------------------- | ----------------------- |
-| [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge`    | 1.0.7 — live on npm     |
+| Package                                                                  | Type                                                                                                                                  | Status                                                          |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge`                                                                                                | 1.0.7 — live on npm                                             |
 | [`packages/plugin/`](packages/plugin/)                                   | Claude Code plugin (git — this repo's marketplace) — bundles the 6 skills + wires the gateway connector by running the bridge via npx | 6 skills (5 wave-1 + `event-needs`), tool-first; verified in CI |
 
 ### `@hafla/intelligence-mcp-bridge`
@@ -36,8 +36,8 @@ stdio↔HTTPS shim that mints Google ID tokens via the user's own `gcloud` and f
 
 ### Two ways an employee connects
 
-- **Bridge (today, every client):** Claude Code, Cursor, Gemini CLI, Antigravity, and Claude Desktop's developer MCP config use the bridge above — your own `gcloud` Google identity, stdio↔HTTPS.
-- **OAuth Web connector (LIVE — production GA, verified 2026-09-05):** on claude.ai / Claude Desktop / Claude Code add `https://mcp.hafla.com/mcp` as a connector and sign in with Google — no `gcloud`, auto-refresh. **Enabled + verified in production** (a real `@hafla.com` connect through claude.ai reached the gateway; `authMethod=oauth_user` on the prod WorkOS env). The bridge is **not** being retired — it stays canonical for non-OAuth clients + automation. Setup: Claude Code → [`packages/plugin/CLAUDE-CODE-OAUTH.md`](packages/plugin/CLAUDE-CODE-OAUTH.md) (CIMD, verified 2026-09-07); claude.ai / Claude Desktop → [`packages/plugin/DESKTOP-SETUP.md`](packages/plugin/DESKTOP-SETUP.md).
+- **Bridge (`gcloud`, non-OAuth clients):** Cursor, Gemini CLI, Antigravity, and Claude Desktop's developer MCP config use the bridge above — your own `gcloud` Google identity, stdio↔HTTPS. Also the **fallback** for Claude Code (automation / M2M, or when OAuth can't be used).
+- **OAuth Web connector (LIVE — production GA, verified 2026-09-05) — the default for Claude Code + claude.ai:** on claude.ai / Claude Desktop / Claude Code add `https://mcp.hafla.com/mcp` as a connector and sign in with Google — no `gcloud`, auto-refresh, and immune to the bridge's branded-client 403. **Enabled + verified in production** (a real `@hafla.com` connect through claude.ai reached the gateway; `authMethod=oauth_user` on the prod WorkOS env). The bridge is **not** being retired — it stays canonical for non-OAuth clients + automation. Setup: Claude Code → [`packages/plugin/CLAUDE-CODE-OAUTH.md`](packages/plugin/CLAUDE-CODE-OAUTH.md) (CIMD, verified 2026-09-07); claude.ai / Claude Desktop → [`packages/plugin/DESKTOP-SETUP.md`](packages/plugin/DESKTOP-SETUP.md).
 
 ---
 
@@ -115,7 +115,7 @@ The first line of stderr is a `Pre-flight OK` log; the response on stdout is a J
 
 The bridge publishes via npm with provenance (OIDC trusted publisher). See [packages/intelligence-mcp-bridge/CHANGELOG.md](packages/intelligence-mcp-bridge/CHANGELOG.md) for version history.
 
-**Workflow: review-first, release-from-PR.** The version bump is reviewed *before* the irreversible `npm publish`, so the release commit rides the PR branch — it is **never** pushed straight to `main`. (This is what actually ships: every tag `v1.0.4`–`v1.0.7` sits on a PR **merge commit**, with the `chore(bridge): release` bump already inside the branch.) The internal Hafla `09-bridge-package-release-workflow-e375.md` spec is canonical and has the full gated sequence; the short form for maintainers:
+**Workflow: review-first, release-from-PR.** The version bump is reviewed _before_ the irreversible `npm publish`, so the release commit rides the PR branch — it is **never** pushed straight to `main`. (This is what actually ships: every tag `v1.0.4`–`v1.0.7` sits on a PR **merge commit**, with the `chore(bridge): release` bump already inside the branch.) The internal Hafla `09-bridge-package-release-workflow-e375.md` spec is canonical and has the full gated sequence; the short form for maintainers:
 
 ```bash
 # On the PR branch, AFTER the substantive change is green and review threads are

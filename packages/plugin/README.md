@@ -4,7 +4,7 @@ Agent **skills** that sit on top of the read-only EvWA Intelligence gateway (`mc
 "who supplies X / what did we pay / 101 on X" questions into governed, cited answers — for Hafla's
 Sales / CX / supply team.
 
-This package is the **Claude Code plugin** (`evwa-intelligence`): it bundles the six skills *and* wires
+This package is the **Claude Code plugin** (`evwa-intelligence`): it bundles the six skills _and_ wires
 the gateway as an MCP server (running `npx @hafla/intelligence-mcp-bridge`). The skills themselves are
 portable `SKILL.md` files — the same files load standalone as per-user zips on Claude Desktop.
 
@@ -27,13 +27,13 @@ Full rationale: `hafla-intelligence/mcp-gateway/specs/history-and-future/history
 
 ## Wave-1 skills (build order)
 
-| #   | Skill                  | Status                              |
-| --- | ---------------------- | ----------------------------------- |
-| 1   | `supplier-discovery`   | **built (tool-first)**              |
-| 2   | `pricing-lookup`       | **built (tool-first)**              |
-| 3   | `product-brief`        | **built (tool-first orchestrator)** |
-| 4   | `past-orders`          | **built (tool-first)**              |
-| 5   | `venue-recommendation` | **built (evidence-only)**           |
+| #   | Skill                  | Status                                        |
+| --- | ---------------------- | --------------------------------------------- |
+| 1   | `supplier-discovery`   | **built (tool-first)**                        |
+| 2   | `pricing-lookup`       | **built (tool-first)**                        |
+| 3   | `product-brief`        | **built (tool-first orchestrator)**           |
+| 4   | `past-orders`          | **built (tool-first)**                        |
+| 5   | `venue-recommendation` | **built (evidence-only)**                     |
 | 6   | `event-needs`          | **built (wave-1.5 — planning bill-of-needs)** |
 
 Design specs live in the sibling repo:
@@ -108,12 +108,12 @@ answer time; `verify-skills.mjs` asserts the 6 copies match):
 
 ### Connection profiles — which route for which client
 
-| Client | Auth route | How to connect | Server name |
-| --- | --- | --- | --- |
-| **Claude Code** | OAuth (CIMD), simplest · or bridge | OAuth → [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md) · bridge → plugin install below | `hafla-evwa-idl-gateway` |
-| **Claude Desktop** | OAuth (DCR) connector · or bridge | [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md) | connector URL · `hafla-evwa-idl-gateway` |
-| **claude.ai Chat + Cowork** | OAuth (DCR) connector | [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md) | connector URL (server-side) |
-| **Cursor / Gemini CLI / Antigravity** | bridge (`gcloud`) | [bridge README](../intelligence-mcp-bridge/README.md) | `hafla-evwa-idl-gateway` |
+| Client                                | Auth route                                     | How to connect                                                                         | Server name                              |
+| ------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------- |
+| **Claude Code**                       | **OAuth (CIMD) — default** · bridge = fallback | OAuth → [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md) · bridge → plugin install below | `hafla-evwa-idl-gateway`                 |
+| **Claude Desktop**                    | OAuth (DCR) connector · or bridge              | [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md)                                                 | connector URL · `hafla-evwa-idl-gateway` |
+| **claude.ai Chat + Cowork**           | OAuth (DCR) connector                          | [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md)                                                 | connector URL (server-side)              |
+| **Cursor / Gemini CLI / Antigravity** | bridge (`gcloud`)                              | [bridge README](../intelligence-mcp-bridge/README.md)                                  | `hafla-evwa-idl-gateway`                 |
 
 All routes reach the same gateway and the same read-only tools — end users pick
 one, and the server name is always `hafla-evwa-idl-gateway` (the suffixes are
@@ -121,8 +121,8 @@ only for running several routes on one machine).
 
 > **Not sure where you run this?** Start with the persona × surface quickstart + first-success query at
 > the top of [`SKILLS-GUIDE.md`](SKILLS-GUIDE.md). The canonical commands are below. To have Claude Code
-> set up **and verify** the gateway connection for you (incl. the gcloud-auth gotcha), paste
-> [`SETUP-PROMPT.md`](SETUP-PROMPT.md).
+> set up **and verify** the gateway connection for you, paste [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md)
+> (OAuth — the default) — or [`SETUP-PROMPT.md`](SETUP-PROMPT.md) for the bridge / `gcloud` path.
 
 **Claude Code (works today):**
 
