@@ -45,7 +45,7 @@ from whichever key is set; `EVAL_MODEL` overrides the per-provider default (`cla
 
 > **Fidelity caveat.** Production routing is done by **Claude** (the Claude Code / Desktop host picks the
 > skill), so a Claude run is the canonical Tier-1 measure. A Gemini run tells you whether the descriptions
-> are _discriminative_ — useful, and enough when that's the only key you have — but a stronger or just
+> are **discriminative** — useful, and enough when that's the only key you have — but a stronger or just
 > different router can pass a description a Claude host would misroute. Prefer a Claude run before shipping
 > a description change; use Gemini as a cheap proxy in between.
 
