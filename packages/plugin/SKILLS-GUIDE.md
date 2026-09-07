@@ -24,7 +24,7 @@ verifies** the gateway for you over OAuth, the default (no `gcloud`). For the br
 
 You should get a ranked table of partners (Al Jefoon, Sabir Events, Bouncy Time…) with their proven
 order counts and supplier-cost per tier, ending in a `Sources:` line. If you get that, you're set — try
-your own question. If not: on the bridge/gcloud path run `scripts/doctor.sh`; on the OAuth (CIMD) path
+your own question. If not: on the bridge/gcloud path run the repo's `packages/plugin/scripts/doctor.sh`; on the OAuth (CIMD) path
 see [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md)'s Troubleshooting section; or the bridge README's
 troubleshooting.
 
@@ -34,7 +34,7 @@ troubleshooting.
 > retry. If that does **not** clear it, a resident IDE (Cloud Code / Antigravity / Gemini Code Assist)
 > is hijacking the login and re-minting the branded client on every attempt — switch to OAuth
 > ([`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md)), which is `gcloud`-free and immune.
-> `scripts/doctor.sh` confirms the exact cause.
+> The repo's `packages/plugin/scripts/doctor.sh` tells an audience mismatch apart from an employee/domain 403.
 
 ## Pick by what you're asking
 

@@ -62,7 +62,7 @@ if [ "${1:-}" = "--skip-live" ]; then
   warn "skipping the live gateway check (--skip-live)"
 else
   echo "  … calling the gateway via the bridge (tools/list) — a few seconds…"
-  RESP=$(printf '%s' '{"jsonrpc":"2.0","method":"tools/list","id":1}' | npx -y @hafla/intelligence-mcp-bridge 2>/dev/null | head -c 8000 || true)
+  RESP=$(printf '%s' '{"jsonrpc":"2.0","method":"tools/list","id":1}' | npx -y @hafla/intelligence-mcp-bridge@1.0.7 2>/dev/null | head -c 8000 || true)
   if printf '%s' "$RESP" | grep -q '"tools"'; then
     pass "gateway reachable — tools/list returned a tool list"
   elif printf '%s' "$RESP" | grep -qE 'Gateway returned 403|\b403\b'; then
@@ -83,7 +83,7 @@ else
         # The usual cause: your gcloud credential was minted by a NON-standard OAuth client (e.g. Gemini
         # Code Assist / Cloud Code / a branded installer), so the token's `aud` isn't one the gateway accepts.
         fail "gateway 403 — token verification failed (audience mismatch, not a group/employee issue)" \
-          "your gcloud identity token's aud isn't accepted. Re-auth with STANDARD gcloud: 'gcloud auth login' (vanilla CLI → the universal client the gateway accepts). If that doesn't fix it, your OAuth client ID must be added to the gateway's accepted audiences — ask ops (see gateway auth GCLOUD_OAUTH_CLIENT_ID)." ;;
+          "your gcloud token's aud isn't accepted — it was minted by a branded OAuth client (e.g. Cloud Code / Gemini Code Assist), not vanilla gcloud. Re-auth with STANDARD gcloud: 'gcloud auth login'. If that does NOT clear it, a resident IDE (Cloud Code / Antigravity / Gemini Code Assist) is hijacking the login and re-minting the branded client — switch to OAuth (CLAUDE-CODE-OAUTH.md), which is gcloud-free and immune." ;;
       *"employee_inactive"*)
         fail "gateway 403 — account not flagged as an active employee" \
           "ask ops to set haflaCore.OpsUsers.isEmployeeActive=true for your @hafla.com account" ;;
