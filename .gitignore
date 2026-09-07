@@ -31,4 +31,5 @@ pr.md
 # MCP / Claude / Gemini local config
 .mcp.json
 .claude/settings.local.json
+.claude/pr-comments.config
 .gemini/settings.json
