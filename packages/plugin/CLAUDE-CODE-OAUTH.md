@@ -8,9 +8,10 @@ before changing any config and verifies the connection at the end.
 This is the OAuth alternative to the bridge path in
 [`SETUP-PROMPT.md`](SETUP-PROMPT.md) — pick one. OAuth is the simplest route
 and sidesteps the `gcloud` 403 audience-mismatch gotcha entirely; the bridge
-stays canonical for automation and non-OAuth clients. Verified end-to-end
-2026-09-07: CIMD self-registration works and the token is bound to the gateway
-audience, so it cannot 403.
+stays canonical for automation and non-OAuth clients. First verified 2026-09-07
+on one machine (a second-machine / teammate confirm is the natural next check);
+CIMD self-registration works, and the token is resource-bound to the gateway
+audience, so this path structurally cannot 403.
 
 ---
 

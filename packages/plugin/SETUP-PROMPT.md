@@ -9,7 +9,7 @@ config file.
 
 - **A — OAuth (simplest, no `gcloud`):** add the gateway as a remote connector
   and sign in with Google — no `gcloud`, no bridge, and the 403 audience gotcha
-  cannot happen. Verified live 2026-09-07. Steps:
+  cannot happen. First verified 2026-09-07 (one machine). Steps:
   [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md).
 - **B — Bridge over `gcloud` (this prompt):** your own `gcloud` Google identity
   via the stdio bridge — canonical for automation and non-OAuth clients.
