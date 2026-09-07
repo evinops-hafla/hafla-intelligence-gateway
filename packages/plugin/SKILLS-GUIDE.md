@@ -23,7 +23,8 @@ gateway for you, including the gcloud-auth gotcha.)
 
 You should get a ranked table of partners (Al Jefoon, Sabir Events, Bouncy Time…) with their proven
 order counts and supplier-cost per tier, ending in a `Sources:` line. If you get that, you're set — try
-your own question. If not, run `scripts/doctor.sh` (Claude Code path) or see the bridge README's
+your own question. If not: on the bridge/gcloud path run `scripts/doctor.sh`; on the OAuth (CIMD) path
+see [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md)'s Troubleshooting section; or the bridge README's
 troubleshooting.
 
 > **Getting a 403 / "token verification failed"?** Your gcloud may have been set up via a non-standard
