@@ -70,7 +70,8 @@ encyclopedia knowledge is one line at most, skipped by default.**
 Optional: `related_products({ id, rankBy: "lift" })` for "commonly ordered with" (a useful brief line) —
 `rankBy: "lift"` surfaces **distinctive** pairings (market-basket lift) over popular staples (chairs,
 tables) that co-occur with almost everything; **only trust `lift` among `liftReliable: true` rows** (a
-thin-support lift can be huge and meaningless — fall back to `coOrders` otherwise). And
+thin-support lift can be huge and meaningless — fall back to `coOrders` otherwise; verified live
+2026-09-07: Silver Chiavari → all-`liftReliable` rows, lift 123→4). And
 `get_ticket_360({ ticket_id: "<n>" })` if the user drills into a cited Zendesk ticket.
 
 ## Brief structure (the one page)
