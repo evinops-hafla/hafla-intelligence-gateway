@@ -6,7 +6,7 @@ A small stdio↔HTTPS shim that lets **Claude Code, Claude Desktop, Cursor, Gemi
 
 The bridge mints a fresh 60-minute Google ID token via your own `gcloud` session, caches it, refreshes it ~55 minutes before expiry, and forwards every JSON-RPC request to the gateway with a `Bearer` header. No shared secret, no per-user token to issue or rotate — authorisation is your Google Workspace identity.
 
-> **Coexists with the OAuth Web connector.** The gateway now also has a browser-OAuth "Web connector" (WorkOS AuthKit, no secret): claude.ai / Claude Desktop connect via **DCR** (production GA, verified live 2026-09-05 — see the plugin's `DESKTOP-SETUP.md`); Claude Code connects via **CIMD** (verified 2026-09-07 — see the plugin's `CLAUDE-CODE-OAUTH.md`). It is **not** a replacement: this bridge stays the canonical path for Cursor / Gemini CLI / Antigravity / automation and for anyone using their `gcloud` identity.
+> **Coexists with the OAuth Web connector.** The gateway now also has a browser-OAuth "Web connector" (WorkOS AuthKit, no secret): claude.ai / Claude Desktop connect via **DCR** (production GA, verified live 2026-09-05 — see the plugin's `DESKTOP-SETUP.md`); Claude Code connects via **CIMD** (verified 2026-09-07 — see the plugin's `CLAUDE-CODE-OAUTH.md`). It is **not** a replacement: this bridge stays the canonical path for Cursor / Gemini CLI / Antigravity / automation and for anyone using their `gcloud` identity. For **Claude Code, OAuth (CIMD) is now the default and the bridge is the fallback** (automation / non-OAuth needs).
 
 ---
 
@@ -41,16 +41,16 @@ Restart your MCP client. Done.
 
 Before the install playbook below, confirm these checks pass. If any fail, complete the setup in [PREREQUISITES.md](./PREREQUISITES.md).
 
-| Check                                | Command                                  | Expected output                                                                                                                                                                       |
-| ------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Node 24 LTS active                   | `node -v`                                | `v24.15.0` or newer `v24.x.y`                                                                                                                                                         |
-| npm recent                           | `npm -v`                                 | `11.x` or newer                                                                                                                                                                       |
-| Version manager (Windows)            | `nvm version`                            | A version string (e.g. `1.1.12`)                                                                                                                                                      |
-| Version manager (macOS)              | `command -v nvm`                         | `nvm` (a shell function)                                                                                                                                                              |
-| Node-managed MCP client on Node 24   | `gemini --version` or `claude --version` | Version string, no `EBADENGINE` warning. Skip if you only use non-Node-managed clients (Cursor / Claude Desktop / Antigravity CLI / Antigravity 2.0).                                 |
-| Antigravity CLI (if using)           | `agy --version`                          | Version string. `agy` is not Node-managed (installed via Google curl/PowerShell script); `EBADENGINE` is not possible.                                                                |
-| gcloud SDK installed                 | `gcloud --version`                       | Prints SDK version                                                                                                                                                                    |
-| `@hafla.com` active in gcloud        | `gcloud auth list`                       | An `ACTIVE` row matching your `@hafla.com` email                                                                                                                                      |
+| Check                              | Command                                  | Expected output                                                                                                                                       |
+| ---------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node 24 LTS active                 | `node -v`                                | `v24.15.0` or newer `v24.x.y`                                                                                                                         |
+| npm recent                         | `npm -v`                                 | `11.x` or newer                                                                                                                                       |
+| Version manager (Windows)          | `nvm version`                            | A version string (e.g. `1.1.12`)                                                                                                                      |
+| Version manager (macOS)            | `command -v nvm`                         | `nvm` (a shell function)                                                                                                                              |
+| Node-managed MCP client on Node 24 | `gemini --version` or `claude --version` | Version string, no `EBADENGINE` warning. Skip if you only use non-Node-managed clients (Cursor / Claude Desktop / Antigravity CLI / Antigravity 2.0). |
+| Antigravity CLI (if using)         | `agy --version`                          | Version string. `agy` is not Node-managed (installed via Google curl/PowerShell script); `EBADENGINE` is not possible.                                |
+| gcloud SDK installed               | `gcloud --version`                       | Prints SDK version                                                                                                                                    |
+| `@hafla.com` active in gcloud      | `gcloud auth list`                       | An `ACTIVE` row matching your `@hafla.com` email                                                                                                      |
 
 All pass → proceed below.
 
@@ -102,7 +102,6 @@ Pick your client's config file:
     - **Shared (with the symlink workaround in [Step 4 Form B Pro-tip](#form-b--absolute-paths-fallback)):** if you use both products and want one source of truth. **Only `agy` natively reads `~/.gemini/config/mcp_config.json`** — Antigravity 2.0 reads `~/.gemini/antigravity/mcp_config.json` and does NOT pick up the shared path automatically. Without the symlink, you'd be back to two separate files. **Don't pick "shared" without also applying the symlink** — the configs will drift the moment you edit either side.
 
     Gemini CLI and Antigravity CLI both also read project-scoped settings from `<project>/.gemini/settings.json` (cascades over the global file — useful for repo-specific overrides).
-
 
 **If the file exists**, back it up with a date-time suffix:
 
@@ -170,9 +169,9 @@ Use ONLY when Form A doesn't work. This is typically because the client spawns s
 
 **Derive your paths** (run on your machine; do NOT copy from an example):
 
-| OS                   | Path A (node)                | Path B (bridge entrypoint)                                          | Path C (gcloud's bin directory)         |
-| -------------------- | ---------------------------- | ------------------------------------------------------------------- | --------------------------------------- |
-| macOS                | `node -p "process.execPath"` | `echo "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js"` | `dirname $(which gcloud)`               |
+| OS                   | Path A (node)                | Path B (bridge entrypoint)                                          | Path C (gcloud's bin directory)             |
+| -------------------- | ---------------------------- | ------------------------------------------------------------------- | ------------------------------------------- |
+| macOS                | `node -p "process.execPath"` | `echo "$(npm root -g)/@hafla/intelligence-mcp-bridge/src/index.js"` | `dirname $(which gcloud)`                   |
 | Windows (PowerShell) | `node -p "process.execPath"` | `echo "$(npm root -g)\@hafla\intelligence-mcp-bridge\src\index.js"` | `(Get-Command gcloud).Source \| Split-Path` |
 
 `node -p "process.execPath"` returns the absolute path to the Node binary that is _currently_ executing — single value, deterministic, identical syntax across both OSes. Avoids the `which node` / `where.exe node` multi-line ambiguity when multiple Node installs exist.
@@ -197,10 +196,10 @@ Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` (macOS) / `False` (Wi
 
 **Confirm Path C resolves `gcloud`** (catches "gcloud isn't installed where I think it is" before the bridge fails at pre-flight):
 
-| OS                   | Command                                                                                                                |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| macOS                | `if test -x "$(dirname $(which gcloud))/gcloud"; then echo OK; else echo "NOT FOUND — install gcloud first"; fi`        |
-| Windows (PowerShell) | `Test-Path "$((Get-Command gcloud).Source \| Split-Path)\gcloud.cmd"`                                                  |
+| OS                   | Command                                                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| macOS                | `if test -x "$(dirname $(which gcloud))/gcloud"; then echo OK; else echo "NOT FOUND — install gcloud first"; fi` |
+| Windows (PowerShell) | `Test-Path "$((Get-Command gcloud).Source \| Split-Path)\gcloud.cmd"`                                            |
 
 Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` / `False`, install gcloud per [PREREQUISITES.md](./PREREQUISITES.md) — Form B can't paper over a missing `gcloud` binary.
 
@@ -312,16 +311,17 @@ Restart the client. **CLI clients (Gemini CLI, Antigravity CLI):** the MCP confi
 
 **Then verify the MCP server is connected BEFORE running a tool.** How depends on your client. **Menu paths in GUI clients drift between vendor releases** — if a path below doesn't match your version, the fallback is always to edit the JSON config file directly (per [Step 3 table](#step-3--back-up-your-mcp-client-config-if-it-exists)) and check the client's log/console for an MCP-server-loaded entry.
 
-| Client                                     | Connection-status check                                                                                                                                                                                                                                                                                                                                  |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Claude Code / Gemini CLI / Antigravity CLI | Type `/mcp` at the prompt. `hafla-evwa-idl-gateway` should appear with status **Connected** (or equivalent wording).                                                                                                                                                |
-| Cursor                                     | Open **Settings → MCP** (or the MCP panel in the sidebar). `hafla-evwa-idl-gateway` should appear with a green/connected indicator. If the menu has moved, the fallback is to confirm the entry in `~/.cursor/mcp.json` and check Cursor's developer console for MCP-server load logs. |
-| Claude Desktop                             | Open **Settings → Developer** (or the MCP servers section in Settings). `hafla-evwa-idl-gateway` should appear in the configured servers list. Status indicators vary across Claude Desktop versions; fallback is to inspect the configured-servers list itself.   |
-| Antigravity 2.0                            | From the Agent session view, click the **…** dropdown at the top of the side panel → **MCP Servers** → in the MCP Store, click **Manage MCP Servers** to see the configured-servers list (and **View raw config** to inspect the JSON). Alternative path: **User Settings → Customizations**. *(Verified against Antigravity 2.0 UI as of 2026-05-26 — vendor may rearrange between releases; fallback is to inspect `~/.gemini/antigravity/mcp_config.json` directly.)* |
+| Client                                     | Connection-status check                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Claude Code / Gemini CLI / Antigravity CLI | Type `/mcp` at the prompt. `hafla-evwa-idl-gateway` should appear with status **Connected** (or equivalent wording).                                                                                                                                                                                                                                                                                                                                                     |
+| Cursor                                     | Open **Settings → MCP** (or the MCP panel in the sidebar). `hafla-evwa-idl-gateway` should appear with a green/connected indicator. If the menu has moved, the fallback is to confirm the entry in `~/.cursor/mcp.json` and check Cursor's developer console for MCP-server load logs.                                                                                                                                                                                   |
+| Claude Desktop                             | Open **Settings → Developer** (or the MCP servers section in Settings). `hafla-evwa-idl-gateway` should appear in the configured servers list. Status indicators vary across Claude Desktop versions; fallback is to inspect the configured-servers list itself.                                                                                                                                                                                                         |
+| Antigravity 2.0                            | From the Agent session view, click the **…** dropdown at the top of the side panel → **MCP Servers** → in the MCP Store, click **Manage MCP Servers** to see the configured-servers list (and **View raw config** to inspect the JSON). Alternative path: **User Settings → Customizations**. _(Verified against Antigravity 2.0 UI as of 2026-05-26 — vendor may rearrange between releases; fallback is to inspect `~/.gemini/antigravity/mcp_config.json` directly.)_ |
 
 If the server doesn't appear or shows as disconnected, the bridge didn't load — see [Troubleshooting](#troubleshooting). The connection check is cheap and gives a deterministic load/connect signal before you fire a real tool call.
 
 > **Common recovery paths from a disconnected `/mcp` listing:**
+>
 > - **Antigravity CLI (`agy`)** specifically — see [Antigravity CLI fallback](#antigravity-cli-agy-fallback) in Step 4 (`agy` may not inherit nvm PATH; switch to Form B).
 > - **Claude Desktop / Antigravity 2.0** — desktop apps don't inherit shell PATH; use Form B with absolute paths (see [Form B](#form-b--absolute-paths-fallback)).
 > - **Any client** — re-run [Step 2 verify](#step-2--verify-install) to confirm the bin shim is on PATH; if Form B, re-derive Path A + Path B (the global node_modules root moves on nvm version changes).
@@ -353,62 +353,62 @@ schema — from `tools/list` at connect; this table is the human overview.)
 
 ### Raw query sandboxes
 
-| Tool                    | What it does                                                                                          |
-| ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| Tool                    | What it does                                                                                                                                                                       |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `safe_sql_sandbox`      | Read-only SQL across the AlloyDB lakes (`zendesk`, `whatsappPeriskope`, `slack`, `intelligence`, `haflaCore`); 60 s timeout, 500-row cap. `haflaCore` here is a ~4 h-synced mirror |
-| `safe_sql_sandbox_core` | Read-only SQL against the **live** Hafla Core RDS primary — current-second freshness                   |
-| `safe_cypher_sandbox`   | Read-only Cypher over the 838K-node Neo4j identity/event graph (hosts, events, orders, products, partners, tickets…); 60 s timeout, 500-record cap |
-| `describe_table`        | Column names / types / nullability for a lake or core table — run before writing SQL                  |
+| `safe_sql_sandbox_core` | Read-only SQL against the **live** Hafla Core RDS primary — current-second freshness                                                                                               |
+| `safe_cypher_sandbox`   | Read-only Cypher over the 838K-node Neo4j identity/event graph (hosts, events, orders, products, partners, tickets…); 60 s timeout, 500-record cap                                 |
+| `describe_table`        | Column names / types / nullability for a lake or core table — run before writing SQL                                                                                               |
 
 ### Identity & customer
 
-| Tool                     | What it does                                                                                          |
+| Tool                     | What it does                                                                                         |
 | ------------------------ | ---------------------------------------------------------------------------------------------------- |
-| `analyze_identity_graph` | 1-degree identity subgraph around a phone/email across WhatsApp, Zendesk, and Hafla Core              |
-| `customer_360`           | Lifetime transactional profile for one host — spend, cadence, budget tier, segment, taste categories  |
-| `get_org_events`         | Event history for a corporate buyer, keyed by email `orgDomain` (domain = org identity)               |
-| `top_orgs`               | Corporate-buyer leaderboard by deduped event count — same `orgDomain` backing as `get_org_events`      |
+| `analyze_identity_graph` | 1-degree identity subgraph around a phone/email across WhatsApp, Zendesk, and Hafla Core             |
+| `customer_360`           | Lifetime transactional profile for one host — spend, cadence, budget tier, segment, taste categories |
+| `get_org_events`         | Event history for a corporate buyer, keyed by email `orgDomain` (domain = org identity)              |
+| `top_orgs`               | Corporate-buyer leaderboard by deduped event count — same `orgDomain` backing as `get_org_events`    |
 
 ### Support & conversations
 
-| Tool                        | What it does                                                                                    |
-| --------------------------- | ----------------------------------------------------------------------------------------------- |
-| `get_ticket_360`            | Full Zendesk ticket — comment thread + linked Hafla Core UserEvents                              |
-| `search_internal_knowledge` | Semantic search over the WhatsApp conversation corpus (Vertex AI)                                |
+| Tool                        | What it does                                                        |
+| --------------------------- | ------------------------------------------------------------------- |
+| `get_ticket_360`            | Full Zendesk ticket — comment thread + linked Hafla Core UserEvents |
+| `search_internal_knowledge` | Semantic search over the WhatsApp conversation corpus (Vertex AI)   |
 
 ### Catalog & pricing
 
-| Tool               | What it does                                                                                          |
-| ------------------ | ----------------------------------------------------------------------------------------------------- |
-| `catalog_search`   | Keyword search of the published product catalog, with narrowing facets                                 |
-| `product_lookup`   | Resolve one product to a compact card (price, image, status) by id / slug / productNumber              |
-| `related_products` | What to offer alongside a product — curated upsell + real market-basket co-occurrence                  |
-| `price_truth`      | Real transacted **sell** price (p25 / median / p75) for a product; catalog list-price fallback         |
-| `price_anchor`     | Partner **cost** anchor for a product (negotiation) — what Hafla pays suppliers, not a client price     |
-| `delivery_fee`     | Deterministic delivery + collection fee (AED) for a set of items to a UAE location                     |
+| Tool               | What it does                                                                                        |
+| ------------------ | --------------------------------------------------------------------------------------------------- |
+| `catalog_search`   | Keyword search of the published product catalog, with narrowing facets                              |
+| `product_lookup`   | Resolve one product to a compact card (price, image, status) by id / slug / productNumber           |
+| `related_products` | What to offer alongside a product — curated upsell + real market-basket co-occurrence               |
+| `price_truth`      | Real transacted **sell** price (p25 / median / p75) for a product; catalog list-price fallback      |
+| `price_anchor`     | Partner **cost** anchor for a product (negotiation) — what Hafla pays suppliers, not a client price |
+| `delivery_fee`     | Deterministic delivery + collection fee (AED) for a set of items to a UAE location                  |
 
 ### Events & demand
 
-| Tool                 | What it does                                                                                         |
-| -------------------- | --------------------------------------------------------------------------------------------------- |
-| `event_need_profile` | Category attach-rate for an event family — what real orders actually included                         |
-| `event_playbook`     | Authored "ideal" bill-of-needs for an event type / family (reference content)                         |
-| `seasonal_demand`    | Monthly booking or demand curve for UAE events, with an index vs the yearly mean                      |
+| Tool                 | What it does                                                                     |
+| -------------------- | -------------------------------------------------------------------------------- |
+| `event_need_profile` | Category attach-rate for an event family — what real orders actually included    |
+| `event_playbook`     | Authored "ideal" bill-of-needs for an event type / family (reference content)    |
+| `seasonal_demand`    | Monthly booking or demand curve for UAE events, with an index vs the yearly mean |
 
 ### Suppliers
 
-| Tool                 | What it does                                                                                         |
-| -------------------- | --------------------------------------------------------------------------------------------------- |
-| `supplier_brief`     | Capability dossier for one supplier — proven vs stated products, order volume, per-product cost       |
-| `supplier_discovery` | Find partners who have delivered a product/category (costs, contacts) + internal planner notes        |
+| Tool                 | What it does                                                                                    |
+| -------------------- | ----------------------------------------------------------------------------------------------- |
+| `supplier_brief`     | Capability dossier for one supplier — proven vs stated products, order volume, per-product cost |
+| `supplier_discovery` | Find partners who have delivered a product/category (costs, contacts) + internal planner notes  |
 
 ### Leads & pipeline
 
-| Tool                   | What it does                                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------------------------- |
-| `get_lead_context`     | Fetch one bot-triage lead (HEBA↔Oscar handoff) by lead / Zendesk ticket / host / event number      |
-| `lead_pipeline_health` | Fleet-wide stuck-lead / pipeline-health check against live Hafla Core                               |
-| `get_data_freshness`   | Last completed run + sync watermark per pipeline — the canonical "as-of" source                    |
+| Tool                   | What it does                                                                                  |
+| ---------------------- | --------------------------------------------------------------------------------------------- |
+| `get_lead_context`     | Fetch one bot-triage lead (HEBA↔Oscar handoff) by lead / Zendesk ticket / host / event number |
+| `lead_pipeline_health` | Fleet-wide stuck-lead / pipeline-health check against live Hafla Core                         |
+| `get_data_freshness`   | Last completed run + sync watermark per pipeline — the canonical "as-of" source               |
 
 All 24 are read-only at the database layer — the bridge cannot write.
 
@@ -418,20 +418,20 @@ All 24 are read-only at the database layer — the bridge cannot write.
 
 Diagnostic banners are written to stderr. The "literal stderr" column gives the exact text to grep against.
 
-**🟢 401 / 403 from the gateway is a GOOD signal, not a setup failure.** It means the bridge loaded, the gcloud-minted token reached `mcp.hafla.com`, and the gateway is just gating your identity. Everything client-side worked; the fix is an Ops-side ticket (add you to the Workspace group / set `isEmployeeActive=true`). If you reach a 401/403, you can stop debugging your setup — the install is correct.
+**🟢 Most 401 / 403s from the gateway are a GOOD signal, not a setup failure.** They mean the bridge loaded, the gcloud-minted token reached `mcp.hafla.com`, and the gateway is just gating your identity — the fix is an Ops-side ticket (add you to the Workspace group / set `isEmployeeActive=true`), and you can stop debugging your setup. **The one exception is a token _audience mismatch_** (row below): that one is **client-side** — your `gcloud` credential was minted by a non-standard / branded OAuth client the gateway does not accept — so it IS a setup issue on your side, not an Ops ticket.
 
-| Symptom                          | Literal stderr (grep target)                                    | Cause                                                | Fix                                                                                                                            |
-| -------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Wrong Node version               | `requires Node 24 LTS (you are on v...)`                        | Node ≠ 24.x                                          | `nvm use 24.15.0`. If on Form B, also re-derive Path A (Node binary path may have moved).                                      |
-| gcloud not found                 | `gcloud CLI not found`                                          | (1) gcloud not installed; OR (2) gcloud IS installed (works in your shell) but the MCP client spawned the bridge with a minimal PATH that doesn't include gcloud's bin directory — typical for desktop apps via launchd (macOS) / service host (Windows) | (1) If `gcloud --version` fails in your shell too: install per [PREREQUISITES.md](./PREREQUISITES.md) (Windows Step 4 / macOS Step 5). (2) If `gcloud --version` works in your shell but bridge says not found: you're on [Form B](#form-b--absolute-paths-fallback) and your config's `env.PATH` doesn't include Path C. Re-derive `Path C` via `dirname $(which gcloud)` (macOS) or `(Get-Command gcloud).Source \| Split-Path` (Windows) and add it to your `env.PATH`. |
-| Wrong gcloud account             | `Active gcloud account is X — must be an @hafla.com account`    | Personal account active                              | `gcloud config set account YOU@hafla.com`; verify with `gcloud auth list`.                                                     |
-| 401 audience mismatch            | `gateway returned 401 — token audience likely mismatched`       | Not in `team@hafla.com` Workspace group              | Ping Ops to be added. If you ARE in the group, run `gcloud auth login` to mint a fresh token.                                  |
-| 403 employee inactive            | `gateway returned 403 employee_inactive`                        | `haflaCore.OpsUsers` row not active                  | Ping Ops to set `isEmployeeActive=true` on your row.                                                                           |
-| Token mint failure               | `Failed to mint Google ID token`                                | Credentials expired or SDK stale                     | `gcloud auth login` to re-authenticate; `gcloud components update` to refresh the SDK.                                         |
-| Silent disconnect                | (no bridge banner — client log shows "MCP server disconnected") | bin shim not on PATH (Form A) or wrong path (Form B) | Re-run Step 2 verify. If Form A bin shim doesn't resolve, switch to Form B. If Form B path is wrong, re-derive on the machine. |
-| Windows: PowerShell script error | `running scripts is disabled on this system`                    | PowerShell ExecutionPolicy blocks `.ps1` shims       | Invoke the `.cmd` wrapper directly: `intelligence-mcp-bridge.cmd` (works regardless of `ExecutionPolicy`).                     |
-| Antigravity 2.0 / Claude Desktop: bridge does not load even after Form A | (no bridge banner; client log shows "MCP server disconnected" or empty tool list) | Desktop app spawned via launchd (macOS) or service host (Windows) — does NOT inherit shell PATH, so bare `intelligence-mcp-bridge` can't be resolved | Switch to [Form B](#form-b--absolute-paths-fallback) with absolute Path A (`node`) + Path B (`src/index.js`). |
-| Antigravity CLI: `agy` searches the filesystem instead of using gateway tools | (no error — agent silently falls back to file/bash tools to answer queries) | Bridge not loaded: config file missing, empty, or invalid JSON; OR `agy` was not fully restarted after the config edit (hot-reload doesn't apply) | Verify the config exists and parses (Node is already required for the bridge so this is universal): `node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); console.log('OK')" "$HOME"/.gemini/antigravity-cli/settings.json` (substitute the shared path `"$HOME"/.gemini/config/mcp_config.json` if you use that one). Fully `/quit` and relaunch `agy`. Run `/mcp` inside `agy` to confirm `hafla-evwa-idl-gateway` shows as Connected. |
+| Symptom                                                                       | Literal stderr (grep target)                                                                                     | Cause                                                                                                                                                                                                                                                    | Fix                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Wrong Node version                                                            | `requires Node 24 LTS (you are on v...)`                                                                         | Node ≠ 24.x                                                                                                                                                                                                                                              | `nvm use 24.15.0`. If on Form B, also re-derive Path A (Node binary path may have moved).                                                                                                                                                                                                                                                                                                                                                                                  |
+| gcloud not found                                                              | `gcloud CLI not found`                                                                                           | (1) gcloud not installed; OR (2) gcloud IS installed (works in your shell) but the MCP client spawned the bridge with a minimal PATH that doesn't include gcloud's bin directory — typical for desktop apps via launchd (macOS) / service host (Windows) | (1) If `gcloud --version` fails in your shell too: install per [PREREQUISITES.md](./PREREQUISITES.md) (Windows Step 4 / macOS Step 5). (2) If `gcloud --version` works in your shell but bridge says not found: you're on [Form B](#form-b--absolute-paths-fallback) and your config's `env.PATH` doesn't include Path C. Re-derive `Path C` via `dirname $(which gcloud)` (macOS) or `(Get-Command gcloud).Source \| Split-Path` (Windows) and add it to your `env.PATH`. |
+| Wrong gcloud account                                                          | `Active gcloud account is X — must be an @hafla.com account`                                                     | Personal account active                                                                                                                                                                                                                                  | `gcloud config set account YOU@hafla.com`; verify with `gcloud auth list`.                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 401 / 403 audience mismatch                                                   | `gateway returned 401 — token audience likely mismatched` / `Gateway returned 403` (`token verification failed`) | gcloud token minted by a **non-standard / branded OAuth client** (Gemini Code Assist / Cloud Code / a branded installer) — its `aud` isn't on the gateway's allowlist. NOT a Workspace-group issue.                                                      | Re-auth with **vanilla** `gcloud auth login`. If that does NOT clear it, a resident IDE (Cloud Code / Antigravity / Gemini Code Assist) is hijacking the localhost OAuth callback and re-minting the branded client — switch to **OAuth** (the plugin's [`CLAUDE-CODE-OAUTH.md`](../plugin/CLAUDE-CODE-OAUTH.md)), which is `gcloud`-free and immune. The plugin's `scripts/doctor.sh` confirms the exact cause.                                                           |
+| 403 employee inactive                                                         | `gateway returned 403 employee_inactive`                                                                         | `haflaCore.OpsUsers` row not active                                                                                                                                                                                                                      | Ping Ops to set `isEmployeeActive=true` on your row.                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Token mint failure                                                            | `Failed to mint Google ID token`                                                                                 | Credentials expired or SDK stale                                                                                                                                                                                                                         | `gcloud auth login` to re-authenticate; `gcloud components update` to refresh the SDK.                                                                                                                                                                                                                                                                                                                                                                                     |
+| Silent disconnect                                                             | (no bridge banner — client log shows "MCP server disconnected")                                                  | bin shim not on PATH (Form A) or wrong path (Form B)                                                                                                                                                                                                     | Re-run Step 2 verify. If Form A bin shim doesn't resolve, switch to Form B. If Form B path is wrong, re-derive on the machine.                                                                                                                                                                                                                                                                                                                                             |
+| Windows: PowerShell script error                                              | `running scripts is disabled on this system`                                                                     | PowerShell ExecutionPolicy blocks `.ps1` shims                                                                                                                                                                                                           | Invoke the `.cmd` wrapper directly: `intelligence-mcp-bridge.cmd` (works regardless of `ExecutionPolicy`).                                                                                                                                                                                                                                                                                                                                                                 |
+| Antigravity 2.0 / Claude Desktop: bridge does not load even after Form A      | (no bridge banner; client log shows "MCP server disconnected" or empty tool list)                                | Desktop app spawned via launchd (macOS) or service host (Windows) — does NOT inherit shell PATH, so bare `intelligence-mcp-bridge` can't be resolved                                                                                                     | Switch to [Form B](#form-b--absolute-paths-fallback) with absolute Path A (`node`) + Path B (`src/index.js`).                                                                                                                                                                                                                                                                                                                                                              |
+| Antigravity CLI: `agy` searches the filesystem instead of using gateway tools | (no error — agent silently falls back to file/bash tools to answer queries)                                      | Bridge not loaded: config file missing, empty, or invalid JSON; OR `agy` was not fully restarted after the config edit (hot-reload doesn't apply)                                                                                                        | Verify the config exists and parses (Node is already required for the bridge so this is universal): `node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); console.log('OK')" "$HOME"/.gemini/antigravity-cli/settings.json` (substitute the shared path `"$HOME"/.gemini/config/mcp_config.json` if you use that one). Fully `/quit` and relaunch `agy`. Run `/mcp` inside `agy` to confirm `hafla-evwa-idl-gateway` shows as Connected.               |
 
 ---
 
