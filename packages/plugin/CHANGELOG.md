@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ## [Unreleased]
 
 - Docs only — the claude.ai / Claude Desktop **OAuth Web connector** (WorkOS AuthKit over Google `@hafla.com`, add-by-URL, no client ID/secret) reached **production GA** 2026-09-05. `README.md`, `DESKTOP-SETUP.md` and the root README updated; no plugin behaviour change, no version bump.
+- Docs only — **Claude Code OAuth (CIMD) path documented + verified live 2026-09-07**. New `CLAUDE-CODE-OAUTH.md` runbook (connect via `claude mcp add` / `login`, no `gcloud`, no bridge); `SETUP-PROMPT.md` gains a co-equal OAuth/bridge chooser; the root + plugin `README.md` and `SKILLS-GUIDE.md` gain a client→connection-profile map (every client → the invariant server name `hafla-evwa-idl-gateway`); `DESKTOP-SETUP.md` cross-links the runbook. No plugin behaviour change, no version bump.
 
 ## [0.2.0] — 2026-09-05
 
