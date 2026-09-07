@@ -23,10 +23,10 @@ Talk about "the MCP Gateway server" when you mean the Cloud Run service; "the In
 
 ## Packages
 
-| Package                                                                  | Type                                                                                                                                  | Status                                                          |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge`                                                                                                | 1.0.7 — live on npm                                             |
-| [`packages/plugin/`](packages/plugin/)                                   | Claude Code plugin (git — this repo's marketplace) — bundles the 6 skills + wires the gateway connector by running the bridge via npx | 6 skills (5 wave-1 + `event-needs`), tool-first; verified in CI |
+| Package                                                                  | Type                                                                                                                                           | Status                                                          |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge`                                                                                                         | 1.0.7 — live on npm                                             |
+| [`packages/plugin/`](packages/plugin/)                                   | Claude Code plugin (git — this repo's marketplace) — bundles the 6 skills; the gateway connection is separate (OAuth default, bridge fallback) | 6 skills (5 wave-1 + `event-needs`), tool-first; verified in CI |
 
 ### `@hafla/intelligence-mcp-bridge`
 
@@ -64,7 +64,7 @@ intelligence-gateway/
 │   │   ├── README.md               # operator-facing install guide
 │   │   ├── CHANGELOG.md
 │   │   └── LICENSE                 # MIT (root LICENSE; the package symlinks via npm `files`)
-│   └── plugin/                     # Claude Code plugin — bundles 6 skills + wires the bridge as MCP server
+│   └── plugin/                     # Claude Code plugin — bundles 6 skills (gateway connection is separate)
 │       ├── .claude-plugin/plugin.json   # plugin manifest (name: evwa-intelligence)
 │       ├── skills/                 # 6 SKILL.md folders (auto-discovered)
 │       └── README.md               # plugin + skills conventions

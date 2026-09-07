@@ -1,11 +1,12 @@
-# EvWA Intelligence — Claude Code plugin (6 skills + gateway connector)
+# EvWA Intelligence — Claude Code plugin (6 skills)
 
 Agent **skills** that sit on top of the read-only EvWA Intelligence gateway (`mcp.hafla.com`) and turn
 "who supplies X / what did we pay / 101 on X" questions into governed, cited answers — for Hafla's
 Sales / CX / supply team.
 
-This package is the **Claude Code plugin** (`evwa-intelligence`): it bundles the six skills _and_ wires
-the gateway as an MCP server (running `npx @hafla/intelligence-mcp-bridge`). The skills themselves are
+This package is the **Claude Code plugin** (`evwa-intelligence`): it bundles the six skills. Connecting to
+the gateway is a **separate** step — OAuth is the default (see [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md)),
+the bridge is the fallback — so the plugin wires no transport of its own. The skills themselves are
 portable `SKILL.md` files — the same files load standalone as per-user zips on Claude Desktop.
 
 ## Delivery model (2026-08-13 correction — read this before building more)
@@ -108,12 +109,12 @@ answer time; `verify-skills.mjs` asserts the 6 copies match):
 
 ### Connection profiles — which route for which client
 
-| Client                                | Auth route                                     | How to connect                                                                         | Server name                              |
-| ------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------- |
-| **Claude Code**                       | **OAuth (CIMD) — default** · bridge = fallback | OAuth → [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md) · bridge → plugin install below | `hafla-evwa-idl-gateway`                 |
-| **Claude Desktop**                    | OAuth (DCR) connector · or bridge              | [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md)                                                 | connector URL · `hafla-evwa-idl-gateway` |
-| **claude.ai Chat + Cowork**           | OAuth (DCR) connector                          | [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md)                                                 | connector URL (server-side)              |
-| **Cursor / Gemini CLI / Antigravity** | bridge (`gcloud`)                              | [bridge README](../intelligence-mcp-bridge/README.md)                                  | `hafla-evwa-idl-gateway`                 |
+| Client                                | Auth route                                     | How to connect                                                                                         | Server name                              |
+| ------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
+| **Claude Code**                       | **OAuth (CIMD) — default** · bridge = fallback | OAuth → [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md) · bridge → [`SETUP-PROMPT.md`](SETUP-PROMPT.md) | `hafla-evwa-idl-gateway`                 |
+| **Claude Desktop**                    | OAuth (DCR) connector · or bridge              | [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md)                                                                 | connector URL · `hafla-evwa-idl-gateway` |
+| **claude.ai Chat + Cowork**           | OAuth (DCR) connector                          | [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md)                                                                 | connector URL (server-side)              |
+| **Cursor / Gemini CLI / Antigravity** | bridge (`gcloud`)                              | [bridge README](../intelligence-mcp-bridge/README.md)                                                  | `hafla-evwa-idl-gateway`                 |
 
 All routes reach the same gateway and the same read-only tools — end users pick
 one, and the server name is always `hafla-evwa-idl-gateway` (the suffixes are
@@ -126,15 +127,18 @@ only for running several routes on one machine).
 
 **Claude Code (works today):**
 
+Connect the gateway first (OAuth is the default — paste
+[`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md)), then install the skills:
+
 ```bash
 /plugin marketplace add evinops-hafla/hafla-intelligence-gateway
 /plugin install evwa-intelligence@hafla-intelligence-gateway
 ```
 
-Installing wires the skills **and** the gateway connector (`hafla-evwa-idl-gateway`, via
-`npx @hafla/intelligence-mcp-bridge`) together. Prerequisite: `gcloud` installed + `gcloud auth login`
-with your `@hafla.com` account — the bridge mints a Google ID token and cannot bundle auth (see the
-bridge README for full onboarding).
+Installing adds the six **skills** only — it does **not** wire a gateway connection. That is deliberate:
+auto-wiring the `gcloud` bridge forced it on everyone and 403s on machines where an IDE hijacks the login.
+Connect the gateway separately — OAuth (default) via [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md), or the
+bridge / `gcloud` path via [`SETUP-PROMPT.md`](SETUP-PROMPT.md).
 
 **Claude Desktop / claude.ai (Chat / Cowork):** per-user — upload each skill folder as a **zip**
 (Customize → Skills → Add; code-execution enabled) and connect the gateway. **LIVE (production GA, verified 2026-09-05):**
@@ -143,17 +147,17 @@ the claude.ai remote-connector uses the gateway's OAuth (WorkOS AuthKit) — bui
 
 ## Prerequisites (to run a skill)
 
-1. The EvWA Intelligence gateway available as MCP tools — wired automatically by the Claude Code plugin
-   above, or added as a **connector** on Claude Desktop — so `safe_sql_sandbox`, `safe_cypher_sandbox`,
+1. The EvWA Intelligence gateway available as MCP tools — connect it separately (OAuth default — see
+   [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md)), or add it as a **connector** on Claude Desktop — so `safe_sql_sandbox`, `safe_cypher_sandbox`,
    `search_internal_knowledge`, `analyze_identity_graph`, `get_ticket_360`, plus the R1–R5 tools are
    available.
 2. The skill installed on the surface (Claude Code plugin, or Claude Desktop skill zip).
 
 ## Distribution (researched 2026-08-23 vs current Anthropic docs)
 
-- **Claude Code** — installable now via the plugin/marketplace above; connects over **OAuth (CIMD) by
-  default**, bridge = fallback (the plugin auto-wires the bridge connector — override it with a same-named
-  OAuth server; see the Connection profiles table above).
+- **Claude Code** — skills installable now via the plugin/marketplace above; the gateway connects
+  **separately over OAuth (CIMD) by default**, bridge = fallback (the plugin wires no transport — see the
+  Connection profiles table above).
 - **claude.ai Chat / Cowork** — the remote connector calls from Anthropic's cloud via the gateway's OAuth
   resource server + WorkOS AuthKit → **built + enabled + production GA verified live** (add-by-URL,
   DCR — no client ID/secret). See [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md).

@@ -25,9 +25,9 @@ Two "gateways", one convention — do not conflate them:
    A stdio↔HTTPS shim: mints a Google ID token from the user's own `gcloud` and
    forwards JSON-RPC to the gateway. Zero runtime dependencies.
 2. **Plugin** — `packages/plugin/` (`evwa-intelligence`). The Claude Code plugin:
-   it bundles the six skills **and** wires the gateway as an MCP server (by running
-   the bridge via `npx`). Git-distributed — this repo is its own marketplace
-   (`.claude-plugin/marketplace.json`).
+   it bundles the six skills and wires **no** gateway transport — connecting is a
+   separate step (OAuth is the default; the bridge is the fallback). Git-distributed
+   — this repo is its own marketplace (`.claude-plugin/marketplace.json`).
 3. **Skills** — `packages/plugin/skills/<name>/SKILL.md`. Portable Agent Skills
    (YAML frontmatter `name` + `description`, then instructions). The description
    decides when a skill triggers; the body tells the agent how to answer using the

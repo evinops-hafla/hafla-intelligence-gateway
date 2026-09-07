@@ -22,6 +22,10 @@ This release **is** the `0.1.0 → 0.2.0` bump (`plugin.json` + `marketplace.jso
 - **OAuth onboarding.** The claude.ai / Claude Desktop **OAuth Web connector** (WorkOS AuthKit, DCR, add-by-URL, no client ID/secret) reached **production GA** 2026-09-05; the **Claude Code OAuth (CIMD)** path is documented + verified live 2026-09-07 (`CLAUDE-CODE-OAUTH.md`) and is now the **default** Claude Code connection — the bridge / `gcloud` path (`SETUP-PROMPT.md`) is the fallback for automation, M2M, and non-OAuth clients (OAuth is immune to the branded-client callback-hijack 403 that breaks the bridge on machines with Cloud Code / Antigravity / Gemini Code Assist). A client→connection-profile map (every client → the invariant name `hafla-evwa-idl-gateway`) lands in the root + plugin READMEs and `SKILLS-GUIDE.md`.
 - **Post-review hardening.** Reconciled CIMD-vs-DCR conflation, a staging-vs-prod GA wording contradiction, and an OAuth-unaware troubleshooting fallback; the three drift-survey tool caveats (`price_truth.lastOrderedAt`, `related_products.rankBy`/`liftReliable`, `get_org_events.additionalDomains` merge/dedup) were **live-verified against the gateway 2026-09-07**, and `additionalDomains` now ships as a real `get_org_events({ … })` call literal so `verify-skills.mjs` covers the param.
 
+### Changed
+
+- **Plugin is now skills-only — it no longer auto-wires a gateway connector.** 0.1.0 wired the `gcloud` bridge (`npx @hafla/intelligence-mcp-bridge`) into every install; that forced the bridge on everyone and 403s wherever an IDE hijacks the gcloud login. Installing now adds just the six skills; connect the gateway **separately** — OAuth (default) via `CLAUDE-CODE-OAUTH.md`, or the bridge via `SETUP-PROMPT.md`. Existing users who relied on the auto-wired bridge must add a connection after upgrading.
+
 ### Fixed
 
 - Live-verified tool-contract bugs: `price_anchor` takes `productId` (not `id`); `supplier_discovery.costAed` is a tier-preferred anchor object (not `{avg,min,max}`); skill tooling made CRLF-safe for Windows checkouts.
