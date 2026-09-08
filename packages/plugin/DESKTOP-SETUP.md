@@ -1,11 +1,12 @@
 # EvWA Intelligence on Claude Desktop / claude.ai — setup guide
 
-> **✅ LIVE — production GA, operator-verified 2026-09-05 (teammate end-to-end pending).** The Desktop/claude.ai OAuth connector is
+> **✅ LIVE — production GA, operator-verified 2026-09-05; teammate end-to-end confirmed 2026-09-08 (Chat / Cowork / Code).** The Desktop/claude.ai OAuth connector is
 > built, **enabled, and verified working in production**: a real `@hafla.com` Google sign-in through claude.ai
 > reached the gateway (`authMethod=oauth_user`) on the **production** WorkOS environment (prod issuer
 > `secure-grace-01.authkit.app`). Claude **Code** also works (see [`README.md`](README.md) § Install). The
-> steps below are the connect runbook; the only remaining polish items are a second-teammate end-to-end +
-> confirming exact Desktop UI labels.
+> steps below are the connect runbook; a teammate confirmed the connector
+> end-to-end in Chat, Cowork, and Code (2026-09-08). Remaining polish: confirm the
+> exact Desktop UI labels.
 
 ## What this enables
 
@@ -124,7 +125,7 @@ in [`SKILLS-GUIDE.md`](SKILLS-GUIDE.md) § "Good to know (the honesty rules)". O
 - [ ] Exact Desktop menu labels (Connectors path; Skills-upload path).
 - [ ] Org-connector Advanced-settings: DCR fully covers add-by-URL, or does the org flow still want
       credentials? (per-user add-by-URL needs none.)
-- [ ] End-to-end on a real _teammate_ (operator end-to-end done 2026-09-05): connect → skill → real gateway query.
+- [x] End-to-end on a real _teammate_ — Hardik, 2026-09-08: the org connector auto-appeared, connected on sign-in, and returned real cited answers in Chat, Cowork, and Code (no popup; empty local `mcpServers`).
 
 > Identity note: a WorkOS access token carries no Google `hd` claim; access is restricted to `@hafla.com`
 > at the Auth Server, and the gateway independently re-checks the token's email domain + active-employee

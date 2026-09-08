@@ -9,9 +9,9 @@ This is the **default** Claude Code connection for end users; the bridge path in
 [`SETUP-PROMPT.md`](SETUP-PROMPT.md) is the fallback for automation and
 non-OAuth clients. OAuth is the simplest route and sidesteps the `gcloud` 403
 audience-mismatch gotcha entirely — including the callback-hijack variant that
-breaks the bridge on machines with Cloud Code / Antigravity / Gemini Code
-Assist. First verified 2026-09-07
-on one machine (a second-machine / teammate confirm is the natural next check);
+can 403 the bridge when an IDE hijacks the gcloud login to a branded OAuth client
+(a per-machine credential state — not from merely having such an IDE installed).
+First verified 2026-09-07, confirmed on a second machine 2026-09-08;
 CIMD self-registration works, and the token is resource-bound to the gateway
 audience, so this path cannot hit the bridge's audience-mismatch 403 (an
 authorization 403 — inactive employee / non-allowlisted domain — can still

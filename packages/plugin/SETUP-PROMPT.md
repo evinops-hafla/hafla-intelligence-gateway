@@ -10,10 +10,10 @@ config file.
 **Most end users should connect over OAuth, not with this prompt.** It adds the
 gateway as a remote connector and signs in with Google — no `gcloud`, no
 bridge, and the branded-client 403 cannot happen (OAuth is immune to the
-callback-hijack that breaks the bridge on machines with Cloud Code /
-Antigravity / Gemini Code Assist installed). Steps:
-[`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md). First verified 2026-09-07 (one
-machine).
+callback-hijack that can 403 the bridge if an IDE hijacks the gcloud login to a
+branded OAuth client — a per-machine state, not from merely having such an IDE
+installed). Steps: [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md). Verified on two
+machines (2026-09-07 / 2026-09-08).
 
 Use this **bridge** prompt only for automation / M2M, non-OAuth clients (Cursor,
 Gemini CLI, Antigravity), or when you specifically need the `gcloud`-identity

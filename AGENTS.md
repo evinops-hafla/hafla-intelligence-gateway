@@ -100,7 +100,7 @@ Two "gateways", one convention — do not conflate them:
 ## Onboarding / connect docs — route users here, don't re-explain
 
 - Which skill answers what → `packages/plugin/SKILLS-GUIDE.md`
-- Connect Claude Code — **default: OAuth (CIMD)** → `packages/plugin/CLAUDE-CODE-OAUTH.md` (no `gcloud`; immune to the branded-client callback-hijack 403 that breaks the bridge on machines with Cloud Code / Antigravity / Gemini Code Assist installed)
+- Connect Claude Code — **default: OAuth (CIMD)** → `packages/plugin/CLAUDE-CODE-OAUTH.md` (no `gcloud`; immune to the branded-client 403 the bridge can hit when an IDE hijacks the gcloud login to a branded OAuth client — a per-machine credential state, not from merely having such an IDE installed)
 - Connect Claude Code via the bridge / `gcloud` — fallback for automation, M2M, and non-OAuth clients → `packages/plugin/SETUP-PROMPT.md`
 - Connect Claude Desktop / claude.ai (DCR connector) → `packages/plugin/DESKTOP-SETUP.md`
 - Add or change a skill → `packages/plugin/AUTHORING.md`

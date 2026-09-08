@@ -1,6 +1,6 @@
 # Hafla Intelligence Gateway
 
-> **Production** — bridge `@hafla/intelligence-mcp-bridge` 1.0.7 on npm · plugin `evwa-intelligence` 0.2.0 (6 skills) · 24 read-only tools · OAuth: claude.ai/Desktop connector GA 2026-09-05 (DCR) · Claude Code 2026-09-07 (CIMD, 1 machine)
+> **Production** — bridge `@hafla/intelligence-mcp-bridge` 1.0.7 on npm · plugin `evwa-intelligence` 0.2.0 (6 skills) · 24 read-only tools · OAuth: claude.ai/Desktop connector GA 2026-09-05 (DCR) · Claude Code CIMD 2026-09-07 (2 machines)
 
 Public client packages for the Hafla MCP Gateway at `mcp.hafla.com`.
 
@@ -37,7 +37,7 @@ stdio↔HTTPS shim that mints Google ID tokens via the user's own `gcloud` and f
 ### Two ways an employee connects
 
 - **Bridge (`gcloud`, non-OAuth clients):** Cursor, Gemini CLI, Antigravity, and Claude Desktop's developer MCP config use the bridge above — your own `gcloud` Google identity, stdio↔HTTPS. Also the **fallback** for Claude Code (automation / M2M, or when OAuth can't be used).
-- **OAuth Web connector — the default for Claude Code + claude.ai (claude.ai/Desktop GA 2026-09-05; Claude Code CIMD verified 1 machine 2026-09-07, teammate confirm pending):** add `https://mcp.hafla.com/mcp` as a connector and sign in with Google — no `gcloud`, auto-refresh, immune to the bridge's branded-client 403. Setup: Claude Code → [`packages/plugin/CLAUDE-CODE-OAUTH.md`](packages/plugin/CLAUDE-CODE-OAUTH.md); claude.ai / Claude Desktop → [`packages/plugin/DESKTOP-SETUP.md`](packages/plugin/DESKTOP-SETUP.md). Per-client detail: the **Connection profiles** table in [`packages/plugin/README.md`](packages/plugin/README.md).
+- **OAuth Web connector — the default for Claude Code + claude.ai (claude.ai/Desktop GA 2026-09-05; Claude Code CIMD verified on 2 machines 2026-09-07/08):** add `https://mcp.hafla.com/mcp` as a connector and sign in with Google — no `gcloud`, auto-refresh, immune to the bridge's branded-client 403. Setup: Claude Code → [`packages/plugin/CLAUDE-CODE-OAUTH.md`](packages/plugin/CLAUDE-CODE-OAUTH.md); claude.ai / Claude Desktop → [`packages/plugin/DESKTOP-SETUP.md`](packages/plugin/DESKTOP-SETUP.md). Per-client detail: the **Connection profiles** table in [`packages/plugin/README.md`](packages/plugin/README.md).
 
 ---
 

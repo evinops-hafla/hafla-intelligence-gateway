@@ -143,7 +143,7 @@ bridge / `gcloud` path via [`SETUP-PROMPT.md`](SETUP-PROMPT.md).
 **Claude Desktop / claude.ai (Chat / Cowork):** per-user — upload each skill folder as a **zip**
 (Customize → Skills → Add; code-execution enabled) and connect the gateway. **LIVE (production GA, verified 2026-09-05):**
 the claude.ai remote-connector uses the gateway's OAuth (WorkOS AuthKit) — built + **enabled + production-verified live**
-(2026-09-05, prod issuer `secure-grace-01.authkit.app`). Claude Code also works over OAuth — see [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md) (CIMD, verified 2026-09-07); Desktop setup is in [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md).
+(2026-09-05, prod issuer `secure-grace-01.authkit.app`). Claude Code also works over OAuth — see [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md) (CIMD, verified on 2 machines 2026-09-07/08); Desktop setup is in [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md).
 
 ## Prerequisites (to run a skill)
 
