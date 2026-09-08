@@ -1039,18 +1039,27 @@ export async function forwardRequest(
         settled = true;
         clearTimeout(timeoutId);
 
-        // 401 — token audience mismatch (the gateway rejected the token's aud).
+        // 401 — the gateway rejected the token. Do NOT assert a single cause:
+        // a 401 can be an expired / revoked / malformed cached credential just
+        // as easily as an audience mismatch (and a pure aud mismatch on an
+        // otherwise-valid token surfaces as 403 — see doctor.sh, which reads the
+        // 403 body's `detail` to name it). We don't parse the gateway's 401 body
+        // here — its `detail` shape isn't pinned by a live-verified contract, so
+        // regexing it could misdiagnose. invalidate() + retry is correct for
+        // every 401 cause; the banner lists the shared remediation ladder rather
+        // than a definitive diagnosis.
         if (res.statusCode === 401) {
           diagnosticBanner(
-            'gateway returned 401 — token audience mismatch',
-            `Your gcloud token's "aud" isn't accepted — usually because it was`,
+            'gateway returned 401 — token not accepted',
+            `Your gcloud token was rejected. Common causes: an expired, revoked,`,
+            `or malformed cached credential — OR an audience mismatch, a token`,
             `minted by a branded OAuth client (e.g. Cloud Code / Gemini Code`,
-            `Assist), not vanilla gcloud.`,
-            `Fix: re-auth with standard gcloud — 'gcloud auth login'.`,
-            `If that does NOT clear it, a resident IDE is hijacking the login and`,
-            `re-minting the branded client — switch to OAuth (gcloud-free, immune):`,
-            `see the plugin's CLAUDE-CODE-OAUTH.md.`,
-            `Bridge will invalidate the cached token and retry on the next request.`
+            `Assist) rather than vanilla gcloud.`,
+            `Fix: re-auth with standard gcloud — 'gcloud auth login'. The bridge`,
+            `will invalidate the cached token and retry on the next request.`,
+            `If re-auth does NOT clear it, a resident IDE may be hijacking the`,
+            `login and re-minting a branded client — switch to OAuth (gcloud-free,`,
+            `immune): see the plugin's CLAUDE-CODE-OAUTH.md.`
           );
           tokenCache.invalidate();
         }

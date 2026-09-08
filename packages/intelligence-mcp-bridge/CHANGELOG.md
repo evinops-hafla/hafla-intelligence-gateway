@@ -10,13 +10,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed
 
-- **401 audience-mismatch diagnostic banner rewritten to be user-actionable.**
+- **401 diagnostic banner rewritten to be user-actionable and cause-accurate.**
   It previously told the end user to run operator-only Cloud Run commands and
   redeploy via a private infra script — actions a user cannot take — and it
   named internal infrastructure. It now points to the real user fix: re-auth
   with vanilla `gcloud auth login`, and if a resident IDE keeps hijacking the
   login, switch to OAuth (the plugin's `CLAUDE-CODE-OAUTH.md`). No infra
-  identifiers in the banner.
+  identifiers in the banner. It also no longer asserts "audience mismatch" as
+  the sole cause of a 401 — a 401 is equally an expired / revoked / malformed
+  cached credential (a pure `aud` mismatch on an otherwise-valid token surfaces
+  as 403), so the banner now lists the shared remediation ladder rather than a
+  definitive diagnosis. The cache invalidate + retry is unchanged (correct for
+  every 401 cause).
 
 ### Security / hygiene
 
