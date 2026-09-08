@@ -32,8 +32,10 @@ EvWA skills over our own data (`mcp.hafla.com`): `supplier-discovery`, `pricing-
 > independent of gcloud/auth — even when the bridge is otherwise healthy). **Remote connectors work
 > everywhere — Chat, Cowork, and Code** — so the OAuth connector below is the only way to reach the gateway
 > in Cowork/Code, and moving to it (and removing the bridge from `claude_desktop_config.json`) stops the
-> popup. Custom connectors live in the app's own state, not the config file, so an empty `"mcpServers": {}`
-> there is normal once you've switched.
+> popup. When you remove it, delete **only** the `hafla-evwa-idl-gateway` key from inside `mcpServers` and
+> **keep every other server you have** — do **not** replace `mcpServers` with `{}` (that wipes all your MCP
+> servers; back the file up first). Custom connectors live in the app's own state, not the config file, so
+> `mcpServers` being empty afterward is normal **only if EvWA was your sole entry**.
 
 ## How Desktop distribution actually works (from current Anthropic docs)
 
