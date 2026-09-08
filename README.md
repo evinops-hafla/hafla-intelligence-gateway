@@ -1,6 +1,6 @@
 # Hafla Intelligence Gateway
 
-> **Production** — bridge `@hafla/intelligence-mcp-bridge` 1.0.7 on npm · plugin `evwa-intelligence` 0.2.0 (6 skills) · 24 read-only tools · OAuth: claude.ai/Desktop connector GA 2026-09-05 (DCR) · Claude Code CIMD 2026-09-07 (2 machines)
+> **Production** — bridge `@hafla/intelligence-mcp-bridge` 1.0.8 on npm · plugin `evwa-intelligence` 0.2.0 (6 skills) · 24 read-only tools · OAuth: claude.ai/Desktop connector GA 2026-09-05 (DCR) · Claude Code CIMD 2026-09-07 (2 machines)
 
 Public client packages for the Hafla MCP Gateway at `mcp.hafla.com`.
 
@@ -25,7 +25,7 @@ Talk about "the MCP Gateway server" when you mean the Cloud Run service; "the In
 
 | Package                                                                  | Type                                                                                                                                           | Status                                                          |
 | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge`                                                                                                         | 1.0.7 — live on npm                                             |
+| [`packages/intelligence-mcp-bridge/`](packages/intelligence-mcp-bridge/) | npm — `@hafla/intelligence-mcp-bridge`                                                                                                         | 1.0.8 — live on npm                                             |
 | [`packages/plugin/`](packages/plugin/)                                   | Claude Code plugin (git — this repo's marketplace) — bundles the 6 skills; the gateway connection is separate (OAuth default, bridge fallback) | 6 skills (5 wave-1 + `event-needs`), tool-first; verified in CI |
 
 ### `@hafla/intelligence-mcp-bridge`

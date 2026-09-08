@@ -62,7 +62,7 @@ if [ "${1:-}" = "--skip-live" ]; then
   warn "skipping the live gateway check (--skip-live)"
 else
   echo "  … calling the gateway via the bridge (tools/list) — a few seconds…"
-  RESP=$(printf '%s' '{"jsonrpc":"2.0","method":"tools/list","id":1}' | npx -y @hafla/intelligence-mcp-bridge@1.0.7 2>/dev/null | head -c 8000 || true)
+  RESP=$(printf '%s' '{"jsonrpc":"2.0","method":"tools/list","id":1}' | npx -y @hafla/intelligence-mcp-bridge@1.0.8 2>/dev/null | head -c 8000 || true)
   if printf '%s' "$RESP" | grep -q '"tools"'; then
     pass "gateway reachable — tools/list returned a tool list"
   elif printf '%s' "$RESP" | grep -qE 'Gateway returned 403|\b403\b'; then

@@ -61,7 +61,7 @@ at the end.
 
    ```bash
    echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' \
-     | npx -y @hafla/intelligence-mcp-bridge@1.0.7
+     | npx -y @hafla/intelligence-mcp-bridge@1.0.8
    ```
 
    If it returns a 403, apply the vanilla-gcloud fix from step 1 and retry. Then

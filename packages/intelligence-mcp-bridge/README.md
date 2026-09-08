@@ -1,6 +1,6 @@
 # `@hafla/intelligence-mcp-bridge`
 
-**Status:** Production (1.0.7 — see [CHANGELOG.md](./CHANGELOG.md)).
+**Status:** Production (1.0.8 — see [CHANGELOG.md](./CHANGELOG.md)).
 
 A small stdio↔HTTPS shim that lets **Claude Code, Claude Desktop, Cursor, Gemini CLI, Antigravity CLI, and Antigravity 2.0** reach the **Hafla MCP Gateway** at `mcp.hafla.com`.
 
@@ -15,7 +15,7 @@ The bridge mints a fresh 60-minute Google ID token via your own `gcloud` session
 Prerequisites are in [PREREQUISITES.md](./PREREQUISITES.md). If those are met:
 
 ```bash
-npm install -g @hafla/intelligence-mcp-bridge@1.0.7
+npm install -g @hafla/intelligence-mcp-bridge@1.0.8
 ```
 
 Add this to your MCP client config (Gemini CLI / Claude Code / Cursor / Antigravity CLI). **Antigravity 2.0 and Claude Desktop need [Form B](#form-b--absolute-paths-fallback) instead** — they're desktop apps that don't inherit shell PATH:
@@ -61,10 +61,10 @@ All pass → proceed below.
 ### Step 1 — Install the bridge
 
 ```bash
-npm install -g @hafla/intelligence-mcp-bridge@1.0.7
+npm install -g @hafla/intelligence-mcp-bridge@1.0.8
 ```
 
-The version is **exact-pinned** (`@1.0.7`, not `@latest`). Pinning is the supply-chain hygiene boundary; Ops announces version bumps in Slack so the team upgrades on a known cadence. See § "Upgrading" below.
+The version is **exact-pinned** (`@1.0.8`, not `@latest`). Pinning is the supply-chain hygiene boundary; Ops announces version bumps in Slack so the team upgrades on a known cadence. See § "Upgrading" below.
 
 ### Step 2 — Verify install
 
