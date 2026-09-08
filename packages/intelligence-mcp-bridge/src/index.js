@@ -27,7 +27,8 @@ try {
  *   (a) gcloud CLI installed + at least one ACTIVE account
  *   (b) active account is on the required Workspace domain (default: hafla.com)
  * Runtime diagnostics (on 401 / 403 from gateway):
- *   (c) 401 = audience mismatch — re-auth vanilla gcloud, or switch to OAuth
+ *   (c) 401 = token not accepted (expired / revoked / malformed credential, or
+ *       an audience mismatch) — re-auth vanilla gcloud, or switch to OAuth
  *   (d) 403 employee_inactive = OpsUsers.isEmployeeActive=false — contact ops
  *
  * Environment:
