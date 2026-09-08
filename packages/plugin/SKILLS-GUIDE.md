@@ -32,7 +32,7 @@ troubleshooting.
 > OAuth client (e.g. Gemini Code Assist / Cloud Code / a branded installer), whose token audience the
 > gateway doesn't accept. Fix: re-authenticate with the **vanilla** CLI — `gcloud auth login` — then
 > retry. If that does **not** clear it, a resident IDE (Cloud Code / Antigravity / Gemini Code Assist)
-> is hijacking the login and re-minting the branded client on every attempt — switch to OAuth
+> is hijacking the login and re-minting the branded client (it can be intermittent) — switch to OAuth
 > ([`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md)), which is `gcloud`-free and immune.
 > The repo's `packages/plugin/scripts/doctor.sh` tells an audience mismatch apart from an employee/domain 403.
 
