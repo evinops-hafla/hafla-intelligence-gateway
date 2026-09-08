@@ -27,7 +27,7 @@ try {
  *   (a) gcloud CLI installed + at least one ACTIVE account
  *   (b) active account is on the required Workspace domain (default: hafla.com)
  * Runtime diagnostics (on 401 / 403 from gateway):
- *   (c) 401 = likely audience mismatch — points to --add-custom-audiences
+ *   (c) 401 = audience mismatch — re-auth vanilla gcloud, or switch to OAuth
  *   (d) 403 employee_inactive = OpsUsers.isEmployeeActive=false — contact ops
  *
  * Environment:
@@ -1039,20 +1039,18 @@ export async function forwardRequest(
         settled = true;
         clearTimeout(timeoutId);
 
-        // 401 — likely audience mismatch (Cloud Run rejected the token).
+        // 401 — token audience mismatch (the gateway rejected the token's aud).
         if (res.statusCode === 401) {
           diagnosticBanner(
-            'gateway returned 401 — token audience likely mismatched',
-            `The gateway expects tokens whose "aud" claim matches a configured custom-audience.`,
-            `Confirm both required audiences are present:`,
-            `  gcloud run services describe mcp-gateway-production --region=us-central1 \\`,
-            `    --format='value(spec.customAudiences)'`,
-            `Both must be in the output (Path A multi-audience):`,
-            `  - https://mcp.hafla.com           (service URL — SA path)`,
-            `  - 32555940559.apps.googleusercontent.com  (gcloud SDK default — human path)`,
-            `If either is missing, the operator redeploys via the canonical script:`,
-            `  bash infra/mcp-gateway/scripts/cloud-service-deploy.sh`,
-            `Bridge will invalidate cached token and retry on the next request.`
+            'gateway returned 401 — token audience mismatch',
+            `Your gcloud token's "aud" isn't accepted — usually because it was`,
+            `minted by a branded OAuth client (e.g. Cloud Code / Gemini Code`,
+            `Assist), not vanilla gcloud.`,
+            `Fix: re-auth with standard gcloud — 'gcloud auth login'.`,
+            `If that does NOT clear it, a resident IDE is hijacking the login and`,
+            `re-minting the branded client — switch to OAuth (gcloud-free, immune):`,
+            `see the plugin's CLAUDE-CODE-OAUTH.md.`,
+            `Bridge will invalidate the cached token and retry on the next request.`
           );
           tokenCache.invalidate();
         }

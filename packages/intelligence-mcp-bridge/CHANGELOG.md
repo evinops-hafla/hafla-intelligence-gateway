@@ -4,6 +4,23 @@ All notable changes to `@hafla/intelligence-mcp-bridge` will be documented in th
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.8] — unreleased
+
+### Changed
+
+- **401 audience-mismatch diagnostic banner rewritten to be user-actionable.**
+  It previously told the end user to run operator-only Cloud Run commands and
+  redeploy via a private infra script — actions a user cannot take — and it
+  named internal infrastructure. It now points to the real user fix: re-auth
+  with vanilla `gcloud auth login`, and if a resident IDE keeps hijacking the
+  login, switch to OAuth (the plugin's `CLAUDE-CODE-OAUTH.md`). No infra
+  identifiers in the banner.
+
+### Security / hygiene
+
+- Removed internal infrastructure identifiers (a prod GCP project id and
+  service-account name) from the bridge test fixtures.
+
 ## [1.0.7] — 2026-05-27
 
 ### Fixed
@@ -30,7 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   then had to discard, while still logging two `warn` lines per notification.
   `forwardRequest` now accepts `[200, 202, 204]` and resolves 202/204 with a
   well-formed empty success frame (`{ "jsonrpc": "2.0", "result": null, "id":
-  … }`), eliminating both the false-positive error frame and the stderr
+… }`), eliminating both the false-positive error frame and the stderr
   noise. Three new tests pin the 202/204 success path.
 
 - **Request timeout raised 30s → 290s, and now resets on response activity.**
@@ -40,7 +57,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   SSE response in a single burst only when the tool handler resolves — nothing
   reaches the bridge mid-compute. So a heavy AlloyDB / Neo4j query or long
   retrieval taking 30–300s was killed client-side with `-32000 Request
-  timeout`, even though the gateway would have answered. Default
+timeout`, even though the gateway would have answered. Default
   `REQUEST_TIMEOUT_MS` is now `290000` (just under the 300s Cloud Run cap, so
   the bridge emits a clean JSON-RPC timeout instead of letting Cloud Run 504 —
   whose HTML body the bridge would fail to parse). `res.on('data')` now calls
@@ -53,7 +70,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - **Request termination hardened — mid-response failures fail fast instead of
   hanging or crashing.** `forwardRequest` had no handler for a failure on the
-  *response* stream: if the gateway drops the connection mid-body, Node emits
+  _response_ stream: if the gateway drops the connection mid-body, Node emits
   `'aborted'` on the response (not `'error'` on the request), so the call hung
   until the 290s timeout; a rarer response-stream `'error'` was unhandled and
   would crash the whole bridge process. Both are now caught and resolve a clean
@@ -111,19 +128,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **`isMainModule` ESM check no longer silently exits when invoked via
   symlinked paths.** The published 1.0.5 used a naive literal compare
   (`import.meta.url === \`file://${process.argv[1]}\``) that fails whenever
-  either side has a symlink in its resolution chain — global npm bins
-  (always symlinks), npx fresh-cache `.bin/` (also symlinks), macOS `/tmp`
-  auto-symlinks, NFS, Docker bind mounts, ASDF, Volta. Symptom: process
-  exited with code 0, no stdout, no stderr, no MCP handshake — MCP clients
-  saw "server disconnected" with no useful error. Fixed by resolving both
-  sides via `realpathSync` + `fileURLToPath` before comparing, with an
-  explicit `if (!process.argv[1]) return false;` guard at the top of the
-  IIFE so REPL / `node -e` / library-import contexts (where `argv[1]` is
-  `undefined`) don't trip the catch branch and pollute stderr at module
-  load. **Every consumer who followed the README install instructions for
-  1.0.5 from a neutral cwd was affected; the bug was invisible to dev
-  environments only because monorepo cwds carry a local `node_modules/`
-  install that shadows the global symlink path.** 1.0.5 is deprecated.
+either side has a symlink in its resolution chain — global npm bins
+(always symlinks), npx fresh-cache `.bin/`(also symlinks), macOS`/tmp`auto-symlinks, NFS, Docker bind mounts, ASDF, Volta. Symptom: process
+exited with code 0, no stdout, no stderr, no MCP handshake — MCP clients
+saw "server disconnected" with no useful error. Fixed by resolving both
+sides via`realpathSync`+`fileURLToPath`before comparing, with an
+explicit`if (!process.argv[1]) return false;`guard at the top of the
+IIFE so REPL /`node -e`/ library-import contexts (where`argv[1]`is`undefined`) don't trip the catch branch and pollute stderr at module
+load. **Every consumer who followed the README install instructions for
+1.0.5 from a neutral cwd was affected; the bug was invisible to dev
+environments only because monorepo cwds carry a local `node_modules/`
+  install that shadows the global symlink path.\*\* 1.0.5 is deprecated.
 
 ### Added
 

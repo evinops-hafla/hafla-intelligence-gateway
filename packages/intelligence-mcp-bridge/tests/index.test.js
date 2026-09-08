@@ -1754,7 +1754,7 @@ describe('forwardRequest', () => {
   // User-Agent reports the actual package version on every outbound request.
   // Pre-1.0.6 this was hardcoded `intelligence-mcp-bridge/1.0`, which masked
   // the real version on 100% of bridge traffic in Cloud Run access logs
-  // (verified against mcp-gateway-production logs 2026-05-26 — all bridge
+  // (verified against the prod gateway's logs 2026-05-26 — all bridge
   // entries showed `1.0` regardless of which version was actually running).
   // The test asserts (a) the header is present, (b) it reports the current
   // package.json version, (c) the format follows `product/semver` per RFC
