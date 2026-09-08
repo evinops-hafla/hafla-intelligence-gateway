@@ -96,6 +96,8 @@ Pick your client's config file:
 | Antigravity CLI + 2.0 (shared) [^agycli] | `~/.gemini/config/mcp_config.json`                                | `%USERPROFILE%\.gemini\config\mcp_config.json`           |
 | Antigravity 2.0                          | `~/.gemini/antigravity/mcp_config.json`                           | `%USERPROFILE%\.gemini\antigravity\mcp_config.json`      |
 
+> **Antigravity IDE is a separate product from Antigravity 2.0 and is not yet covered here.** Some machines have both `/Applications/Antigravity.app` (Antigravity 2.0) and `/Applications/Antigravity IDE.app` (Antigravity IDE) installed — they are distinct apps with distinct data dirs (`~/.gemini/antigravity/` vs `~/.gemini/antigravity-ide/`). This table's "Antigravity 2.0" row does **not** apply to Antigravity IDE, whose MCP config path is not yet documented (no reliable path has been confirmed in the field). Do not assume the 2.0 path works for the IDE — if you need EvWA in Antigravity IDE, open an issue so we can document the verified path rather than guess one. (Note also PREREQUISITES.md's installer-conflict warning about running both products on the same machine.)
+
 [^agycli]: **Antigravity CLI has two valid config paths.** Pick one of:
 
     - **CLI-only:** if you don't use Antigravity 2.0. Write the `mcpServers` block to `~/.gemini/antigravity-cli/settings.json` — that's the only config file `agy` reads in this mode. (You still complete Step 4 → Step 5 for the restart + `/mcp` verify; "CLI-only" refers to the path-decision, not the workflow.)
@@ -304,6 +306,8 @@ foreach ($f in @("$env:USERPROFILE\.gemini\antigravity\mcp_config.json","$env:US
 ```
 
 If only the Windsurf path has the hafla entry (size > 0 and `grep hafla-evwa-idl-gateway` matches), 2.0 is reading from there — repeat the same symlink/hard-link pattern targeting `~/.codeium/windsurf/mcp_config.json` (or `%USERPROFILE%\.codeium\windsurf\mcp_config.json` on Windows).
+
+> **⚠️ Only if Antigravity 2.0 is what actually owns `~/.codeium/windsurf/`.** That directory is the generic Windsurf-platform config home, and other Windsurf-derived editors reuse it — **Devin**, for one, owns `~/.codeium/windsurf/` on machines where it's installed. So before writing an EvWA config there, confirm the path belongs to your Antigravity 2.0 install and not to another Windsurf-derived client. The diagnostic above only tells you a config exists at that path — not which product reads it. If Devin (or any non-Antigravity Windsurf client) is installed, treat this legacy fallback as **not applicable** and configure Antigravity 2.0 via `~/.gemini/antigravity/mcp_config.json` only.
 
 ### Step 5 — Reload your MCP client + end-to-end verify
 
