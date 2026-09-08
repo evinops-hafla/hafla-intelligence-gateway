@@ -232,7 +232,7 @@ describe('createTokenCache', () => {
 describe('createTokenCache — Shape B + identity cross-check', () => {
   test('(a) SA active + SA token: mints with --audiences; cross-check passes', async () => {
     const saEmail =
-      'mcp-gw-production-sa@hafla-backend-v1.iam.gserviceaccount.com';
+      'mcp-gw-sa@example-project.iam.gserviceaccount.com';
     const seenArgs = [];
     const cache = createTokenCache({
       activeAccount: saEmail,
@@ -483,7 +483,7 @@ describe('preFlight', () => {
     // Code reviewer (2026-05-16) caught the contradiction; this test guards
     // against any future re-introduction.
     const saEmail =
-      'mcp-gw-production-sa@hafla-backend-v1.iam.gserviceaccount.com';
+      'mcp-gw-sa@example-project.iam.gserviceaccount.com';
     const account = await preFlight({
       execGcloudFn: async (args) => {
         if (args[0] === 'auth' && args[1] === 'list') {
