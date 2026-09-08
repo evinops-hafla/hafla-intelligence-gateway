@@ -48,7 +48,7 @@ discipline** around them.
 - `scripts/pack-skills.sh` → one `dist/<skill>.zip` per skill (the claude.ai upload format). Run
   `verify-skills.mjs` first — don't zip a skill that fails.
 - Claude Code: the plugin/marketplace (see README). Claude Desktop: per-user zip upload +
-  the org connector — see [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md) (pending OAuth Stage 2).
+  the org connector — see [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md) (built + production GA verified live 2026-09-05).
 - **Preflight (Claude Code path):** `bash scripts/doctor.sh` — checks Node≥24 (+ the version-manager/GUI
   path trap), the active gcloud account is `@hafla.com`, the identity token mints, and a real `tools/list`
   round-trips through the bridge. `--skip-live` skips the last (network) check. macOS/Linux only.
@@ -63,7 +63,8 @@ description edit**, run the credential-free structural check:
 
 ```bash
 node eval/run-routing-eval.mjs --check      # golden-set structure (CI-safe, no key)
-node eval/run-routing-eval.mjs              # the real routing eval (needs ANTHROPIC_API_KEY)
+node eval/run-routing-eval.mjs              # the real eval — needs a model key: ANTHROPIC_API_KEY
+                                            # (canonical), or GEMINI_API_KEY / GOOGLE_API_KEY (AI Studio)
 ```
 
 ## CI

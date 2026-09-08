@@ -27,7 +27,8 @@ try {
  *   (a) gcloud CLI installed + at least one ACTIVE account
  *   (b) active account is on the required Workspace domain (default: hafla.com)
  * Runtime diagnostics (on 401 / 403 from gateway):
- *   (c) 401 = likely audience mismatch — points to --add-custom-audiences
+ *   (c) 401 = token not accepted (expired / revoked / malformed credential, or
+ *       an audience mismatch) — re-auth vanilla gcloud, or switch to OAuth
  *   (d) 403 employee_inactive = OpsUsers.isEmployeeActive=false — contact ops
  *
  * Environment:
@@ -1039,20 +1040,27 @@ export async function forwardRequest(
         settled = true;
         clearTimeout(timeoutId);
 
-        // 401 — likely audience mismatch (Cloud Run rejected the token).
+        // 401 — the gateway rejected the token. Do NOT assert a single cause:
+        // a 401 can be an expired / revoked / malformed cached credential just
+        // as easily as an audience mismatch (and a pure aud mismatch on an
+        // otherwise-valid token surfaces as 403 — see doctor.sh, which reads the
+        // 403 body's `detail` to name it). We don't parse the gateway's 401 body
+        // here — its `detail` shape isn't pinned by a live-verified contract, so
+        // regexing it could misdiagnose. invalidate() + retry is correct for
+        // every 401 cause; the banner lists the shared remediation ladder rather
+        // than a definitive diagnosis.
         if (res.statusCode === 401) {
           diagnosticBanner(
-            'gateway returned 401 — token audience likely mismatched',
-            `The gateway expects tokens whose "aud" claim matches a configured custom-audience.`,
-            `Confirm both required audiences are present:`,
-            `  gcloud run services describe mcp-gateway-production --region=us-central1 \\`,
-            `    --format='value(spec.customAudiences)'`,
-            `Both must be in the output (Path A multi-audience):`,
-            `  - https://mcp.hafla.com           (service URL — SA path)`,
-            `  - 32555940559.apps.googleusercontent.com  (gcloud SDK default — human path)`,
-            `If either is missing, the operator redeploys via the canonical script:`,
-            `  bash infra/mcp-gateway/scripts/cloud-service-deploy.sh`,
-            `Bridge will invalidate cached token and retry on the next request.`
+            'gateway returned 401 — token not accepted',
+            `Your gcloud token was rejected. Common causes: an expired, revoked,`,
+            `or malformed cached credential — OR an audience mismatch, a token`,
+            `minted by a branded OAuth client (e.g. Cloud Code / Gemini Code`,
+            `Assist) rather than vanilla gcloud.`,
+            `Fix: re-auth with standard gcloud — 'gcloud auth login'. The bridge`,
+            `will invalidate the cached token and retry on the next request.`,
+            `If re-auth does NOT clear it, a resident IDE may be hijacking the`,
+            `login and re-minting a branded client — switch to OAuth (gcloud-free,`,
+            `immune): see the plugin's CLAUDE-CODE-OAUTH.md.`
           );
           tokenCache.invalidate();
         }

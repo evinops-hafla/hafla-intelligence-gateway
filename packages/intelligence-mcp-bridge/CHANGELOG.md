@@ -4,6 +4,30 @@ All notable changes to `@hafla/intelligence-mcp-bridge` will be documented in th
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [1.0.8] — 2026-09-08
+
+### Changed
+
+- **401 diagnostic banner rewritten to be user-actionable and cause-accurate.**
+  It previously told the end user to run operator-only Cloud Run commands and
+  redeploy via a private infra script — actions a user cannot take — and it
+  named internal infrastructure. It now points to the real user fix: re-auth
+  with vanilla `gcloud auth login`, and if a resident IDE keeps hijacking the
+  login, switch to OAuth (the plugin's `CLAUDE-CODE-OAUTH.md`). No infra
+  identifiers in the banner. It also no longer asserts "audience mismatch" as
+  the sole cause of a 401 — a 401 is equally an expired / revoked / malformed
+  cached credential (a pure `aud` mismatch on an otherwise-valid token surfaces
+  as 403), so the banner now lists the shared remediation ladder rather than a
+  definitive diagnosis. The cache invalidate + retry is unchanged (correct for
+  every 401 cause).
+
+### Security / hygiene
+
+- Removed internal infrastructure identifiers (a prod GCP project id and
+  service-account name) from the bridge test fixtures.
+
 ## [1.0.7] — 2026-05-27
 
 ### Fixed
@@ -30,7 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   then had to discard, while still logging two `warn` lines per notification.
   `forwardRequest` now accepts `[200, 202, 204]` and resolves 202/204 with a
   well-formed empty success frame (`{ "jsonrpc": "2.0", "result": null, "id":
-  … }`), eliminating both the false-positive error frame and the stderr
+… }`), eliminating both the false-positive error frame and the stderr
   noise. Three new tests pin the 202/204 success path.
 
 - **Request timeout raised 30s → 290s, and now resets on response activity.**
@@ -40,7 +64,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   SSE response in a single burst only when the tool handler resolves — nothing
   reaches the bridge mid-compute. So a heavy AlloyDB / Neo4j query or long
   retrieval taking 30–300s was killed client-side with `-32000 Request
-  timeout`, even though the gateway would have answered. Default
+timeout`, even though the gateway would have answered. Default
   `REQUEST_TIMEOUT_MS` is now `290000` (just under the 300s Cloud Run cap, so
   the bridge emits a clean JSON-RPC timeout instead of letting Cloud Run 504 —
   whose HTML body the bridge would fail to parse). `res.on('data')` now calls
@@ -53,7 +77,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - **Request termination hardened — mid-response failures fail fast instead of
   hanging or crashing.** `forwardRequest` had no handler for a failure on the
-  *response* stream: if the gateway drops the connection mid-body, Node emits
+  _response_ stream: if the gateway drops the connection mid-body, Node emits
   `'aborted'` on the response (not `'error'` on the request), so the call hung
   until the 290s timeout; a rarer response-stream `'error'` was unhandled and
   would crash the whole bridge process. Both are now caught and resolve a clean
@@ -100,7 +124,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   `product/semver` format). Pre-1.0.6 the value was hardcoded to
   `intelligence-mcp-bridge/1.0`, which masked the real version on 100%
   of bridge traffic in Cloud Run access logs — verified against
-  `mcp-gateway-production` logs (every bridge entry showed `1.0`
+  the prod gateway's logs (every bridge entry showed `1.0`
   regardless of which version was actually running). Post-1.0.6,
   gateway-side analytics can aggregate `httpRequest.userAgent` in Cloud
   Logging to drive a per-version distribution dashboard ("X% of
@@ -110,7 +134,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   version drift between code and shipped package is caught in CI.
 - **`isMainModule` ESM check no longer silently exits when invoked via
   symlinked paths.** The published 1.0.5 used a naive literal compare
-  (`import.meta.url === \`file://${process.argv[1]}\``) that fails whenever
+  (``import.meta.url === `file://${process.argv[1]}` ``) that fails whenever
   either side has a symlink in its resolution chain — global npm bins
   (always symlinks), npx fresh-cache `.bin/` (also symlinks), macOS `/tmp`
   auto-symlinks, NFS, Docker bind mounts, ASDF, Volta. Symptom: process

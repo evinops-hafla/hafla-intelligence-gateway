@@ -6,14 +6,17 @@ real order / event / ticket numbers**.
 
 ## Quickstart — where do I run this?
 
-Find your row, do the one thing in it, then paste the first-success query below.
+Find your row, do the one thing in it, then paste the first-success query below. (Prefer a guided
+setup? Paste [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md) into Claude Code — it configures **and
+verifies** the gateway for you over OAuth, the default (no `gcloud`). For the bridge / `gcloud` path use
+[`SETUP-PROMPT.md`](SETUP-PROMPT.md) instead.)
 
-| You are… | On… | Do this |
-| -------- | --- | ------- |
-| **Sales / CX** | **Claude Desktop / claude.ai** | **Not live yet** — needs OAuth Stage 2. For now, ask an engineer on the team to run your question in Claude Code (below), or wait for the Desktop rollout. |
-| **Sales / CX** | via a teammate | Send your question to anyone set up with Claude Code — the answer is the same. |
-| **Engineer** | **Claude Code** | ① `gcloud auth login` with your `@hafla.com` account · ② `/plugin marketplace add evinops-hafla/hafla-intelligence-gateway` · ③ `/plugin install evwa-intelligence@hafla-intelligence-gateway`. Then just ask. |
-| **Engineer** | raw MCP client (Cursor / Gemini CLI) | Wire the bridge directly — see the [bridge README](../intelligence-mcp-bridge/README.md). |
+| You are…       | On…                                  | Do this                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Sales / CX** | **Claude Desktop / claude.ai**       | **Live — production GA (2026-09-05).** Connect the **EvWA Intelligence** connector (your admin adds it org-wide; if your workspace permits, you can add the URL `https://mcp.hafla.com/mcp` yourself — it self-registers, no client ID/secret), sign in with Google `@hafla.com`, then upload the skill zips (Customize → Skills). Full steps: [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md). |
+| **Sales / CX** | via a teammate                       | Send your question to anyone set up with Claude Code — the answer is the same.                                                                                                                                                                                                                                                                                                         |
+| **Engineer**   | **Claude Code**                      | **Default — OAuth (no `gcloud`):** connect per [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md), then `/plugin marketplace add evinops-hafla/hafla-intelligence-gateway` + `/plugin install evwa-intelligence@hafla-intelligence-gateway` for the skills. **Bridge fallback** (automation / non-OAuth): wire the bridge via [`SETUP-PROMPT.md`](SETUP-PROMPT.md).                        |
+| **Engineer**   | raw MCP client (Cursor / Gemini CLI) | Wire the bridge directly — see the [bridge README](../intelligence-mcp-bridge/README.md).                                                                                                                                                                                                                                                                                              |
 
 **First-success query** (once connected, paste this):
 
@@ -21,31 +24,35 @@ Find your row, do the one thing in it, then paste the first-success query below.
 
 You should get a ranked table of partners (Al Jefoon, Sabir Events, Bouncy Time…) with their proven
 order counts and supplier-cost per tier, ending in a `Sources:` line. If you get that, you're set — try
-your own question. If not, run `scripts/doctor.sh` (Claude Code path) or see the bridge README's
+your own question. If not: on the bridge/gcloud path run the repo's `packages/plugin/scripts/doctor.sh`; on the OAuth (CIMD) path
+see [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md)'s Troubleshooting section; or the bridge README's
 troubleshooting.
 
 > **Getting a 403 / "token verification failed"?** Your gcloud may have been set up via a non-standard
 > OAuth client (e.g. Gemini Code Assist / Cloud Code / a branded installer), whose token audience the
 > gateway doesn't accept. Fix: re-authenticate with the **vanilla** CLI — `gcloud auth login` — then
-> retry. `scripts/doctor.sh` confirms the exact cause.
+> retry. If that does **not** clear it, a resident IDE (Cloud Code / Antigravity / Gemini Code Assist)
+> is hijacking the login and re-minting the branded client (it can be intermittent) — switch to OAuth
+> ([`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md)), which is `gcloud`-free and immune.
+> The repo's `packages/plugin/scripts/doctor.sh` tells an audience mismatch apart from an employee/domain 403.
 
 ## Pick by what you're asking
 
-| If you're asking… | Skill | Example |
-| ----------------- | ----- | ------- |
-| **Who can supply / provide X?** (rank vendors by proven orders) | `supplier-discovery` | "Who supplies chiavari chairs?" · "Top partners for LED walls, not [vendor we tried]" |
-| **What does X cost / what did we pay?** (real prices, per-unit, delivered) | `pricing-lookup` | "What do we charge for a banquet chair?" · "Dry-hire cost for 100 chairs + 20 tables delivered to Business Bay" |
-| **Give me a 101 / brief on X** (one product/service, all angles) | `product-brief` | "Brief me on misters" · "101 on arabic calligraphy" |
-| **What did we do for X before?** (a host, company, event, order, ticket) | `past-orders` | "Past events for AUS" · "History for +9715…" · "What was on order #16504?" |
-| **Where do events like this happen?** (venue *evidence*, not a recommender) | `venue-recommendation` | "Where do 200-pax outdoor events happen?" |
-| **What do I need for a [event]?** (planning checklist + typical spend) | `event-needs` | "What do I need for a wedding?" (the skill maps everyday words to the playbook's family names — e.g. wedding → "Wedding and Engagement") · "Checklist for an industry conference" |
+| If you're asking…                                                           | Skill                  | Example                                                                                                                                                                           |
+| --------------------------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Who can supply / provide X?** (rank vendors by proven orders)             | `supplier-discovery`   | "Who supplies chiavari chairs?" · "Top partners for LED walls, not [vendor we tried]"                                                                                             |
+| **What does X cost / what did we pay?** (real prices, per-unit, delivered)  | `pricing-lookup`       | "What do we charge for a banquet chair?" · "Dry-hire cost for 100 chairs + 20 tables delivered to Business Bay"                                                                   |
+| **Give me a 101 / brief on X** (one product/service, all angles)            | `product-brief`        | "Brief me on misters" · "101 on arabic calligraphy"                                                                                                                               |
+| **What did we do for X before?** (a host, company, event, order, ticket)    | `past-orders`          | "Past events for AUS" · "History for +9715…" · "What was on order #16504?"                                                                                                        |
+| **Where do events like this happen?** (venue _evidence_, not a recommender) | `venue-recommendation` | "Where do 200-pax outdoor events happen?"                                                                                                                                         |
+| **What do I need for a [event]?** (planning checklist + typical spend)      | `event-needs`          | "What do I need for a wedding?" (the skill maps everyday words to the playbook's family names — e.g. wedding → "Wedding and Engagement") · "Checklist for an industry conference" |
 
 ## Starter prompts (copy-paste)
 
 Real questions to try, grouped by skill and roughly ordered by how often the team asks them. Just paste
 one — Claude picks the skill and cites real order / event / partner numbers. Every prompt here was run
 live against the gateway and returns a cited, non-empty answer (last verified 3 Sep 2026); a ⚠ marks a
-deliberately *hard* one that exercises an honesty rule.
+deliberately _hard_ one that exercises an honesty rule.
 
 **`supplier-discovery` — "who can supply X?"**
 
@@ -66,7 +73,7 @@ deliberately *hard* one that exercises an honesty rule.
 **`pricing-lookup` — "what does X cost / what did we pay?"**
 
 - `What did we pay suppliers for a White Chiavari Chair?` → partner-cost anchor (~10 AED, ORDER tier) with
-  the p25–p75 band — and it will *not* quote the raw 1,260 AED outlier as a price.
+  the p25–p75 band — and it will _not_ quote the raw 1,260 AED outlier as a price.
 - `What do we charge clients for a banquet chair?` → the selling-price side (kept separate from cost).
 - ⚠ `Dry-hire cost for 100 chairs + 20 tables delivered to Business Bay` → a generic/dry-hire brief:
   the per-unit numbers come from order notes + chat (not a price column), plus an optional delivery total.
@@ -75,6 +82,9 @@ deliberately *hard* one that exercises an honesty rule.
 
 - `Past events for AUS` → a corporate buyer's full event history (~129 events), deduped, newest first,
   with every AED value labelled a pre-sale estimate.
+- `Who are our top corporate clients?` → a leaderboard of org email-domains by event count (`aus.edu`,
+  `pepsidrc.ae`, `alfurjanclub.com`…), each drillable into its full history — value shown as a pre-sale
+  estimate, not realized spend.
 - `What was on order #28487?` → that order's line items, quantities, and fulfilling partners.
 - `Which orders did Al Jefoon fulfil recently?` → a partner's recent fulfilled orders, cited by order #.
 
@@ -102,14 +112,16 @@ deliberately *hard* one that exercises an honesty rule.
 - **Proven vs stated:** suppliers are ranked by **real past orders**, not a reliability score (none
   exists) — listed-but-never-delivered vendors are labelled as such.
 - **Estimates are labelled.** Some figures (e.g. a company's per-event `valueAed`) are pre-sale
-  *estimates*, not realized totals — the answer says so.
+  _estimates_, not realized totals — the answer says so.
 - **What it won't do:** book/create/register anything (read-only); quote a margin/markup (out of scope);
   invent numbers it doesn't have.
 
 ## Where it runs
 
-- **Claude Code:** installed as a plugin — invoke with `/evwa-intelligence:<skill>` or just ask.
+- **Claude Code:** ship inside the `evwa-intelligence` plugin, which also connects the gateway for you —
+  invoke with `/evwa-intelligence:<skill>` or just ask.
 - **Claude Desktop:** per-user skill install + the EvWA connector — see
-  [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md) (rolling out with OAuth Stage 2).
+  [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md) (built + production GA verified live 2026-09-05).
 
-Needs the EvWA gateway connected. Questions → your team channel.
+Needs the EvWA gateway connected (automatic with the Claude Code plugin; a separate connector on
+Desktop). Questions → your team channel.

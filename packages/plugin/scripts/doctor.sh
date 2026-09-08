@@ -2,8 +2,8 @@
 # doctor.sh — preflight for the EvWA Intelligence plugin on the CLAUDE CODE path (macOS/Linux only).
 #
 # Serves the Claude Code / raw-MCP audience (the two-person dev team + technical users). Desktop users
-# never run shell scripts, and at OAuth Stage 2 the connector auth is browser OAuth, not gcloud — so this
-# is intentionally Code-only. Each check prints a one-line fix; exit 1 if any fails.
+# never run shell scripts, and the Desktop OAuth connector uses browser OAuth (WorkOS AuthKit), not
+# gcloud — so this is intentionally Code-only. Each check prints a one-line fix; exit 1 if any fails.
 #
 # It is a THIN wrapper over what the bridge already does at startup (gcloud installed + active account on
 # hafla.com — see intelligence-mcp-bridge/src/index.js §Pre-flight). The truth test is a real tools/list
@@ -62,7 +62,7 @@ if [ "${1:-}" = "--skip-live" ]; then
   warn "skipping the live gateway check (--skip-live)"
 else
   echo "  … calling the gateway via the bridge (tools/list) — a few seconds…"
-  RESP=$(printf '%s' '{"jsonrpc":"2.0","method":"tools/list","id":1}' | npx -y @hafla/intelligence-mcp-bridge 2>/dev/null | head -c 8000 || true)
+  RESP=$(printf '%s' '{"jsonrpc":"2.0","method":"tools/list","id":1}' | npx -y @hafla/intelligence-mcp-bridge@1.0.8 2>/dev/null | head -c 8000 || true)
   if printf '%s' "$RESP" | grep -q '"tools"'; then
     pass "gateway reachable — tools/list returned a tool list"
   elif printf '%s' "$RESP" | grep -qE 'Gateway returned 403|\b403\b'; then
@@ -75,7 +75,7 @@ else
       [ -n "$TOK" ] && DETAIL=$(curl -s -X POST "$GATEWAY_URL/mcp" \
         -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" \
         -H "Accept: application/json, text/event-stream" \
-        -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' 2>/dev/null | head -c 400 || true)
+        -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' 2>/dev/null | head -c 8000 || true)
     fi
     case "$DETAIL" in
       *"token verification failed"*|*"Invalid token"*)
@@ -83,7 +83,7 @@ else
         # The usual cause: your gcloud credential was minted by a NON-standard OAuth client (e.g. Gemini
         # Code Assist / Cloud Code / a branded installer), so the token's `aud` isn't one the gateway accepts.
         fail "gateway 403 — token verification failed (audience mismatch, not a group/employee issue)" \
-          "your gcloud identity token's aud isn't accepted. Re-auth with STANDARD gcloud: 'gcloud auth login' (vanilla CLI → the universal client the gateway accepts). If that doesn't fix it, your OAuth client ID must be added to the gateway's accepted audiences — ask ops (see gateway auth GCLOUD_OAUTH_CLIENT_ID)." ;;
+          "your gcloud token's aud isn't accepted — it was minted by a branded OAuth client (e.g. Cloud Code / Gemini Code Assist), not vanilla gcloud. Re-auth with STANDARD gcloud: 'gcloud auth login'. If that does NOT clear it, a resident IDE (Cloud Code / Antigravity / Gemini Code Assist) is hijacking the login and re-minting the branded client — switch to OAuth (CLAUDE-CODE-OAUTH.md), which is gcloud-free and immune." ;;
       *"employee_inactive"*)
         fail "gateway 403 — account not flagged as an active employee" \
           "ask ops to set haflaCore.OpsUsers.isEmployeeActive=true for your @hafla.com account" ;;

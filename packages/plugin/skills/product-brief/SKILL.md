@@ -4,7 +4,7 @@ description: >-
   Build a one-page Hafla-context brief ("101") on ONE product, service, or concept — catalog match,
   what was actually ordered (negotiated spec from order notes), proven suppliers, a price band, recent
   cited orders, and negotiated/setup detail from WhatsApp. NOT a whole-event planning checklist ("what
-  do I need for a wedding" → event-needs). Use for "/101 X", "give me 101 on X", "brief me on X", "what
+  do I need for a wedding" → event-needs), and NOT product support/ticket escalations (out of scope). Use for "/101 X", "give me 101 on X", "brief me on X", "what
   do we know about X". Hafla-context-first (skips generic encyclopedia knowledge). Read-only, via the
   EvWA gateway.
 ---
@@ -57,7 +57,8 @@ encyclopedia knowledge is one line at most, skipped by default.**
    `FULFILLED_BY` grain** (`safe_cypher_sandbox`, or the `Products→OrderItems→OrderItemPartners→Partners`
    SQL) before writing "no proven supplier" — do not treat an empty tool result as ground truth.
 4. **Price band** — `price_truth({ id: <uuid> })` for the **selling** band (p25/median/p75,
-   reliable/committable); if the caller wants **cost**, `price_anchor({ productId: <uuid> })` (tier-aware
+   reliable/committable; note `lastOrderedAt` — an old last order is a staleness caution even when
+   reliable); if the caller wants **cost**, `price_anchor({ productId: <uuid> })` (tier-aware
    partner-cost anchor + band, ORDER-preferred). Label selling vs cost. (`price_truth` blocks generics →
    for a `--…--` subject, the price lives in source 2/5, say so.)
 5. **WhatsApp negotiated detail + setup gotchas** (only on run choice [2]) —
@@ -66,7 +67,11 @@ encyclopedia knowledge is one line at most, skipped by default.**
    setup challenges + partner mentions. **Snippet caveat:** hits are truncated snippets — a price can be
    cut off mid-number; verify a corpus price is complete before quoting it, never complete a cut-off number.
 
-Optional: `related_products({ id })` for "commonly ordered with" (a useful brief line), and
+Optional: `related_products({ id, rankBy: "lift" })` for "commonly ordered with" (a useful brief line) —
+`rankBy: "lift"` surfaces **distinctive** pairings (market-basket lift) over popular staples (chairs,
+tables) that co-occur with almost everything; **only trust `lift` among `liftReliable: true` rows** (a
+thin-support lift can be huge and meaningless — fall back to `coOrders` otherwise; verified live
+2026-09-07: Silver Chiavari → all-`liftReliable` rows, lift 123→4). And
 `get_ticket_360({ ticket_id: "<n>" })` if the user drills into a cited Zendesk ticket.
 
 ## Brief structure (the one page)
@@ -113,6 +118,9 @@ Shared formatting for every EvWA answer (skill-specific structure/order is above
   (`price_truth`) and cost (`price_anchor`) on one page, so it's a real temptation — do **not** compute
   or present `selling − cost`, markup %, or margin. Deflect: "margin is wave-2 commercial-intelligence."
   (Matches `pricing-lookup` / `supplier-discovery` / `venue-recommendation`.)
+- **Support / ticket escalations for a product are OUT OF SCOPE** — no support-analytics skill yet
+  (a dedicated escalations skill / pre-derived per-product escalations data is planned). Deflect; don't
+  improvise trends from tickets.
 - Read-only. Deep host order history → `past-orders`; price distribution deep-dive → `pricing-lookup`;
   "who can supply / who else" → `supplier-discovery`; where/venue evidence for a pax band →
   `venue-recommendation`; "what do I need for a &lt;event&gt;" (planning checklist) → `event-needs`.
