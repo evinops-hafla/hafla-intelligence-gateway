@@ -119,10 +119,11 @@ npm version <patch|minor|major> --no-git-tag-version
 
 # 2. CHANGELOG.md: rename [Unreleased] → [<version>] — <YYYY-MM-DD>; add a fresh empty [Unreleased].
 # 3. Update EVERY version-pinned bridge ref (grep first: `git grep -n "intelligence-mcp-bridge@"`):
-#      - this README's Packages table ("<version> — live on npm")
-#      - the package README's install commands (`npm install -g …@<version>`)
-#      - packages/plugin/.claude-plugin/plugin.json (mcpServers.args — the plugin RUNS the bridge via
-#        `npx …@<version>`, so a stale pin ships a stale bridge to every plugin user)
+#      - this README's status banner + Packages table ("<version> — live on npm")
+#      - the package README's status line + install commands (`…@<version>`)
+#      - packages/plugin/SETUP-PROMPT.md and packages/plugin/scripts/doctor.sh
+#        (both run the bridge via `npx …@<version>`)
+#      - NOTE: the plugin is skills-only — plugin.json no longer pins the bridge
 # 4. Sync the workspace lockfile from the repo root:
 cd ../.. && npm install --package-lock-only
 
@@ -130,7 +131,7 @@ cd ../.. && npm install --package-lock-only
 git add packages/intelligence-mcp-bridge/package.json \
         packages/intelligence-mcp-bridge/CHANGELOG.md \
         README.md packages/intelligence-mcp-bridge/README.md \
-        packages/plugin/.claude-plugin/plugin.json \
+        packages/plugin/SETUP-PROMPT.md packages/plugin/scripts/doctor.sh \
         package-lock.json
 git commit -m "chore(bridge): release <version> — <one-line summary>"
 git push                                                             # bot re-reviews the release commit

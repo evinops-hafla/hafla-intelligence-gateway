@@ -119,7 +119,7 @@ timeout`, even though the gateway would have answered. Default
   `product/semver` format). Pre-1.0.6 the value was hardcoded to
   `intelligence-mcp-bridge/1.0`, which masked the real version on 100%
   of bridge traffic in Cloud Run access logs — verified against
-  `mcp-gateway-production` logs (every bridge entry showed `1.0`
+  the prod gateway's logs (every bridge entry showed `1.0`
   regardless of which version was actually running). Post-1.0.6,
   gateway-side analytics can aggregate `httpRequest.userAgent` in Cloud
   Logging to drive a per-version distribution dashboard ("X% of
@@ -129,18 +129,20 @@ timeout`, even though the gateway would have answered. Default
   version drift between code and shipped package is caught in CI.
 - **`isMainModule` ESM check no longer silently exits when invoked via
   symlinked paths.** The published 1.0.5 used a naive literal compare
-  (`import.meta.url === \`file://${process.argv[1]}\``) that fails whenever
-either side has a symlink in its resolution chain — global npm bins
-(always symlinks), npx fresh-cache `.bin/`(also symlinks), macOS`/tmp`auto-symlinks, NFS, Docker bind mounts, ASDF, Volta. Symptom: process
-exited with code 0, no stdout, no stderr, no MCP handshake — MCP clients
-saw "server disconnected" with no useful error. Fixed by resolving both
-sides via`realpathSync`+`fileURLToPath`before comparing, with an
-explicit`if (!process.argv[1]) return false;`guard at the top of the
-IIFE so REPL /`node -e`/ library-import contexts (where`argv[1]`is`undefined`) don't trip the catch branch and pollute stderr at module
-load. **Every consumer who followed the README install instructions for
-1.0.5 from a neutral cwd was affected; the bug was invisible to dev
-environments only because monorepo cwds carry a local `node_modules/`
-  install that shadows the global symlink path.\*\* 1.0.5 is deprecated.
+  (``import.meta.url === `file://${process.argv[1]}` ``) that fails whenever
+  either side has a symlink in its resolution chain — global npm bins
+  (always symlinks), npx fresh-cache `.bin/` (also symlinks), macOS `/tmp`
+  auto-symlinks, NFS, Docker bind mounts, ASDF, Volta. Symptom: process
+  exited with code 0, no stdout, no stderr, no MCP handshake — MCP clients
+  saw "server disconnected" with no useful error. Fixed by resolving both
+  sides via `realpathSync` + `fileURLToPath` before comparing, with an
+  explicit `if (!process.argv[1]) return false;` guard at the top of the
+  IIFE so REPL / `node -e` / library-import contexts (where `argv[1]` is
+  `undefined`) don't trip the catch branch and pollute stderr at module
+  load. **Every consumer who followed the README install instructions for
+  1.0.5 from a neutral cwd was affected; the bug was invisible to dev
+  environments only because monorepo cwds carry a local `node_modules/`
+  install that shadows the global symlink path.** 1.0.5 is deprecated.
 
 ### Added
 
