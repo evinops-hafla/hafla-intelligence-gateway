@@ -240,6 +240,8 @@ Expected: `OK` (macOS) or `True` (Windows). If `NOT FOUND` / `False`, install gc
 
 **Order matters.** List Path C FIRST so `gcloud` resolves to the directory you just verified — not to a possibly-stale `/usr/local/bin/gcloud` symlink further down the list. If your Path C happens to equal one of the trailing standard entries (Intel Macs where Homebrew installs to `/usr/local/bin`), list it once at the front and drop the duplicate from the tail — duplicates are functionally harmless but ugly.
 
+> **Watch for a second `gcloud` bundled in an env (conda/mamba, another SDK install).** A `conda`/`mamba` environment can ship its own `google-cloud-sdk` (e.g. `~/miniforge3/envs/<env>/bin/gcloud`). If that directory leads your `env.PATH` instead of Path C, the bridge may **appear to work** — it mints tokens against the wrong/older SDK — so a missing Path C stays hidden until that env is rebuilt or removed, at which point pre-flight dies with `gcloud CLI not found`. Field-seen. Always lead with the Homebrew/official Path C you verified above; do not let an env's bundled `gcloud` be the one the bridge finds.
+
 **Windows note:** the env.PATH separator on Windows is `;` not `:`, and entries use Windows-style paths. Example:
 
 ```json

@@ -151,6 +151,12 @@ for (const skill of skillDirs) {
     else {
       if (fm.description.length > 1024) err(skill, `description ${fm.description.length} chars > 1024 (platform max)`);
       else if (fm.description.length > 200) warn(skill, `description ${fm.description.length} chars > 200 (claude.ai UI may truncate)`);
+      // Angle-bracket tags are rejected by the Claude Desktop / claude.ai skill uploader
+      // ("SKILL.md description cannot contain XML tags") — Claude Code tolerates them, so
+      // this only surfaces on Desktop/claude.ai upload. Field-seen on event-needs (`<event>`
+      // placeholder). Hard error: a description that won't upload is broken for the app track.
+      const tags = fm.description.match(/<[^>]+>/g);
+      if (tags) err(skill, `description contains XML-like tag(s) ${JSON.stringify(tags)} — the Claude Desktop/claude.ai uploader rejects angle brackets; use plain wording (e.g. "an event", not "<event>")`);
       // front-loading: the disambiguating trigger must land in the first ~200 chars (all the UI shows)
       const head = fm.description.slice(0, 200).toLowerCase();
       const phrases = TRIGGER_PHRASES[skill];
