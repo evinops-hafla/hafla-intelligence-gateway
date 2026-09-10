@@ -1,11 +1,11 @@
 ---
 name: event-needs
 description: >-
-  "What do I need for a <event>?" — the planning bill-of-needs for an event type. Pairs the authored
+  "What do I need for an event?" — the planning bill-of-needs for an event type. Pairs the authored
   IDEAL checklist (core/common/optional needs, the often-forgotten items, budget band, per-guest cost)
   with what Hafla ACTUALLY books for that event (category attach-rates + median unit price). Use for
-  "what do I need for a wedding / corporate conference / birthday", "plan a <event>", "checklist for
-  <event>", "what should we pitch for a <event>". Read-only, via the EvWA gateway. NOT a single-product
+  "what do I need for a wedding / corporate conference / birthday", "plan an event", "checklist for an
+  event type", "what should we pitch for an event". Read-only, via the EvWA gateway. NOT a single-product
   101 (→ product-brief) and NOT venue evidence (→ venue-recommendation).
 ---
 
