@@ -7,7 +7,7 @@ Sales / CX / supply team.
 This package is the **Claude Code plugin** (`evwa-intelligence`): it bundles the six skills. Connecting to
 the gateway is a **separate** step — OAuth is the default (see [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md)),
 the bridge is the fallback — so the plugin wires no transport of its own. The skills themselves are
-portable `SKILL.md` files — the same files load standalone as per-user zips on Claude Desktop.
+portable `SKILL.md` files — the same files load standalone as skill zips on Claude Desktop.
 
 ## Delivery model (2026-08-13 correction — read this before building more)
 
@@ -140,8 +140,8 @@ auto-wiring the `gcloud` bridge forced it on everyone and 403s on machines where
 Connect the gateway separately — OAuth (default) via [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md), or the
 bridge / `gcloud` path via [`SETUP-PROMPT.md`](SETUP-PROMPT.md).
 
-**Claude Desktop / claude.ai (Chat / Cowork):** per-user — upload each skill folder as a **zip**
-(Customize → Skills → Add; code-execution enabled) and connect the gateway. **LIVE (production GA, verified 2026-09-05):**
+**Claude Desktop / claude.ai (Chat / Cowork):** the six skills are provisioned **org-wide** by an owner
+(Organization → Skills; per-user zip upload via Customize → Skills → Add also works, code-execution enabled), and you connect the gateway. **LIVE (production GA, verified 2026-09-05):**
 the claude.ai remote-connector uses the gateway's OAuth (WorkOS AuthKit) — built + **enabled + production-verified live**
 (2026-09-05, prod issuer `secure-grace-01.authkit.app`). Claude Code also works over OAuth — see [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md) (CIMD, verified on 2 machines 2026-09-07/08); Desktop setup is in [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md).
 
@@ -151,7 +151,7 @@ the claude.ai remote-connector uses the gateway's OAuth (WorkOS AuthKit) — bui
    [`CLAUDE-CODE-OAUTH.md`](CLAUDE-CODE-OAUTH.md)), or add it as a **connector** on Claude Desktop — so `safe_sql_sandbox`, `safe_cypher_sandbox`,
    `search_internal_knowledge`, `analyze_identity_graph`, `get_ticket_360`, plus the R1–R5 tools are
    available.
-2. The skill installed on the surface (Claude Code plugin, or Claude Desktop skill zip).
+2. The skill installed on the surface (Claude Code plugin, or Claude Desktop skill — org-provisioned or per-user zip).
 
 ## Distribution (per current Anthropic docs)
 
@@ -161,8 +161,11 @@ the claude.ai remote-connector uses the gateway's OAuth (WorkOS AuthKit) — bui
 - **claude.ai Chat / Cowork** — the remote connector calls from Anthropic's cloud via the gateway's OAuth
   resource server + WorkOS AuthKit → **built + enabled + production GA verified live** (add-by-URL,
   DCR — no client ID/secret). See [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md).
-- **No org-wide custom-Skill distribution exists on any plan** (incl. Enterprise) — skills are per-user
-  zip upload; only the remote **connector** is org-deployable by an owner.
+- **Org-wide skill provisioning (Team/Enterprise)** — an owner uploads the skill zips once in
+  **Organization settings → Skills**; they're enabled by default for all members in chat/web + the
+  Desktop **Chat** tab + **Cowork** (NOT the Claude Code / Code tab — there skills come from the
+  plugin). Per-user zip upload still works. The remote **connector** is likewise org-deployable. See
+  [`DESKTOP-SETUP.md`](DESKTOP-SETUP.md).
 - Tool migration **DONE** (PR #314/#316/#317/#319/#320, 2026-08-14): all skills are tool-first where a
   tool exists; remaining raw-SQL grains (generic `--Name--` price, per-host order enumeration, venue
   evidence) have no tool yet — noted in each SKILL.md's forward note.
