@@ -1,10 +1,9 @@
 ---
 name: past-orders
 description: >-
-  "What did we do for X before?" — enumerate every event, order, ticket, and fulfilling partner linked
-  to a host, client, partner, event #, order #, ticket #, or a specific product (which orders used it),
-  cited by human-readable integer key (orderNumber / userEventNumber / ticket #), newest first. Use for history lookups on a specific
-  entity, or the top corporate buyers leaderboard (biggest clients / top orgs / who books us most). Identity-federation-first for phone/email/name. Read-only, via the EvWA gateway.
+  "What did we do for X before?" — history of every event, order, ticket, partner for a
+  host/client/partner/event#/order#/ticket#, cited by integer key, newest first. Plus top corporate
+  buyers.
 ---
 
 # past-orders

@@ -1,11 +1,8 @@
 ---
 name: venue-recommendation
 description: >-
-  Evidence lookup (NOT a recommender) for venues — given pax / area / budget / indoor-outdoor / vibe,
-  return what PAST Hafla events in that band actually did: the venue site-type mix, the specific venues
-  that recur, and the vendors/partners who served events there. Use for "where do people do 200-pax
-  outdoor events / what venues for a corporate gala". Read-only, via the EvWA gateway. There is no
-  venue catalog to recommend from — this surfaces evidence, cited by event # / order #.
+  Evidence (NOT a recommender) for venues — given pax/area/budget/indoor-outdoor/vibe, what past Hafla
+  events did: recurring venues + partners who served them. "venues for a 200-pax outdoor event".
 ---
 
 # venue-recommendation

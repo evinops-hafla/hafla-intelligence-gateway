@@ -1,12 +1,8 @@
 ---
 name: product-brief
 description: >-
-  Build a one-page Hafla-context brief ("101") on ONE product, service, or concept — catalog match,
-  what was actually ordered (negotiated spec from order notes), proven suppliers, a price band, recent
-  cited orders, and negotiated/setup detail from WhatsApp. NOT a whole-event planning checklist ("what
-  do I need for a wedding" → event-needs), and NOT product support/ticket escalations (out of scope). Use for "/101 X", "give me 101 on X", "brief me on X", "what
-  do we know about X". Hafla-context-first (skips generic encyclopedia knowledge). Read-only, via the
-  EvWA gateway.
+  A one-page Hafla "101" brief on ONE product/service/concept — catalog match, proven suppliers, price
+  band, cited orders. "/101 X", "brief me on X". NOT a whole-event checklist (→ event-needs).
 ---
 
 # product-brief

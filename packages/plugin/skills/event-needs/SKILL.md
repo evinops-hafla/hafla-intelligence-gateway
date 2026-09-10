@@ -1,12 +1,8 @@
 ---
 name: event-needs
 description: >-
-  "What do I need for an event?" — the planning bill-of-needs for an event type. Pairs the authored
-  IDEAL checklist (core/common/optional needs, the often-forgotten items, budget band, per-guest cost)
-  with what Hafla ACTUALLY books for that event (category attach-rates + median unit price). Use for
-  "what do I need for a wedding / corporate conference / birthday", "plan an event", "checklist for an
-  event type", "what should we pitch for an event". Read-only, via the EvWA gateway. NOT a single-product
-  101 (→ product-brief) and NOT venue evidence (→ venue-recommendation).
+  What do I NEED for an event — planning checklist (core, optional, budget, per-guest) for a wedding,
+  conference, birthday, etc. NOT a product (→ product-brief) or a venue (→ venue-recommendation).
 ---
 
 # event-needs
