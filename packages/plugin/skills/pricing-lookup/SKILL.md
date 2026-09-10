@@ -1,8 +1,13 @@
 ---
 name: pricing-lookup
 description: >-
-  What a named product/service COSTS — Hafla's transacted/per-unit prices. "what does X cost / what
-  did we pay / dry-hire". NOT whole-event cost (→ event-needs) or vendors (→ supplier-discovery).
+  What a named PRODUCT/service costs — what Hafla CHARGES or PAID for it: real transacted prices
+  (p25/median/p75) plus negotiated per-unit numbers from order notes and WhatsApp. NOT whole-event
+  cost ("what does a wedding cost" → event-needs). Use for "what does X cost / what did we pay for X /
+  typical or per-unit rate / dry-hire charge for N chairs + M tables". Handles both fully-cataloged
+  SKUs (structured) and generic "--Name--" / dry-hire / F&B items (whose real price lives in notes +
+  chat, not a price column). Read-only, via the EvWA gateway. NOT pricing strategy ("how should we
+  price X") and NOT supplier discovery (route vendor questions to supplier-discovery).
 ---
 
 # pricing-lookup
