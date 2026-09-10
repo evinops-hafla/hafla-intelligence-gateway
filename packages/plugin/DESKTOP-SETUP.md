@@ -39,15 +39,24 @@ EvWA skills over our own data (`mcp.hafla.com`): `supplier-discovery`, `pricing-
 
 ## How Desktop distribution actually works (from current Anthropic docs)
 
-Two independent pieces — **you can push one, not the other**:
+Two independent pieces — **the owner can push both org-wide**:
 
-| Piece                                  | Who installs it                                   | Org-wide push?                                                        |
-| -------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------- |
-| **The gateway connector** (remote MCP) | Owner adds it org-wide; each member connects once | ✅ Owner-deployable                                                   |
-| **The six skills**                     | **Each member uploads the zips themselves**       | ❌ **No org-wide skill push exists on ANY plan** (Team or Enterprise) |
+| Piece                                  | Who installs it                                            | Org-wide push?     |
+| -------------------------------------- | --------------------------------------------------------- | ------------------ |
+| **The gateway connector** (remote MCP) | Owner adds it org-wide; each member connects once         | ✅ Owner-deployable |
+| **The six skills**                     | Owner provisions the zips org-wide (Organization → Skills) | ✅ Owner-deployable |
 
-So the rollout is: **owner deploys the connector once → each teammate connects it + uploads the skill
-zips.** Distribute the zips via this repo + this guide.
+> **Updated 2026-09-10 — org-wide skill provisioning now exists** (Team + Enterprise). An earlier
+> version of this guide said members had to upload the zips themselves; Anthropic has since shipped
+> admin skill provisioning ([support](https://support.claude.com/en/articles/13119606-provision-and-manage-skills-for-your-organization)).
+> An admin uploads each zip once in **Organization settings → Skills**; it is "immediately provisioned
+> to all users," **enabled by default** (members can toggle off), and appears in **chat/web, the Claude
+> Desktop Chat tab, and Cowork**. **Caveat:** that surface list does **not** include **Claude Code /
+> the Code tab** — there, skills come from the plugin (`/plugin install`, see
+> [`SKILLS-GUIDE.md`](SKILLS-GUIDE.md) / Claude Code path), not this upload.
+
+So the rollout is: **owner deploys the connector once + provisions the six skills once → each teammate
+just Connects.** Teammates no longer upload anything for the app surfaces.
 
 ## Prerequisites (production GA — live 2026-09-05)
 
@@ -79,13 +88,23 @@ zips.** Distribute the zips via this repo + this guide.
 > asks for credentials under Advanced settings, confirm whether DCR covers it (per-user
 > add-by-URL definitely needs none).
 
-## Part 2 — Each teammate (self-serve, ~3 min)
+## Part 1b — Owner: provision the six skills org-wide (one-time)
+
+1. **Organization settings → Skills → Policy:** confirm both **Code execution and file creation** and
+   **Skills** are toggled **on** (prerequisite — provisioning is unavailable otherwise).
+2. Produce the six skill zips (see [Packaging the skill zips](#packaging-the-skill-zips) below).
+3. **Organization settings → Skills → Library → + Add** → upload each of the six `.zip` files.
+   Each is "immediately provisioned to all users," enabled by default.
+4. That is the whole skill rollout for the app surfaces — teammates do **not** upload anything.
+
+## Part 2 — Each teammate (self-serve, ~2 min)
 
 1. **Enable code execution** (Settings/Features) — skills won't appear without it.
 2. **Customize → Connectors →** find **EvWA Intelligence** (Custom) **→ Connect** → sign in with your
    `@hafla.com` Google account (per-user OAuth; Claude only sees what you can).
-3. **Customize → Skills → Add →** upload each skill **zip** (produced below). _(Confirm the exact menu
-   label — "Customize → Skills" vs "Settings → Features" — in your workspace; docs disagree.)_
+3. **Skills:** nothing to upload — the six EvWA skills were provisioned org-wide by the owner (Part 1b)
+   and are enabled by default. Check **Customize → Skills** to confirm they're present (toggle any back
+   on if you'd turned it off). If they're missing entirely, the owner hasn't run Part 1b yet — ping them.
 
 ## Packaging the skill zips
 
@@ -95,9 +114,12 @@ From the repo root:
 bash packages/plugin/scripts/pack-skills.sh     # → packages/plugin/dist/<skill>.zip  (6 zips)
 ```
 
-Each zip contains `<skill>/SKILL.md`. Share the six zips (Slack/drive) with a link to this guide.
-Re-run and re-share after any skill update — **skills do not auto-sync across surfaces**; each member
-re-uploads. (Maintain the `SKILL.md` folders in Git as the source of truth.)
+Each zip contains `<skill>/SKILL.md`. The **owner** uploads these six zips once in **Organization
+settings → Skills** (Part 1b) — teammates don't handle them. After any skill update, re-run this and
+the owner **re-uploads the changed zip(s) org-wide** (the org-provisioned copy does not auto-update from
+Git). (Maintain the `SKILL.md` folders in Git as the source of truth.) Note the surface split: this
+org upload covers chat/web + Desktop Chat + Cowork; **Claude Code** picks up skill changes from the
+plugin instead (`/plugin` update), not this upload.
 
 ## What you get / honesty rules (same as Claude Code)
 
